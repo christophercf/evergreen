@@ -3,7 +3,7 @@
 // number, so Building Costs, the Budget, and the dashboard all agree.
 // ----------------------------------------------------------------------------
 
-import type { CostLine, DB, Draw, LinePhase, MacroCategory } from "./types";
+import type { CostLine, DB, Draw, DrawAllocation, LinePhase, MacroCategory } from "./types";
 
 export function fmt(n: number, opts: { cents?: boolean } = {}): string {
   return n.toLocaleString("en-US", {
@@ -77,11 +77,21 @@ export function findPhase(db: DB, lineId: string, phaseId: string): { line: Cost
   const phase = line?.phases.find((p) => p.id === phaseId);
   return line && phase ? { line, phase } : null;
 }
+/** Dollar value of a draw allocation against its line's current total. */
+export function allocationAmount(line: CostLine, alloc: DrawAllocation): number {
+  return alloc.mode === "pct" ? (lineCurrent(line) * alloc.value) / 100 : alloc.value;
+}
 export function drawAmount(db: DB, draw: Draw): number {
-  return draw.phaseRefs.reduce((a, ref) => {
-    const f = findPhase(db, ref.lineId, ref.phaseId);
-    return a + (f ? phaseAmount(f.line, f.phase) : 0);
+  return draw.allocations.reduce((a, al) => {
+    const line = db.costLines.find((l) => l.id === al.lineId);
+    return a + (line ? allocationAmount(line, al) : 0);
   }, 0);
+}
+/** Total allocated across ALL draws for a given line (its "drawn" amount). */
+export function lineDrawn(db: DB, lineId: string): number {
+  const line = db.costLines.find((l) => l.id === lineId);
+  if (!line) return 0;
+  return db.draws.reduce((a, d) => a + d.allocations.filter((al) => al.lineId === lineId).reduce((s, al) => s + allocationAmount(line, al), 0), 0);
 }
 
 export type Rollup = { key: string; label: string; total: number; base: number; markup: number; count: number };

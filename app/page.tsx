@@ -89,7 +89,7 @@ export default function Dashboard() {
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 7 }}>
               {db.draws.map((d) => (
                 <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                  <Pill color="#fff" bg={d.status === "paid" ? "var(--ok)" : d.status === "invoiced" ? "var(--brass)" : "var(--sc-unset)"}>{d.status}</Pill>
+                  <Pill color="#fff" bg={d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass)" : "var(--sc-unset)"}>{d.status}</Pill>
                   <span style={{ flex: 1, color: "var(--muted)" }}>{d.name}</span>
                   <span style={{ fontWeight: 700 }}>{fmt(drawAmount(db, d))}</span>
                 </div>

@@ -487,14 +487,12 @@ class Store {
     this.mutate((db) => {
       const l = db.costLines.find((x) => x.id === lineId);
       if (l) l.phases = l.phases.filter((p) => p.id !== phaseId);
-      // Drop any draw references to the removed phase.
-      db.draws.forEach((d) => { d.phaseRefs = d.phaseRefs.filter((r) => !(r.lineId === lineId && r.phaseId === phaseId)); });
     });
   }
 
-  // ---- Draws (Payment Tracker) ----
+  // ---- Draws (Payment Tracker — budget allocations) ----
   addDraw(name: string) {
-    this.mutate((db) => { db.draws.push({ id: newId("draw"), name, phaseRefs: [], status: "planned" }); });
+    this.mutate((db) => { db.draws.push({ id: newId("draw"), name, allocations: [], status: "planned" }); });
   }
   renameDraw(id: string, name: string) {
     this.mutate((db) => { const d = db.draws.find((x) => x.id === id); if (d) d.name = name; });
@@ -507,25 +505,47 @@ class Store {
       const d = db.draws.find((x) => x.id === id);
       if (!d) return;
       d.status = status;
-      d.paidDate = status === "paid" ? new Date().toISOString().slice(0, 10) : undefined;
+      d.paidDate = status === "paid" ? new Date().toISOString().slice(0, 10) : d.paidDate;
     });
   }
-  togglePhaseInDraw(drawId: string, lineId: string, phaseId: string) {
+  /** Drop a budget line into a draw (default 0% allocation). Skips paid draws. */
+  addAllocation(drawId: string, lineId: string, mode: "pct" | "flat" = "pct", value = 0) {
     this.mutate((db) => {
       const d = db.draws.find((x) => x.id === drawId);
-      if (!d || d.status === "paid") return; // paid draws are locked
-      const i = d.phaseRefs.findIndex((r) => r.lineId === lineId && r.phaseId === phaseId);
-      if (i >= 0) d.phaseRefs.splice(i, 1);
-      else {
-        // a phase can only belong to one draw
-        db.draws.forEach((o) => { o.phaseRefs = o.phaseRefs.filter((r) => !(r.lineId === lineId && r.phaseId === phaseId)); });
-        d.phaseRefs.push({ lineId, phaseId });
-      }
+      if (!d || d.status === "paid") return;
+      if (!d.allocations.some((a) => a.lineId === lineId)) d.allocations.push({ lineId, mode, value });
     });
   }
-  /** Phases already committed to a PAID draw (locked, can't be re-drawn). */
-  phaseInPaidDraw(lineId: string, phaseId: string): boolean {
-    return this.db.draws.some((d) => d.status === "paid" && d.phaseRefs.some((r) => r.lineId === lineId && r.phaseId === phaseId));
+  setAllocation(drawId: string, lineId: string, patch: Partial<{ mode: "pct" | "flat"; value: number }>) {
+    this.mutate((db) => {
+      const a = db.draws.find((x) => x.id === drawId)?.allocations.find((y) => y.lineId === lineId);
+      if (a) Object.assign(a, patch);
+    });
+  }
+  removeAllocation(drawId: string, lineId: string) {
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (d && d.status !== "paid") d.allocations = d.allocations.filter((a) => a.lineId !== lineId);
+    });
+  }
+  /** Push a draw → create the first round of trade contracts for its lines. */
+  pushDraw(drawId: string, byName: string): { trades: number } {
+    let trades = 0;
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (!d) return;
+      d.status = "pushed";
+      d.pushedDate = new Date().toISOString().slice(0, 10);
+      const tradeIds = [...new Set(d.allocations.map((a) => db.costLines.find((l) => l.id === a.lineId)?.tradeId).filter(Boolean) as string[])];
+      trades = tradeIds.length;
+      for (const tradeId of tradeIds) {
+        const a = this.ensureAgreement(db, tradeId);
+        if (!a.round1.some((s) => s.party === "builder")) a.round1.push({ party: "builder", name: byName, at: new Date().toISOString() });
+        const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
+        this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", message: `📄 Contract issued for "${d.name}". Please review & sign Round 1 (scope & cost) in Vendor Management.`, });
+      }
+    });
+    return { trades };
   }
 
   // ---- Materials ----

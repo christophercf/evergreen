@@ -6,7 +6,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, type VendorAgreement } from "@/lib/data/types";
-import { tradeCost, tradeName, phaseAmount, fmt } from "@/lib/data/money";
+import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
 
 export default function VendorsPage() {
   const store = useStore();
@@ -59,8 +59,12 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const r1Done = agreement.round1.some((s) => s.party === "builder") && agreement.round1.some((s) => s.party === "trade");
   const r2Done = agreement.round2.some((s) => s.party === "builder") && agreement.round2.some((s) => s.party === "trade");
 
-  // This trade's phases and the draws they belong to (for round 2).
-  const phases = db.costLines.filter((l) => l.tradeId === tradeId).flatMap((l) => l.phases.map((p) => ({ l, p })));
+  // This trade's draw allocations (for round 2 schedule).
+  const myLineIds = new Set(db.costLines.filter((l) => l.tradeId === tradeId).map((l) => l.id));
+  const drawRows = db.draws.flatMap((d) => d.allocations.filter((a) => myLineIds.has(a.lineId)).map((a) => {
+    const l = db.costLines.find((x) => x.id === a.lineId)!;
+    return { d, l, amt: allocationAmount(l, a) };
+  }));
 
   const [start, setStart] = useState(agreement.startDate ?? "");
   const [finish, setFinish] = useState(agreement.finishDate ?? "");
@@ -121,16 +125,13 @@ function VendorCard({ tradeId }: { tradeId: string }) {
           </div>
           <Lbl>Draw schedule (from Payments)</Lbl>
           <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "4px 0 8px" }}>
-            {phases.length ? phases.map(({ l, p }) => {
-              const draw = db.draws.find((d) => d.phaseRefs.some((r) => r.lineId === l.id && r.phaseId === p.id));
-              return (
-                <div key={`${l.id}:${p.id}`} style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
-                  <span style={{ flex: 1 }}>{l.name} · {p.name}</span>
-                  <span style={{ fontWeight: 600 }}>{fmt(phaseAmount(l, p))}</span>
-                  <span style={{ minWidth: 92, textAlign: "right", color: draw ? (draw.status === "paid" ? "var(--ok)" : "var(--brass-2)") : "var(--muted)" }}>{draw ? `${draw.name} (${draw.status})` : "unassigned"}</span>
-                </div>
-              );
-            }) : <span style={{ fontSize: 12, color: "var(--muted)" }}>No phases defined for this trade yet (set them in Building Costs).</span>}
+            {drawRows.length ? drawRows.map(({ d, l, amt }, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
+                <span style={{ flex: 1 }}>{d.name} · {l.name}</span>
+                <span style={{ fontWeight: 600 }}>{fmt(amt)}</span>
+                <span style={{ minWidth: 92, textAlign: "right", color: d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass-2)" : "var(--muted)" }}>{d.status}</span>
+              </div>
+            )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment Tracker).</span>}
           </div>
           <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} onSign={(party) => store.signVendorRound(tradeId, 2, party, name)} />
         </>}

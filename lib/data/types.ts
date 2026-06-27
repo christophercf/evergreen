@@ -215,13 +215,20 @@ export interface VendorAgreement {
   round2: VendorSig[];
 }
 
-// A client payment that bundles one or more line phases. Once paid, those
-// amounts lock (lines can still grow via change orders → new phases/draws).
+// A client payment (draw) that allocates a portion of one or more budget lines.
+// Each allocation is a % or flat $ of that line's current total. "Pushing" a
+// draw creates the first round of trade contracts. Paid draws lock.
+export interface DrawAllocation {
+  lineId: string;
+  mode: "pct" | "flat";
+  value: number; // percent (0-100) or dollars
+}
 export interface Draw {
   id: string;
   name: string;
-  phaseRefs: { lineId: string; phaseId: string }[];
-  status: "planned" | "invoiced" | "paid";
+  allocations: DrawAllocation[];
+  status: "planned" | "pushed" | "paid";
+  pushedDate?: string;
   paidDate?: string;
   note?: string;
 }

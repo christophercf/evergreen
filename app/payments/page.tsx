@@ -5,10 +5,9 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { accessFor, type Draw } from "@/lib/data/types";
-import { totals, drawAmount, phaseAmount, lineCurrent, tradeName, fmt } from "@/lib/data/money";
+import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, tradeName, fmt } from "@/lib/data/money";
 
-const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", invoiced: "var(--brass)", paid: "var(--ok)" };
-const NEXT: Record<Draw["status"], Draw["status"]> = { planned: "invoiced", invoiced: "paid", paid: "paid" };
+const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
 export default function PaymentsPage() {
   const store = useStore();
@@ -16,141 +15,144 @@ export default function PaymentsPage() {
   const role = store.session.role;
   const user = store.currentUser;
   const access = accessFor(user, role, "payments");
+  const [dragLine, setDragLine] = useState<string | null>(null);
   if (access === "none") return <NoAccess module="the Payment Tracker" />;
   const ro = access !== "edit";
 
   const t = totals(db.costLines);
+  const allocated = db.draws.reduce((a, d) => a + drawAmount(db, d), 0);
   const paid = db.draws.filter((d) => d.status === "paid").reduce((a, d) => a + drawAmount(db, d), 0);
-  const invoiced = db.draws.filter((d) => d.status === "invoiced").reduce((a, d) => a + drawAmount(db, d), 0);
-  const planned = db.draws.filter((d) => d.status === "planned").reduce((a, d) => a + drawAmount(db, d), 0);
-  const remaining = Math.max(0, t.grand - paid);
+  const unallocated = Math.max(0, t.grand - allocated);
 
-  // phases already attached to any draw
-  const assigned = new Set(db.draws.flatMap((d) => d.phaseRefs.map((r) => `${r.lineId}:${r.phaseId}`)));
+  const lines = [...db.costLines].filter((l) => lineCurrent(l) > 0).sort((a, b) => a.category.localeCompare(b.category) || lineCurrent(b) - lineCurrent(a));
 
   return (
     <>
       <PageHeader
         title="Payment Tracker"
-        subtitle="Bundle line phases into draws — the client payments that fund the work. Once a draw is paid, those amounts lock in (lines can still grow through change orders, funded by later draws)."
-        right={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {ro && <Pill color="var(--muted)">View only</Pill>}
-            <Link href="/costs" className="btn btn-sm">Building Costs →</Link>
-          </div>
-        }
+        subtitle="Drag budget lines into draws, set each line's share (% or flat $), then push a draw to issue the first round of trade contracts. The budget on the left tracks total → drawn → remaining live."
+        right={<div style={{ display: "flex", gap: 8 }}>{ro && <Pill color="var(--muted)">View only</Pill>}<Link href="/costs" className="btn btn-sm">Building Costs →</Link></div>}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Contract Value" value={<Money value={t.grand} />} sub="current, all lines" />
-        <StatCard label="Paid to Date" value={<Money value={paid} />} accent="var(--ok)" sub={`${db.draws.filter((d) => d.status === "paid").length} draw(s)`} />
-        <StatCard label="In Pipeline" value={<Money value={invoiced + planned} />} sub={`${fmt(invoiced)} invoiced · ${fmt(planned)} planned`} />
-        <StatCard label="Remaining" value={<Money value={remaining} />} accent="var(--brass-2)" sub="not yet paid" />
+        <StatCard label="Allocated to Draws" value={<Money value={allocated} />} accent="var(--brass-2)" sub={`${Math.round((allocated / (t.grand || 1)) * 100)}% of budget`} />
+        <StatCard label="Paid" value={<Money value={paid} />} accent="var(--ok)" sub={`${db.draws.filter((d) => d.status === "paid").length} draw(s)`} />
+        <StatCard label="Unallocated" value={<Money value={unallocated} />} sub="not yet in a draw" />
       </div>
 
-      <div className="card" style={{ padding: 16, marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 8 }}>
-          <span style={{ color: "var(--muted)" }}>Paid vs remaining</span>
-          <span style={{ fontWeight: 700 }}>{Math.round((paid / (t.grand || 1)) * 100)}% funded</span>
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(280px, 360px) 1fr", gap: 16, marginTop: 18, alignItems: "start" }} className="ever-pay">
+        {/* LEFT: budget modules */}
+        <div>
+          <SectionTitle>Budget</SectionTitle>
+          <div className="card" style={{ padding: 10, maxHeight: "70vh", overflow: "auto" }}>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status." : "Drag a line into a draw →"}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {lines.map((l) => {
+                const total = lineCurrent(l);
+                const drawn = lineDrawn(db, l.id);
+                const rem = total - drawn;
+                return (
+                  <div key={l.id}
+                    draggable={!ro}
+                    onDragStart={(e) => { e.dataTransfer.setData("text/plain", l.id); setDragLine(l.id); }}
+                    onDragEnd={() => setDragLine(null)}
+                    className="card"
+                    style={{ padding: "8px 10px", cursor: ro ? "default" : "grab", opacity: dragLine === l.id ? 0.5 : 1, background: "var(--paper)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {!ro && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
+                      <span style={{ fontWeight: 600, fontSize: 12.5, flex: 1 }}>{l.name}</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 0 : 19 }}>
+                      <span>Total <strong style={{ color: "var(--ink)" }}>{fmt(total)}</strong></span>
+                      <span>Drawn <strong style={{ color: "var(--brass-2)" }}>{fmt(drawn)}</strong></span>
+                      <span>Left <strong style={{ color: rem > 0 ? "var(--ink)" : "var(--ok)" }}>{fmt(rem)}</strong></span>
+                    </div>
+                    <div style={{ marginTop: 4, paddingLeft: ro ? 0 : 19 }}><StackBar height={5} segments={[{ value: drawn, color: "var(--brass)" }, { value: Math.max(0, rem), color: "var(--cream-2)" }]} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
-        <StackBar height={16} segments={[{ value: paid, color: "var(--ok)" }, { value: invoiced, color: "var(--brass)" }, { value: Math.max(0, remaining - invoiced), color: "var(--cream-2)" }]} />
-        <div style={{ display: "flex", gap: 16, marginTop: 8, fontSize: 11.5, color: "var(--muted)" }}>
-          <span>▮ paid</span><span style={{ color: "var(--brass-2)" }}>▮ invoiced</span><span>▮ remaining</span>
+
+        {/* RIGHT: draws */}
+        <div>
+          <SectionTitle right={!ro ? <button className="btn btn-primary btn-sm" onClick={() => store.addDraw(`Draw ${db.draws.length + 1}`)}>+ Add draw</button> : undefined}>Draws</SectionTitle>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+            {db.draws.map((d) => <DrawCard key={d.id} draw={d} ro={ro} />)}
+          </div>
         </div>
       </div>
 
-      <SectionTitle right={!ro ? <button className="btn btn-primary btn-sm" onClick={() => store.addDraw(`Draw ${db.draws.length + 1}`)}>+ New draw</button> : undefined}>Draws</SectionTitle>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {db.draws.map((d) => <DrawCard key={d.id} draw={d} ro={ro} assigned={assigned} />)}
-        {!db.draws.length && <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>No draws yet.</div>}
-      </div>
-
-      <SectionTitle>Remaining by Line</SectionTitle>
-      <div className="card" style={{ overflow: "auto", maxHeight: "50vh" }}>
-        <table style={{ fontSize: 12.5 }}>
-          <thead><tr>
-            <th style={th}>Line</th><th style={thR}>Current</th><th style={thR}>In draws</th><th style={thR}>Paid</th><th style={thR}>Remaining</th>
-          </tr></thead>
-          <tbody>
-            {db.costLines.filter((l) => lineCurrent(l) > 0).map((l) => {
-              const inDraws = db.draws.flatMap((d) => d.phaseRefs.filter((r) => r.lineId === l.id).map((r) => ({ d, r })))
-                .reduce((a, { r }) => { const p = l.phases.find((x) => x.id === r.phaseId); return a + (p ? phaseAmount(l, p) : 0); }, 0);
-              const paidL = db.draws.filter((d) => d.status === "paid").flatMap((d) => d.phaseRefs.filter((r) => r.lineId === l.id))
-                .reduce((a, r) => { const p = l.phases.find((x) => x.id === r.phaseId); return a + (p ? phaseAmount(l, p) : 0); }, 0);
-              const rem = lineCurrent(l) - paidL;
-              return (
-                <tr key={l.id}>
-                  <td style={td}>{l.name}<div style={{ fontSize: 11, color: "var(--muted)" }}>{tradeName(db, l.tradeId)}</div></td>
-                  <td style={tdR}>{fmt(lineCurrent(l))}</td>
-                  <td style={tdR}>{fmt(inDraws)}</td>
-                  <td style={{ ...tdR, color: "var(--ok)" }}>{fmt(paidL)}</td>
-                  <td style={{ ...tdR, fontWeight: 700 }}>{fmt(rem)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <style>{`@media (max-width: 820px){ .ever-pay{ grid-template-columns: 1fr !important; } }`}</style>
     </>
   );
 }
 
-function DrawCard({ draw, ro, assigned }: { draw: Draw; ro: boolean; assigned: Set<string> }) {
+function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
   const store = useStore();
   const db = store.db;
-  const [adding, setAdding] = useState(false);
-  const amount = drawAmount(db, draw);
-  const paidLock = draw.status === "paid";
-
-  // Candidate phases to add: any line phase not already in a draw.
-  const candidates = db.costLines.flatMap((l) => l.phases.map((p) => ({ l, p }))).filter(({ l, p }) => !assigned.has(`${l.id}:${p.id}`));
+  const [over, setOver] = useState(false);
+  const total = drawAmount(db, draw);
+  const locked = draw.status === "paid";
 
   return (
-    <div className="card" style={{ padding: 16, borderLeft: `3px solid ${STATUS_BG[draw.status]}` }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <input value={draw.name} disabled={ro || paidLock} onChange={(e) => store.renameDraw(draw.id, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 16, fontFamily: "var(--font-serif)", color: "var(--walnut)", minWidth: 160 }} />
-        <Pill color="#fff" bg={STATUS_BG[draw.status]}>{draw.status}{draw.paidDate ? ` · ${draw.paidDate}` : ""}</Pill>
-        <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 16 }}><Money value={amount} /></span>
+    <div
+      onDragOver={(e) => { if (!ro && !locked) { e.preventDefault(); setOver(true); } }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { e.preventDefault(); setOver(false); const id = e.dataTransfer.getData("text/plain"); if (id) store.addAllocation(draw.id, id); }}
+      className="card"
+      style={{ padding: 14, borderLeft: `3px solid ${STATUS_BG[draw.status]}`, outline: over ? "2px dashed var(--sage)" : "none", background: over ? "var(--sage-tint)" : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <input value={draw.name} disabled={ro || locked} onChange={(e) => store.renameDraw(draw.id, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", minWidth: 120, flex: 1 }} />
+        <Pill color="#fff" bg={STATUS_BG[draw.status]}>{draw.status}{draw.paidDate ? ` · ${draw.paidDate}` : draw.pushedDate ? ` · ${draw.pushedDate}` : ""}</Pill>
       </div>
+      <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--font-serif)", margin: "4px 0 8px" }}><Money value={total} /></div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 10 }}>
-        {draw.phaseRefs.map((r) => {
-          const l = db.costLines.find((x) => x.id === r.lineId);
-          const p = l?.phases.find((x) => x.id === r.phaseId);
-          if (!l || !p) return null;
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {draw.allocations.map((a) => {
+          const l = db.costLines.find((x) => x.id === a.lineId);
+          if (!l) return null;
           return (
-            <div key={`${r.lineId}:${r.phaseId}`} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, padding: "5px 0", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ flex: 1 }}><strong>{l.name}</strong> <span style={{ color: "var(--muted)" }}>· {p.name}</span></span>
-              <span style={{ fontWeight: 700 }}>{fmt(phaseAmount(l, p))}</span>
-              {!ro && !paidLock && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.togglePhaseInDraw(draw.id, r.lineId, r.phaseId)}>✕</button>}
+            <div key={a.lineId} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, borderBottom: "1px solid var(--line)", paddingBottom: 5 }}>
+              <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
+              {!ro && !locked ? (
+                <>
+                  <select value={a.mode} onChange={(e) => store.setAllocation(draw.id, a.lineId, { mode: e.target.value as "pct" | "flat" })} style={{ fontSize: 11, padding: "1px 3px" }}>
+                    <option value="pct">%</option><option value="flat">$</option>
+                  </select>
+                  <input type="number" value={a.value} onChange={(e) => store.setAllocation(draw.id, a.lineId, { value: Number(e.target.value) })} style={{ width: 56, fontSize: 11, textAlign: "right" }} />
+                </>
+              ) : <span style={{ color: "var(--muted)" }}>{a.mode === "pct" ? `${a.value}%` : "$"}</span>}
+              <span style={{ width: 72, textAlign: "right", fontWeight: 700 }}>{fmt(allocationAmount(l, a))}</span>
+              {!ro && !locked && <button className="btn btn-sm" style={{ color: "var(--rust)", padding: "1px 6px" }} onClick={() => store.removeAllocation(draw.id, a.lineId)}>✕</button>}
             </div>
           );
         })}
-        {!draw.phaseRefs.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No phases in this draw yet.</span>}
+        {!draw.allocations.length && <div style={{ fontSize: 12, color: "var(--muted)", padding: "10px 0", textAlign: "center", border: "1px dashed var(--line)", borderRadius: 8 }}>{ro ? "No lines." : "Drag budget lines here"}</div>}
       </div>
 
-      {!ro && !paidLock && (
-        <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {adding ? (
-            <select autoFocus defaultValue="" onChange={(e) => { if (e.target.value) { const [lineId, phaseId] = e.target.value.split("|"); store.togglePhaseInDraw(draw.id, lineId, phaseId); setAdding(false); } }} style={{ minWidth: 240 }}>
-              <option value="" disabled>Add a line phase…</option>
-              {candidates.map(({ l, p }) => <option key={`${l.id}:${p.id}`} value={`${l.id}|${p.id}`}>{l.name} — {p.name} ({fmt(phaseAmount(l, p))})</option>)}
-            </select>
-          ) : (
-            <button className="btn btn-sm" onClick={() => setAdding(true)}>+ Add phase</button>
-          )}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-            {draw.status !== "paid" && <button className="btn btn-sm" onClick={() => store.setDrawStatus(draw.id, NEXT[draw.status])}>Mark {NEXT[draw.status]}{NEXT[draw.status] === "paid" ? " 🔒" : ""}</button>}
-            <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeDraw(draw.id)}>Delete</button>
-          </div>
+      {!ro && (
+        <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+          {draw.status === "planned" && <PushButton draw={draw} />}
+          {draw.status === "pushed" && <button className="btn btn-sm btn-primary" onClick={() => store.setDrawStatus(draw.id, "paid")}>Mark paid 🔒</button>}
+          {!locked && <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => store.removeDraw(draw.id)}>Delete</button>}
         </div>
       )}
-      {paidLock && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — these amounts are locked. Cost increases must be funded by a new draw.</div>}
+      {locked && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — locked. Cost growth needs a new draw.</div>}
+      {draw.status === "pushed" && <div style={{ fontSize: 11.5, color: "var(--brass-2)", marginTop: 8 }}>📄 Contracts issued — see Vendor Management for signatures.</div>}
     </div>
   );
 }
 
-const th: React.CSSProperties = { textAlign: "left", padding: "8px 10px", borderBottom: "2px solid var(--line)", position: "sticky", top: 0, background: "var(--paper)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" };
-const thR: React.CSSProperties = { ...th, textAlign: "right" };
-const td: React.CSSProperties = { padding: "7px 10px", borderBottom: "1px solid var(--line)" };
-const tdR: React.CSSProperties = { ...td, textAlign: "right" };
+function PushButton({ draw }: { draw: Draw }) {
+  const store = useStore();
+  const name = store.session.displayName;
+  const [done, setDone] = useState(false);
+  return (
+    <button className="btn btn-sm btn-primary" disabled={!draw.allocations.length} onClick={() => { const r = store.pushDraw(draw.id, name); setDone(true); void r; }}>
+      {done ? "✓ Pushed" : "Push → issue contracts"}
+    </button>
+  );
+}

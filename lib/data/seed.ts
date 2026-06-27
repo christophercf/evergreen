@@ -397,14 +397,14 @@ if (masonryId) addCO(masonryId, { kind: "change", title: "Dining room chimney tu
 const demoId = byName("Insulation, Drywall & Demo") ?? byName("Insulation");
 if (demoId) addCO(demoId, { kind: "savings", title: "Demo carved out of drywall bid", desc: "Aaron confirmed demo represented ~$5k of the combined bid; removed and tracked as a saving.", amount: 5000, date: "2026-05-20", status: "approved" });
 
-// ---- Draws (Payments tab) ---------------------------------------------------
-// Draw 1 (paid): the mobilization phase of the early structural/MEP work.
-const ph1 = (name: string) => { const id = byName(name); return id ? { lineId: id, phaseId: `${id}-ph1` } : null; };
-const draw1Refs = ["General Conditions", "Waterproofing", "Footings", "Roof for Additions", "Masonry"].map(ph1).filter(Boolean) as { lineId: string; phaseId: string }[];
-const draw2Refs = ["HVAC", "Electrical", "Plumbing", "Framing"].map(ph1).filter(Boolean) as { lineId: string; phaseId: string }[];
+// ---- Draws (Payment Tracker) ------------------------------------------------
+// Budget lines allocated into draws by % of their current total. Three default
+// draws; Draw 1 is paid (mobilization), Draw 2 pushed (rough-in), Draw 3 empty.
+const alloc = (names: string[], pct: number) => names.map((n) => byName(n)).filter(Boolean).map((lineId) => ({ lineId: lineId as string, mode: "pct" as const, value: pct }));
 const draws: Draw[] = [
-  { id: "draw-1", name: "Draw 1 — Mobilization", phaseRefs: draw1Refs, status: "paid", paidDate: "2026-06-15", note: "Initial mobilization across early structural & site work." },
-  { id: "draw-2", name: "Draw 2 — Rough-in", phaseRefs: draw2Refs, status: "planned", note: "Released after rough inspections pass." },
+  { id: "draw-1", name: "Draw 1 — Mobilization", status: "paid", paidDate: "2026-06-15", note: "Initial mobilization across early structural & site work.", allocations: alloc(["General Conditions", "Waterproofing", "Footings", "Roof for Additions", "Masonry"], 40) },
+  { id: "draw-2", name: "Draw 2 — Rough-in", status: "planned", note: "Release after rough inspections pass.", allocations: alloc(["HVAC", "Electrical", "Plumbing", "Framing"], 40) },
+  { id: "draw-3", name: "Draw 3 — Finishes", status: "planned", note: "", allocations: [] },
 ];
 
 // ---- Vendor agreements ------------------------------------------------------

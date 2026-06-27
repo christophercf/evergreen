@@ -449,7 +449,7 @@ function Phases({ line, ro }: { line: CostLine; ro: boolean }) {
       <div style={{ marginTop: 6 }}><StackBar height={8} segments={[{ value: Math.min(total, current), color: over ? "var(--rust)" : "var(--sage)" }, { value: Math.max(0, current - total), color: "var(--cream-2)" }]} /></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
         {line.phases.map((p) => {
-          const locked = store.phaseInPaidDraw(line.id, p.id);
+          const locked = false;
           return (
             <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
               <input value={p.name} disabled={ro || locked} onChange={(e) => store.updateLinePhase(line.id, p.id, { name: e.target.value })} style={{ flex: 1, minWidth: 0 }} />
