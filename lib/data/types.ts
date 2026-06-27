@@ -226,6 +226,28 @@ export interface Draw {
   note?: string;
 }
 
+// ---- Artifacts (document library) -------------------------------------------
+export type ArtifactKind = "drawing" | "survey" | "permit" | "design" | "photo" | "contract" | "other";
+
+export const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = {
+  drawing: "Architectural Drawings", survey: "Survey", permit: "Permits", design: "Design", photo: "Photos", contract: "Contracts", other: "Other",
+};
+
+export interface Artifact {
+  id: string;
+  name: string;
+  kind: ArtifactKind;
+  url?: string; // view/download link (real file upload via Supabase Storage is the next step)
+  source?: string; // who produced it
+  date?: string;
+  version?: string;
+  notes?: string;
+  /** Roles allowed to view. Empty/undefined = whole team. */
+  audience?: Role[];
+  /** Restrict to specific trades (in addition to roles). Empty = all trades. */
+  tradeIds?: string[];
+}
+
 // ---- Materials --------------------------------------------------------------
 export type MaterialStatus = "needed" | "ordered" | "purchased" | "delivered";
 export type Purchaser = "owner" | "trade" | "builder";
@@ -291,9 +313,24 @@ export interface ScheduleItem {
   confirm: ConfirmState;
   confirmedAt?: string;
   confirmedBy?: string;
+  /** Original (first) dates — kept to overlay the original plan vs final. */
+  origStart?: string;
+  origEnd?: string;
   /** Optional link to a contract funding phase (gate / % release). */
   contractId?: string;
   phaseId?: string;
+}
+
+// A published batch of timing changes, with a reason + timestamp, for the audit
+// trail and the owner email summary.
+export interface ScheduleRevision {
+  id: string;
+  at: string;
+  by: string;
+  reason: string;
+  changes: { itemId: string; label: string; fromStart: string; fromEnd: string; toStart: string; toEnd: string }[];
+  notifiedTradeIds: string[];
+  emailedClient: boolean;
 }
 
 // In-app notification (email later). Targeted at a user or a whole role.
@@ -356,9 +393,11 @@ export interface DB {
   funding: FundingSource[];
   schedule: ScheduleItem[];
   notifications: AppNotification[];
+  scheduleRevisions: ScheduleRevision[];
   draws: Draw[];
   vendorAgreements: VendorAgreement[];
   materials: Material[];
+  artifacts: Artifact[];
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -415,6 +454,17 @@ export function canRemoveUser(viewerRole: Role, viewer: User | undefined, target
 //  • full_admin + builder see all trade contacts
 //  • owner sees only owner-managed trade contacts (not builder-managed)
 //  • non-trade users' contacts are visible to admins
+// Can this user view an artifact, given its audience + trade restrictions?
+export function canSeeArtifact(role: Role, user: User | undefined, a: Artifact): boolean {
+  if (role === "full_admin" || role === "owner" || role === "builder") return true;
+  const audienceOk = !a.audience || a.audience.length === 0 || a.audience.includes(role);
+  if (!audienceOk) return false;
+  if (role === "trade" && a.tradeIds && a.tradeIds.length) {
+    return (user?.tradeIds ?? []).some((t) => a.tradeIds!.includes(t));
+  }
+  return true;
+}
+
 export function canSeeContacts(viewerRole: Role, target: User): boolean {
   if (viewerRole === "full_admin" || viewerRole === "builder") return true;
   if (viewerRole === "owner") return target.role !== "trade" || target.managedBy === "owner";

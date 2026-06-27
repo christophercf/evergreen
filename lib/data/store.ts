@@ -6,7 +6,7 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, AppNotification, ChangeOrder, Contact, Contract, CostLine, DB, Draw, FundingSource,
+  AccessLevel, AppNotification, Artifact, ChangeOrder, Contact, Contract, CostLine, DB, Draw, FundingSource,
   LinePhase, Material, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
   Session, User,
 } from "./types";
@@ -28,6 +28,8 @@ class Store {
   private backend: Backend | null = null;
   private listeners = new Set<Listener>();
   private started = false;
+  // Global undo: snapshot of db (JSON) before each mutation.
+  private undoStack: string[] = [];
 
   get mode(): "mock" | "supabase" {
     return this.backend?.mode ?? "mock";
@@ -68,10 +70,24 @@ class Store {
   }
 
   private mutate(fn: (db: DB) => void) {
+    this.undoStack.push(JSON.stringify(this.db));
+    if (this.undoStack.length > 40) this.undoStack.shift();
     const next = clone(this.db);
     fn(next);
     this.db = next;
     void this.backend?.persistDB(next);
+    this.emit();
+  }
+
+  // ---- Global undo (all tabs) ----
+  get canUndo(): boolean {
+    return this.undoStack.length > 0;
+  }
+  undo() {
+    const prev = this.undoStack.pop();
+    if (prev === undefined) return;
+    this.db = JSON.parse(prev) as DB;
+    void this.backend?.persistDB(this.db);
     this.emit();
   }
 
@@ -183,22 +199,7 @@ class Store {
   }
 
   // ---- Scope matrix ----
-  // Lightweight undo for the scope matrix: snapshot db.scope before each change.
-  private scopeHistory: string[] = [];
   scopeClipboard: { status: ScopeStatus; items: { label: string; included: boolean }[] } | null = null;
-
-  private recordScope() {
-    this.scopeHistory.push(JSON.stringify(this.db.scope));
-    if (this.scopeHistory.length > 40) this.scopeHistory.shift();
-  }
-  get canUndoScope(): boolean {
-    return this.scopeHistory.length > 0;
-  }
-  undoScope() {
-    const prev = this.scopeHistory.pop();
-    if (!prev) return;
-    this.mutate((db) => { db.scope = JSON.parse(prev); });
-  }
 
   private ensureCell(db: DB, roomId: string, tradeId: string) {
     let cell = db.scope.find((c) => c.roomId === roomId && c.tradeId === tradeId);
@@ -216,7 +217,6 @@ class Store {
   }
 
   setScopeStatus(roomId: string, tradeId: string, status: ScopeStatus) {
-    this.recordScope();
     this.mutate((db) => {
       const apply = (rid: string) => {
         const cell = this.ensureCell(db, rid, tradeId);
@@ -240,7 +240,6 @@ class Store {
   pasteScopeCell(roomId: string, tradeId: string) {
     if (!this.scopeClipboard) return;
     const clip = this.scopeClipboard;
-    this.recordScope();
     this.mutate((db) => {
       const cell = this.ensureCell(db, roomId, tradeId);
       cell.status = clip.status;
@@ -265,7 +264,6 @@ class Store {
 
   /** Toggle a scope item (by label) across a cluster of rooms at once. */
   setScopeItemForRooms(roomIds: string[], tradeId: string, label: string, included: boolean) {
-    this.recordScope();
     this.mutate((db) => {
       roomIds.forEach((rid) => {
         const cell = this.ensureCell(db, rid, tradeId);
@@ -304,7 +302,6 @@ class Store {
 
   /** Apply a trade's status to every room. */
   applyScopeToAll(tradeId: string, status: ScopeStatus) {
-    this.recordScope();
     this.mutate((db) => {
       db.rooms.forEach((r) => {
         const cell = this.ensureCell(db, r.id, tradeId);
@@ -316,7 +313,6 @@ class Store {
 
   /** Copy a (room, trade) cell to a set of target rooms. */
   copyScopeToRooms(fromRoomId: string, tradeId: string, toRoomIds: string[]) {
-    this.recordScope();
     this.mutate((db) => {
       const src = this.ensureCell(db, fromRoomId, tradeId);
       toRoomIds.forEach((roomId) => {
@@ -633,6 +629,58 @@ class Store {
         s.confirmedStart = start;
         s.confirmedEnd = end;
       }
+    });
+  }
+
+  /** Edit-mode date change: set dates only (no notify/confirm). Batched until publish. */
+  editSchedule(id: string, start: string, end: string) {
+    this.mutate((db) => {
+      const s = db.schedule.find((x) => x.id === id);
+      if (s) { s.start = start; s.end = end; }
+    });
+  }
+
+  /**
+   * Publish a batch of edit-mode timing changes with a required reason:
+   * records a revision, flags impacted tasks for trade re-confirmation, notifies
+   * each impacted trade, and emails a summary to the client (stub notification).
+   */
+  publishScheduleEdits(
+    changes: { itemId: string; label: string; fromStart: string; fromEnd: string; toStart: string; toEnd: string }[],
+    reason: string,
+    by: string,
+  ) {
+    if (!changes.length) return;
+    this.mutate((db) => {
+      const notifiedTradeIds: string[] = [];
+      for (const c of changes) {
+        const s = db.schedule.find((x) => x.id === c.itemId);
+        if (!s) continue;
+        if (s.assignedUserId) {
+          s.confirm = "pending";
+          this.notify(db, {
+            toUserId: s.assignedUserId,
+            kind: "schedule_pushed",
+            message: `${by} changed "${s.label}" to ${c.toStart} → ${c.toEnd}. Reason: ${reason}. Please confirm.`,
+            scheduleItemId: s.id,
+          });
+          if (s.tradeId) notifiedTradeIds.push(s.tradeId);
+        } else {
+          s.confirm = "confirmed";
+          s.confirmedStart = s.start;
+          s.confirmedEnd = s.end;
+        }
+      }
+      // Email summary to the client (owner) — stubbed as an in-app notification.
+      this.notify(db, {
+        toRole: "owner",
+        kind: "info",
+        message: `📧 Schedule update emailed: ${changes.length} task(s) re-timed by ${by}. Reason: ${reason}.`,
+      });
+      db.scheduleRevisions.unshift({
+        id: newId("rev"), at: new Date().toISOString(), by, reason, changes,
+        notifiedTradeIds: [...new Set(notifiedTradeIds)], emailedClient: true,
+      });
     });
   }
 

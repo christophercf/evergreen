@@ -87,7 +87,7 @@ function MatrixTab({ ro }: { ro: boolean }) {
       {/* toolbar */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", margin: "12px 0" }}>
         {!ro && <>
-          <button className="btn btn-sm" disabled={!store.canUndoScope} onClick={() => store.undoScope()}>↶ Undo</button>
+          <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()}>↶ Undo</button>
           <button className="btn btn-sm" onClick={() => { setArmCopy(true); setPasteMode(false); }} style={{ background: armCopy ? "var(--brass)" : undefined, color: armCopy ? "#fff" : undefined }}>⧉ Copy a cell</button>
           <button className="btn btn-sm" disabled={!store.scopeClipboard} onClick={() => setPasteMode((v) => !v)} style={{ background: pasteMode ? "var(--sage)" : undefined, color: pasteMode ? "#fff" : undefined }}>Paste mode {pasteMode ? "ON" : "off"}</button>
           {store.scopeClipboard && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>clipboard: <strong>{SCOPE_LABEL[store.scopeClipboard.status]}</strong></span>}

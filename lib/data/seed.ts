@@ -8,7 +8,7 @@
 import type {
   Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
-  ScheduleKind, ScheduleStatus, VendorAgreement, Material,
+  ScheduleKind, ScheduleStatus, VendorAgreement, Material, Artifact,
 } from "./types";
 import { lineTotal } from "./money";
 
@@ -295,7 +295,7 @@ const sch = (
   tradeId: string | undefined, kind: ScheduleKind, status: ScheduleStatus,
 ): ScheduleItem => ({
   id: `sch-${++sid}`, label, start, end, durationLabel, tradeId, kind, status,
-  confirm: "confirmed", confirmedStart: start, confirmedEnd: end,
+  confirm: "confirmed", confirmedStart: start, confirmedEnd: end, origStart: start, origEnd: end,
 });
 
 const schedule: ScheduleItem[] = [
@@ -489,6 +489,20 @@ const materials: Material[] = [
   m({ item: "Ext Door", roomId: "mudroom", roomLabel: "Mud Hall", tradeId: "windows", desc: "32''", status: "needed", notes: "Transom door w/ window (measure)", purchaser: "owner" }),
 ];
 
+// ---- Artifacts (document library) -------------------------------------------
+let aid = 0;
+const af = (o: Omit<Artifact, "id">): Artifact => ({ id: `art-${++aid}`, ...o });
+const artifacts: Artifact[] = [
+  af({ name: "Architectural Plans — Schematic Set", kind: "drawing", source: "Joseph Mosey Architecture", date: "2026-05", version: "v2 (after plan review)", notes: "Floor plans, elevations, sections.", url: "" }),
+  af({ name: "Structural Engineering Drawings", kind: "drawing", source: "Metropolitan Structural Engineers", date: "2026-04", url: "" }),
+  af({ name: "Land Survey", kind: "survey", source: "Fenn & Associates", date: "2026-04-17", url: "" }),
+  af({ name: "Building Permit", kind: "permit", source: "Municipality", date: "2026-05", notes: "Permits billed at cost ($6,638.72).", url: "" }),
+  af({ name: "Electrical Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["builder", "trade"], tradeIds: ["electrical"], url: "" }),
+  af({ name: "Plumbing Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["builder", "trade"], tradeIds: ["plumbing"], url: "" }),
+  af({ name: "Design Intent — Restoration", kind: "design", source: "The Johnson Family", date: "2026-03", notes: "Grand vision, guiding principles, room-by-room intent (1822 farmhouse).", url: "" }),
+  af({ name: "Pinterest References", kind: "design", source: "Owner", url: "https://pinterest.com" }),
+];
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -503,9 +517,11 @@ export function buildDB(): DB {
     funding,
     schedule,
     notifications: [],
+    scheduleRevisions: [],
     draws,
     vendorAgreements,
     materials,
+    artifacts,
   };
 }
 

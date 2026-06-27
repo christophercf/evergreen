@@ -98,9 +98,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           }}
         >
           <button className="btn btn-sm ever-burger" onClick={() => setNavOpen((v) => !v)} style={{ display: "none" }}>☰</button>
-          <div style={{ flex: 1, fontSize: 13, color: "var(--muted)" }}>
+          <div style={{ flex: 1, fontSize: 13, color: "var(--muted)" }} className="ever-tagline">
             Renovation management — replacing the working spreadsheets
           </div>
+          {role !== "viewer" && (
+            <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo last change">↶ Undo</button>
+          )}
           <PersonaSwitcher current={role} onPick={(r) => store.setRole(r)} onLogout={() => store.logout()} canViewAs={role === "full_admin"} name={store.session.displayName} />
         </header>
         <main className="ever-main" style={{ padding: "22px 24px 64px", maxWidth: 1180, width: "100%", margin: "0 auto" }}>{children}</main>

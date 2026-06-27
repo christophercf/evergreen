@@ -180,50 +180,53 @@ function CostChart() {
       return a + base + (landed <= uptoIdx ? co : 0);
     }, 0);
 
-  const W = 720, H = 230, padL = 56, padB = 26, padT = 10;
-  const plotW = W - padL - 8, plotH = H - padB - padT;
-  const colW = months.length ? Math.min(70, plotW / months.length) : plotW;
+  const W = 720, H = 240, padL = 56, padB = 28, padT = 12;
+  const plotW = W - padL - 10, plotH = H - padB - padT;
   const y = (v: number) => padT + plotH - (v / maxV) * plotH;
+  const xAt = (i: number) => padL + (months.length <= 1 ? plotW : (i / (months.length - 1)) * plotW);
   const budgetY = y(baseTotal);
+  const cats = MACRO_ORDER.filter((c) => db.costLines.some((l) => l.category === c));
+
+  // Build cumulative stacked series: bottom[i] accumulates as we stack categories.
+  const bottom = months.map(() => 0);
+  const bands = cats.map((c) => {
+    const pts = months.map((m, i) => {
+      const v = cum(m, c);
+      const b = bottom[i];
+      const t = b + v;
+      bottom[i] = t;
+      return { x: xAt(i), top: y(t), bot: y(b) };
+    });
+    // polygon: tops L→R, then bottoms R→L
+    const poly = [...pts.map((p) => `${p.x.toFixed(1)},${p.top.toFixed(1)}`), ...[...pts].reverse().map((p) => `${p.x.toFixed(1)},${p.bot.toFixed(1)}`)].join(" ");
+    return { c, poly };
+  });
+  const totalLine = months.map((m, i) => `${xAt(i).toFixed(1)},${y(bottom[i]).toFixed(1)}`).join(" ");
 
   return (
     <div className="card" style={{ padding: 16, overflowX: "auto" }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 520, display: "block" }}>
-        {/* y gridlines */}
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
           <g key={f}>
-            <line x1={padL} x2={W - 8} y1={padT + plotH * (1 - f)} y2={padT + plotH * (1 - f)} stroke="var(--line)" strokeWidth={1} />
+            <line x1={padL} x2={W - 10} y1={padT + plotH * (1 - f)} y2={padT + plotH * (1 - f)} stroke="var(--line)" strokeWidth={1} />
             <text x={padL - 6} y={padT + plotH * (1 - f) + 3} textAnchor="end" fontSize={9} fill="var(--muted)">{fmt(maxV * f)}</text>
           </g>
         ))}
+        {/* stacked areas */}
+        {bands.map((b) => <polygon key={b.c} points={b.poly} fill={MACRO_COLOR[b.c]} opacity={0.82} stroke={MACRO_COLOR[b.c]} strokeWidth={0.5} />)}
+        {/* total boundary line + points */}
+        <polyline points={totalLine} fill="none" stroke="var(--walnut)" strokeWidth={1.5} />
+        {months.map((m, i) => <circle key={i} cx={xAt(i)} cy={y(bottom[i])} r={2.4} fill="var(--walnut)" />)}
         {/* budget reference line */}
-        <line x1={padL} x2={W - 8} y1={budgetY} y2={budgetY} stroke="var(--brass)" strokeWidth={1.5} strokeDasharray="5 4" />
-        <text x={W - 10} y={budgetY - 4} textAnchor="end" fontSize={9.5} fill="var(--brass-2)" fontWeight={700}>Baseline budget {fmt(baseTotal)}</text>
-        {/* stacked bars per month */}
-        {months.map((m, i) => {
-          let yTop = padT + plotH;
-          const x = padL + i * colW + colW * 0.15;
-          const bw = colW * 0.7;
-          return (
-            <g key={m}>
-              {MACRO_ORDER.map((c) => {
-                const v = cum(m, c);
-                if (v <= 0) return null;
-                const h = (v / maxV) * plotH;
-                yTop -= h;
-                return <rect key={c} x={x} y={yTop} width={bw} height={h} fill={MACRO_COLOR[c]} opacity={0.92} />;
-              })}
-              <text x={x + bw / 2} y={H - padB + 14} textAnchor="middle" fontSize={9} fill="var(--muted)">{fmtMonth(m)}</text>
-            </g>
-          );
-        })}
+        <line x1={padL} x2={W - 10} y1={budgetY} y2={budgetY} stroke="var(--brass)" strokeWidth={1.5} strokeDasharray="5 4" />
+        <text x={W - 12} y={budgetY - 4} textAnchor="end" fontSize={9.5} fill="var(--brass-2)" fontWeight={700}>Baseline budget {fmt(baseTotal)}</text>
+        {/* month labels */}
+        {months.map((m, i) => <text key={i} x={xAt(i)} y={H - padB + 16} textAnchor="middle" fontSize={9} fill="var(--muted)">{fmtMonth(m)}</text>)}
       </svg>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6, fontSize: 11 }}>
-        {MACRO_ORDER.map((c) => db.costLines.some((l) => l.category === c) && (
-          <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: MACRO_COLOR[c] }} />{c}</span>
-        ))}
+        {cats.map((c) => <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: MACRO_COLOR[c] }} />{c}</span>)}
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Costs accrue as each trade’s work completes on the schedule, stacking by category up to the baseline budget (dashed). Approved change orders push the stack above the line.</p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Cumulative cost over time as a stacked area by category, building toward the baseline budget (dashed). Approved change orders lift the curve above the line.</p>
     </div>
   );
 }
