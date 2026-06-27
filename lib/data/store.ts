@@ -6,7 +6,7 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, AppNotification, ChangeOrder, Contract, CostLine, DB, Draw, FundingSource,
+  AccessLevel, AppNotification, ChangeOrder, Contact, Contract, CostLine, DB, Draw, FundingSource,
   LinePhase, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
   Session, User,
 } from "./types";
@@ -97,10 +97,17 @@ class Store {
   }
 
   // ---- Rooms ----
-  addRoom(name: string, floor: Room["floor"]) {
+  roomNameExists(name: string): boolean {
+    const n = name.trim().toLowerCase();
+    return this.db.rooms.some((r) => r.name.trim().toLowerCase() === n);
+  }
+  /** Add a room (shared across Admin + Building Costs). No duplicate names. */
+  addRoom(name: string, floor: Room["floor"]): boolean {
+    if (!name.trim() || this.roomNameExists(name)) return false;
     this.mutate((db) => {
-      db.rooms.push({ id: newId("room"), name, floor, custom: true });
+      db.rooms.push({ id: newId("room"), name: name.trim(), floor, custom: true });
     });
+    return true;
   }
   renameRoom(id: string, name: string) {
     this.mutate((db) => {
@@ -117,6 +124,23 @@ class Store {
   }
 
   // ---- Scope matrix ----
+  // Lightweight undo for the scope matrix: snapshot db.scope before each change.
+  private scopeHistory: string[] = [];
+  scopeClipboard: { status: ScopeStatus; items: { label: string; included: boolean }[] } | null = null;
+
+  private recordScope() {
+    this.scopeHistory.push(JSON.stringify(this.db.scope));
+    if (this.scopeHistory.length > 40) this.scopeHistory.shift();
+  }
+  get canUndoScope(): boolean {
+    return this.scopeHistory.length > 0;
+  }
+  undoScope() {
+    const prev = this.scopeHistory.pop();
+    if (!prev) return;
+    this.mutate((db) => { db.scope = JSON.parse(prev); });
+  }
+
   private ensureCell(db: DB, roomId: string, tradeId: string) {
     let cell = db.scope.find((c) => c.roomId === roomId && c.tradeId === tradeId);
     if (!cell) {
@@ -133,10 +157,35 @@ class Store {
   }
 
   setScopeStatus(roomId: string, tradeId: string, status: ScopeStatus) {
+    this.recordScope();
+    this.mutate((db) => {
+      const apply = (rid: string) => {
+        const cell = this.ensureCell(db, rid, tradeId);
+        cell.status = status;
+        cell.items.forEach((it) => (it.included = status === "in"));
+      };
+      apply(roomId);
+      // Selecting "Whole House" cascades to every other room for this trade.
+      if (roomId === "whole-house") db.rooms.forEach((r) => { if (r.id !== "whole-house") apply(r.id); });
+    });
+  }
+
+  // Copy / paste a cell's status + items.
+  copyScopeCell(roomId: string, tradeId: string) {
+    const cell = this.db.scope.find((c) => c.roomId === roomId && c.tradeId === tradeId);
+    this.scopeClipboard = cell
+      ? { status: cell.status, items: cell.items.map((i) => ({ label: i.label, included: i.included })) }
+      : { status: "unset", items: [] };
+    this.emit();
+  }
+  pasteScopeCell(roomId: string, tradeId: string) {
+    if (!this.scopeClipboard) return;
+    const clip = this.scopeClipboard;
+    this.recordScope();
     this.mutate((db) => {
       const cell = this.ensureCell(db, roomId, tradeId);
-      cell.status = status;
-      cell.items.forEach((it) => (it.included = status === "in"));
+      cell.status = clip.status;
+      cell.items = clip.items.map((it, i) => ({ id: `si-${tradeId}-${roomId}-${i}`, label: it.label, included: it.included }));
     });
   }
 
@@ -152,6 +201,28 @@ class Store {
     this.mutate((db) => {
       const cell = this.ensureCell(db, roomId, tradeId);
       cell.items.push({ id: newId("si"), label, included: cell.status === "in" });
+    });
+  }
+
+  /** Toggle a scope item (by label) across a cluster of rooms at once. */
+  setScopeItemForRooms(roomIds: string[], tradeId: string, label: string, included: boolean) {
+    this.recordScope();
+    this.mutate((db) => {
+      roomIds.forEach((rid) => {
+        const cell = this.ensureCell(db, rid, tradeId);
+        const it = cell.items.find((x) => x.label === label);
+        if (it) it.included = included;
+        else cell.items.push({ id: `si-${tradeId}-${rid}-${cell.items.length}`, label, included });
+      });
+    });
+  }
+  /** Add a new scope item (by label) to a cluster of rooms. */
+  addScopeItemForRooms(roomIds: string[], tradeId: string, label: string) {
+    this.mutate((db) => {
+      roomIds.forEach((rid) => {
+        const cell = this.ensureCell(db, rid, tradeId);
+        if (!cell.items.some((x) => x.label === label)) cell.items.push({ id: `si-${tradeId}-${rid}-${cell.items.length}`, label, included: cell.status === "in" });
+      });
     });
   }
 
@@ -174,6 +245,7 @@ class Store {
 
   /** Apply a trade's status to every room. */
   applyScopeToAll(tradeId: string, status: ScopeStatus) {
+    this.recordScope();
     this.mutate((db) => {
       db.rooms.forEach((r) => {
         const cell = this.ensureCell(db, r.id, tradeId);
@@ -185,6 +257,7 @@ class Store {
 
   /** Copy a (room, trade) cell to a set of target rooms. */
   copyScopeToRooms(fromRoomId: string, tradeId: string, toRoomIds: string[]) {
+    this.recordScope();
     this.mutate((db) => {
       const src = this.ensureCell(db, fromRoomId, tradeId);
       toRoomIds.forEach((roomId) => {
@@ -218,6 +291,31 @@ class Store {
   addUser(u: Omit<User, "id">) {
     this.mutate((db) => {
       db.users.push({ id: newId("u"), ...u });
+    });
+  }
+  removeUser(userId: string) {
+    this.mutate((db) => {
+      db.users = db.users.filter((u) => u.id !== userId);
+      // Unassign from any schedule tasks they owned.
+      db.schedule.forEach((s) => { if (s.assignedUserId === userId) s.assignedUserId = undefined; });
+    });
+  }
+  addContact(userId: string, c: Omit<Contact, "id">) {
+    this.mutate((db) => {
+      const u = db.users.find((x) => x.id === userId);
+      if (u) u.secondaryContacts = [...(u.secondaryContacts ?? []), { id: newId("c"), ...c }];
+    });
+  }
+  updateContact(userId: string, contactId: string, patch: Partial<Contact>) {
+    this.mutate((db) => {
+      const c = db.users.find((x) => x.id === userId)?.secondaryContacts?.find((x) => x.id === contactId);
+      if (c) Object.assign(c, patch);
+    });
+  }
+  removeContact(userId: string, contactId: string) {
+    this.mutate((db) => {
+      const u = db.users.find((x) => x.id === userId);
+      if (u?.secondaryContacts) u.secondaryContacts = u.secondaryContacts.filter((c) => c.id !== contactId);
     });
   }
 

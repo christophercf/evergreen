@@ -7,9 +7,10 @@
 // ----------------------------------------------------------------------------
 
 // ---- People & access --------------------------------------------------------
-export type Role = "owner" | "builder" | "trade" | "viewer";
+export type Role = "full_admin" | "owner" | "builder" | "trade" | "viewer";
 
 export const ROLE_LABEL: Record<Role, string> = {
+  full_admin: "Full Admin",
   owner: "Owner",
   builder: "Builder / GC",
   trade: "Trade",
@@ -30,14 +31,27 @@ export type ModuleKey =
 
 export type AccessLevel = "none" | "view" | "edit";
 
+// A secondary contact attached to a user (alt person/number/email).
+export interface Contact {
+  id: string;
+  label?: string; // e.g. "Office", "Foreman", "Spouse"
+  name?: string;
+  email?: string;
+  phone?: string;
+}
+
 export interface User {
   id: string;
   name: string;
-  email: string;
-  phone?: string;
+  email: string; // primary email
+  phone?: string; // primary phone
   role: Role;
   /** Trade ids this user is responsible for (for trade accounts). */
   tradeIds?: string[];
+  /** Who manages this trade's relationship — drives contact visibility. */
+  managedBy?: "builder" | "owner";
+  /** Additional people/numbers for this vendor. */
+  secondaryContacts?: Contact[];
   /** Door / lockbox code the owner granted this user. */
   doorCode?: string;
   /** Per-module overrides; falls back to the role default when absent. */
@@ -80,7 +94,7 @@ export type ScopeStatus = "in" | "out" | "existing" | "unset";
 export const SCOPE_LABEL: Record<ScopeStatus, string> = {
   in: "In Scope",
   out: "Out of Scope",
-  existing: "Use Existing",
+  existing: "EX",
   unset: "—",
 };
 
@@ -306,6 +320,10 @@ export interface Session {
 // Default per-role module access. Owner sees all; builder sees all but budget;
 // trade sees scope/timing/materials/vendors (view); viewer is read-only-light.
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
+  full_admin: {
+    dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit",
+  },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
     materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit",
@@ -326,4 +344,26 @@ export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
 
 export function accessFor(user: User | undefined, role: Role, mod: ModuleKey): AccessLevel {
   return user?.access?.[mod] ?? ROLE_ACCESS[role][mod];
+}
+
+// Can the viewer remove the target user?
+//  • full_admin removes anyone (except themselves)
+//  • owner removes the builder and owner-managed trades
+//  • builder removes trades (any trade)
+export function canRemoveUser(viewerRole: Role, viewer: User | undefined, target: User): boolean {
+  if (viewer && target.id === viewer.id) return false;
+  if (viewerRole === "full_admin") return true;
+  if (viewerRole === "owner") return target.role === "builder" || (target.role === "trade" && target.managedBy === "owner");
+  if (viewerRole === "builder") return target.role === "trade";
+  return false;
+}
+
+// Can the viewer see this user's contact numbers/emails?
+//  • full_admin + builder see all trade contacts
+//  • owner sees only owner-managed trade contacts (not builder-managed)
+//  • non-trade users' contacts are visible to admins
+export function canSeeContacts(viewerRole: Role, target: User): boolean {
+  if (viewerRole === "full_admin" || viewerRole === "builder") return true;
+  if (viewerRole === "owner") return target.role !== "trade" || target.managedBy === "owner";
+  return false;
 }

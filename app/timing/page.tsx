@@ -11,7 +11,7 @@ import { tradeCost, tradeName, MACRO_COLOR, fmt } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
 
 const DAY = 86400000;
-const MONTH_W = 58;
+const BASE_MONTH_W = 58;
 const ROW_H = 34;
 const LABEL_W = 270;
 
@@ -38,6 +38,8 @@ export default function TimingPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [cascade, setCascade] = useState<Cascade>(null);
+  const [zoom, setZoom] = useState(1);
+  const MONTH_W = Math.round(BASE_MONTH_W * zoom);
   useEffect(() => setMounted(true), []);
 
   const canEdit = role === "builder" && access === "edit"; // only the builder adjusts timing
@@ -72,7 +74,7 @@ export default function TimingPage() {
     while (d.getTime() <= reEnd) { ms.push({ label: d.toLocaleString("en-US", { month: "short", year: "2-digit" }), t: d.getTime() }); d.setMonth(d.getMonth() + 1); }
     const tw = ms.length * MONTH_W;
     return { rangeStart: rs, rangeEnd: reEnd, months: ms, totalW: tw, pxPerDay: tw / ((reEnd - rs) / DAY) };
-  }, [db.schedule]);
+  }, [db.schedule, MONTH_W]);
 
   const x = (ms: number) => ((ms - rangeStart) / (rangeEnd - rangeStart)) * totalW;
   const todayX = mounted && Date.now() >= rangeStart && Date.now() <= rangeEnd ? x(Date.now()) : null;
@@ -144,7 +146,12 @@ export default function TimingPage() {
       </div>
 
       <SectionTitle right={
-        <div style={{ display: "flex", gap: 12, fontSize: 11.5, color: "var(--muted)", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 14, fontSize: 11.5, color: "var(--muted)", flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+            <button className="btn btn-sm" onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.25).toFixed(2)))} title="Zoom out">－</button>
+            <span style={{ minWidth: 34, textAlign: "center", fontWeight: 700 }}>{Math.round(zoom * 100)}%</span>
+            <button className="btn btn-sm" onClick={() => setZoom((z) => Math.min(3, +(z + 0.25).toFixed(2)))} title="Zoom in">＋</button>
+          </div>
           {(["not_started", "in_progress", "done", "blocked"] as ScheduleStatus[]).map((s) => (
             <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 11, height: 11, borderRadius: 3, background: STATUS_COLOR[s] }} />{SCHEDULE_LABEL[s]}</span>
           ))}

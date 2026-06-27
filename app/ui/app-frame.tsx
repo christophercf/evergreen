@@ -24,7 +24,7 @@ const NAV: NavItem[] = [
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon, phase2: true },
 ];
 
-const ROLES: Role[] = ["owner", "builder", "trade", "viewer"];
+const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
 
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const store = useStore();

@@ -14,7 +14,7 @@ export const DB_KEY = "evergreen.db.v1";
 export const SESSION_KEY = "evergreen.session.v1";
 
 export function defaultSession(): Session {
-  return { role: "owner", userId: "u-owner", displayName: "Chris Johnson" };
+  return { role: "full_admin", userId: "u-owner", displayName: "Chris Johnson" };
 }
 
 export interface Backend {

@@ -23,12 +23,13 @@ const project: Project = {
 
 // ---- Users ------------------------------------------------------------------
 const users: User[] = [
-  { id: "u-owner", name: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "", role: "owner" },
+  { id: "u-owner", name: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "", role: "full_admin" },
   { id: "u-owner2", name: "Emily Johnson", email: "emily@johnson.family", role: "owner" },
-  { id: "u-builder", name: "Aaron — Oasis", email: "aaron@oasisbuild.example", phone: "", role: "builder", doorCode: "1822" },
-  { id: "u-electric", name: "Electrician (Oasis sub)", email: "electric@oasisbuild.example", role: "trade", tradeIds: ["electrical"], doorCode: "1822" },
-  { id: "u-plumb", name: "Lakeside Plumbing — Danny", email: "danny@lakeside.example", phone: "313-554-1900", role: "trade", tradeIds: ["plumbing"], doorCode: "1822" },
-  { id: "u-windows", name: "Diverse Windows", email: "info@windowsdiverse.example", phone: "313-655-5684", role: "trade", tradeIds: ["windows"] },
+  { id: "u-builder", name: "Aaron — Oasis", email: "aaron@oasisbuild.example", phone: "248-555-0142", role: "builder", doorCode: "1822",
+    secondaryContacts: [{ id: "c-aaron-1", label: "Office", name: "Oasis Build LLC", phone: "248-555-0100", email: "office@oasisbuild.example" }] },
+  { id: "u-electric", name: "Electrician (Oasis sub)", email: "electric@oasisbuild.example", phone: "248-555-0188", role: "trade", tradeIds: ["electrical"], managedBy: "builder", doorCode: "1822" },
+  { id: "u-plumb", name: "Lakeside Plumbing — Danny", email: "danny@lakeside.example", phone: "313-554-1900", role: "trade", tradeIds: ["plumbing"], managedBy: "builder", doorCode: "1822" },
+  { id: "u-windows", name: "Diverse Windows", email: "info@windowsdiverse.example", phone: "313-655-5684", role: "trade", tradeIds: ["windows"], managedBy: "owner" },
   { id: "u-design", name: "Designer (TBD)", email: "design@example.com", role: "viewer" },
 ];
 
