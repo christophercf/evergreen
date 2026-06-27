@@ -7,7 +7,7 @@ import { useStore } from "@/lib/data/hooks";
 import { IS_MOCK } from "@/lib/data/config";
 import { ROLE_LABEL, accessFor, type ModuleKey, type Role } from "@/lib/data/types";
 import {
-  HomeIcon, GridIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon,
+  HomeIcon, GridIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon,
 } from "./icons";
 
 type NavItem = { href: string; label: string; mod: ModuleKey; Icon: (p: any) => React.ReactElement; phase2?: boolean };
@@ -16,6 +16,7 @@ const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", Icon: HomeIcon },
   { href: "/admin", label: "Administrative", mod: "admin", Icon: GridIcon },
   { href: "/costs", label: "Building Costs", mod: "costs", Icon: CoinsIcon },
+  { href: "/payments", label: "Payment Tracker", mod: "payments", Icon: ReceiptIcon },
   { href: "/budget", label: "Budget", mod: "budget", Icon: WalletIcon },
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon, phase2: true },

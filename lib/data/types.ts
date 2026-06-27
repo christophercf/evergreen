@@ -25,7 +25,8 @@ export type ModuleKey =
   | "materials"
   | "vendors"
   | "costs"
-  | "budget";
+  | "budget"
+  | "payments";
 
 export type AccessLevel = "none" | "view" | "edit";
 
@@ -123,6 +124,28 @@ export interface PricePoint {
   amount: number; // the sub/base cost at this point (pre-markup)
 }
 
+// A change order or found-saving, tracked as a numbered exhibit on the line's
+// contract. `amount` is always positive; `kind` decides whether it adds or saves.
+export interface ChangeOrder {
+  id: string;
+  exhibit: string; // "Exhibit A", "Exhibit B", …
+  kind: "change" | "savings";
+  title: string;
+  desc?: string;
+  amount: number; // positive dollars
+  date: string;
+  status: "proposed" | "approved";
+}
+
+// A portion of a line's budget the builder can group into a draw. Either a % of
+// the line's current total or a hard dollar number.
+export interface LinePhase {
+  id: string;
+  name: string;
+  mode: "pct" | "amount";
+  value: number; // percent (0-100) or dollars
+}
+
 export interface CostLine {
   id: string;
   name: string;
@@ -141,6 +164,28 @@ export interface CostLine {
   allowanceHigh?: number;
   status: "estimate" | "allowance" | "contracted" | "complete";
   contractId?: string;
+  /** Locked baseline (original budget). Set when the baseline is locked. */
+  baseline?: number;
+  locked?: boolean;
+  /** Post-baseline adjustments, tracked as contract exhibits. */
+  changeOrders: ChangeOrder[];
+  /** The line's own contract document. */
+  contractSummary?: string;
+  contractMode?: "direct" | "appendix"; // direct trade contract vs builder's-paper appendix
+  termsAppended?: boolean;
+  /** Funding phases for this line (grouped into draws on the Payments tab). */
+  phases: LinePhase[];
+}
+
+// A client payment that bundles one or more line phases. Once paid, those
+// amounts lock (lines can still grow via change orders → new phases/draws).
+export interface Draw {
+  id: string;
+  name: string;
+  phaseRefs: { lineId: string; phaseId: string }[];
+  status: "planned" | "invoiced" | "paid";
+  paidDate?: string;
+  note?: string;
 }
 
 // ---- Schedule (Gantt) -------------------------------------------------------
@@ -200,23 +245,15 @@ export interface AppNotification {
   read: boolean;
 }
 
-// ---- Contracts & funding phases --------------------------------------------
-export interface ContractPhase {
-  id: string;
-  name: string; // "Phase 1 — Mobilization"
-  pct: number; // % of contract total released at this phase
-  gate: string; // what must be complete to release the next round
-  released: boolean;
-}
-
+// ---- Contracts (master terms templates) ------------------------------------
+// A vendor's master terms (anti-lien, change-order, good-faith policy). These
+// are auto-appended to each cost line's own contract document.
 export interface Contract {
   id: string;
   name: string; // builder / vendor name
   tradeIds: string[];
   terms: string;
-  /** Anti-lien / change-order / good-faith policy acceptance. */
   termsAccepted: boolean;
-  phases: ContractPhase[];
 }
 
 // ---- Owner budget (financing) ----------------------------------------------
@@ -256,6 +293,7 @@ export interface DB {
   funding: FundingSource[];
   schedule: ScheduleItem[];
   notifications: AppNotification[];
+  draws: Draw[];
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -270,19 +308,19 @@ export interface Session {
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "none",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit",
   },
   trade: {
     dashboard: "view", timing: "edit", artifacts: "view", admin: "none",
-    materials: "edit", vendors: "view", costs: "none", budget: "none",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none",
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
-    materials: "view", vendors: "view", costs: "none", budget: "none",
+    materials: "view", vendors: "view", costs: "none", budget: "none", payments: "none",
   },
 };
 

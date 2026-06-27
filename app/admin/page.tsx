@@ -288,6 +288,7 @@ const MODULES: { key: ModuleKey; label: string }[] = [
   { key: "dashboard", label: "Dashboard" },
   { key: "admin", label: "Admin" },
   { key: "costs", label: "Costs" },
+  { key: "payments", label: "Pay" },
   { key: "budget", label: "Budget" },
   { key: "timing", label: "Timing" },
   { key: "materials", label: "Materials" },

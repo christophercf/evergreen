@@ -39,6 +39,9 @@ export const ChevronIcon = (p: SVGProps<SVGSVGElement>) => (
 export const SparkIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" /></svg>
 );
+export const ReceiptIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M5 3v18l2-1.2 2 1.2 2-1.2 2 1.2 2-1.2 2 1.2V3l-2 1.2L14 3l-2 1.2L10 3 8 4.2 6 3 5 3Z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>
+);
 export const LeafIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M11 20A7 7 0 0 1 4 13c0-5 5-9 16-9 0 11-4 16-9 16Z" /><path d="M4 21c4-7 7-9 11-10" /></svg>
 );

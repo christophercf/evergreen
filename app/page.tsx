@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { Money, StatCard, SectionTitle, PageHeader, StackBar, Pill } from "./ui/bits";
-import { byCategory, totals, MACRO_ORDER, MACRO_COLOR } from "@/lib/data/money";
+import { byCategory, totals, drawAmount, MACRO_ORDER, MACRO_COLOR, fmt } from "@/lib/data/money";
 import { accessFor } from "@/lib/data/types";
 
 export default function Dashboard() {
@@ -27,9 +27,10 @@ export default function Dashboard() {
   const items = inScope.flatMap((c) => c.items.filter((i) => i.included));
   const signed = items.filter((i) => i.done).length;
 
-  // Contract phases
-  const phases = db.contracts.flatMap((c) => c.phases.map((p) => ({ ...p, contract: c.name })));
-  const released = phases.filter((p) => p.released).length;
+  // Draws / payments
+  const paidDraws = db.draws.filter((d) => d.status === "paid");
+  const paidTotal = paidDraws.reduce((a, d) => a + drawAmount(db, d), 0);
+  const remaining = Math.max(0, t.grand - paidTotal);
 
   return (
     <>
@@ -78,15 +79,19 @@ export default function Dashboard() {
           </div>
         </div>
         <div>
-          <SectionTitle right={<Link href="/costs" className="btn btn-sm">Contracts →</Link>}>Contract Phases</SectionTitle>
+          <SectionTitle right={<Link href="/payments" className="btn btn-sm">Payments →</Link>}>Draws &amp; Payments</SectionTitle>
           <div className="card" style={{ padding: 16 }}>
-            <Row label="Phases released / total" value={`${released} / ${phases.length}`} />
-            <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 7 }}>
-              {phases.map((p) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                  <Pill color="#fff" bg={p.released ? "var(--ok)" : "var(--sc-unset)"}>{p.released ? "Released" : "Held"}</Pill>
-                  <span style={{ flex: 1, color: "var(--muted)" }}>{p.name}</span>
-                  <span style={{ fontWeight: 700 }}>{p.pct}%</span>
+            <Row label="Paid to date" value={fmt(paidTotal)} />
+            <Row label="Remaining to fund" value={fmt(remaining)} />
+            <div style={{ marginTop: 10 }}>
+              <StackBar segments={[{ value: paidTotal, color: "var(--ok)" }, { value: remaining, color: "var(--cream-2)" }]} />
+            </div>
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 7 }}>
+              {db.draws.map((d) => (
+                <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                  <Pill color="#fff" bg={d.status === "paid" ? "var(--ok)" : d.status === "invoiced" ? "var(--brass)" : "var(--sc-unset)"}>{d.status}</Pill>
+                  <span style={{ flex: 1, color: "var(--muted)" }}>{d.name}</span>
+                  <span style={{ fontWeight: 700 }}>{fmt(drawAmount(db, d))}</span>
                 </div>
               ))}
             </div>

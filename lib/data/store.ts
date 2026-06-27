@@ -6,10 +6,12 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, AppNotification, Contract, CostLine, DB, FundingSource, ModuleKey,
-  PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus, Session, User,
+  AccessLevel, AppNotification, ChangeOrder, Contract, CostLine, DB, Draw, FundingSource,
+  LinePhase, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
+  Session, User,
 } from "./types";
 import { buildDB } from "./seed";
+import { lineTotal, lineCurrent, phaseAmount } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 
 type Listener = () => void;
@@ -239,9 +241,9 @@ class Store {
       l.roomIds = l.roomIds.includes(roomId) ? l.roomIds.filter((r) => r !== roomId) : [...l.roomIds, roomId];
     });
   }
-  addCostLine(l: Omit<CostLine, "id">) {
+  addCostLine(l: Omit<CostLine, "id" | "changeOrders" | "phases"> & Partial<Pick<CostLine, "changeOrders" | "phases">>) {
     this.mutate((db) => {
-      db.costLines.push({ id: newId("cl"), ...l });
+      db.costLines.push({ id: newId("cl"), changeOrders: [], phases: [], ...l });
     });
   }
   removeCostLine(id: string) {
@@ -250,19 +252,127 @@ class Store {
     });
   }
 
-  // ---- Contracts ----
-  togglePhaseReleased(contractId: string, phaseId: string) {
+  // ---- Baseline lock ----
+  /** Lock every line's current total as its baseline (original budget). */
+  lockBaseline() {
     this.mutate((db) => {
-      const c = db.contracts.find((x) => x.id === contractId);
-      const p = c?.phases.find((x) => x.id === phaseId);
-      if (p) p.released = !p.released;
+      db.costLines.forEach((l) => {
+        l.baseline = lineTotal(l);
+        l.locked = true;
+        if (!l.contractSummary) l.contractSummary = l.desc;
+        if (l.termsAppended === undefined) l.termsAppended = true;
+      });
     });
   }
-  setTermsAccepted(contractId: string, accepted: boolean) {
+  unlockLine(id: string) {
     this.mutate((db) => {
-      const c = db.contracts.find((x) => x.id === contractId);
-      if (c) c.termsAccepted = accepted;
+      const l = db.costLines.find((x) => x.id === id);
+      if (l) { l.locked = false; }
     });
+  }
+
+  // ---- Per-line contract doc ----
+  setLineContract(id: string, patch: Pick<Partial<CostLine>, "contractSummary" | "contractMode" | "termsAppended">) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === id);
+      if (l) Object.assign(l, patch);
+    });
+  }
+
+  // ---- Change orders (contract exhibits) ----
+  addChangeOrder(lineId: string, co: Omit<ChangeOrder, "id" | "exhibit">) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (!l) return;
+      const exhibit = `Exhibit ${String.fromCharCode(65 + l.changeOrders.length)}`;
+      l.changeOrders.push({ id: newId("co"), exhibit, ...co });
+    });
+  }
+  updateChangeOrder(lineId: string, coId: string, patch: Partial<ChangeOrder>) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      const co = l?.changeOrders.find((c) => c.id === coId);
+      if (co) Object.assign(co, patch);
+    });
+  }
+  removeChangeOrder(lineId: string, coId: string) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (l) l.changeOrders = l.changeOrders.filter((c) => c.id !== coId);
+    });
+  }
+
+  // ---- Line phases (capped at the line's current total) ----
+  private phasesOther(line: CostLine, exceptId?: string): number {
+    return line.phases.filter((p) => p.id !== exceptId).reduce((a, p) => a + phaseAmount(line, p), 0);
+  }
+  addLinePhase(lineId: string, phase: Omit<LinePhase, "id">) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (!l) return;
+      const p: LinePhase = { id: newId("ph"), ...phase };
+      // Clamp so the sum of phases never exceeds the line's current total.
+      const cap = lineCurrent(l) - this.phasesOther(l);
+      if (phaseAmount(l, p) > cap) p.value = p.mode === "pct" ? Math.max(0, (cap / lineCurrent(l)) * 100) : Math.max(0, cap);
+      l.phases.push(p);
+    });
+  }
+  updateLinePhase(lineId: string, phaseId: string, patch: Partial<LinePhase>) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      const p = l?.phases.find((x) => x.id === phaseId);
+      if (!l || !p) return;
+      Object.assign(p, patch);
+      // Enforce: sum of phases never exceeds the line's current total.
+      const cap = lineCurrent(l) - this.phasesOther(l, phaseId);
+      if (phaseAmount(l, p) > cap) {
+        p.value = p.mode === "pct" ? Math.max(0, (cap / lineCurrent(l)) * 100) : Math.max(0, cap);
+      }
+    });
+  }
+  removeLinePhase(lineId: string, phaseId: string) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (l) l.phases = l.phases.filter((p) => p.id !== phaseId);
+      // Drop any draw references to the removed phase.
+      db.draws.forEach((d) => { d.phaseRefs = d.phaseRefs.filter((r) => !(r.lineId === lineId && r.phaseId === phaseId)); });
+    });
+  }
+
+  // ---- Draws (Payment Tracker) ----
+  addDraw(name: string) {
+    this.mutate((db) => { db.draws.push({ id: newId("draw"), name, phaseRefs: [], status: "planned" }); });
+  }
+  renameDraw(id: string, name: string) {
+    this.mutate((db) => { const d = db.draws.find((x) => x.id === id); if (d) d.name = name; });
+  }
+  removeDraw(id: string) {
+    this.mutate((db) => { db.draws = db.draws.filter((d) => d.id !== id); });
+  }
+  setDrawStatus(id: string, status: Draw["status"]) {
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === id);
+      if (!d) return;
+      d.status = status;
+      d.paidDate = status === "paid" ? new Date().toISOString().slice(0, 10) : undefined;
+    });
+  }
+  togglePhaseInDraw(drawId: string, lineId: string, phaseId: string) {
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (!d || d.status === "paid") return; // paid draws are locked
+      const i = d.phaseRefs.findIndex((r) => r.lineId === lineId && r.phaseId === phaseId);
+      if (i >= 0) d.phaseRefs.splice(i, 1);
+      else {
+        // a phase can only belong to one draw
+        db.draws.forEach((o) => { o.phaseRefs = o.phaseRefs.filter((r) => !(r.lineId === lineId && r.phaseId === phaseId)); });
+        d.phaseRefs.push({ lineId, phaseId });
+      }
+    });
+  }
+  /** Phases already committed to a PAID draw (locked, can't be re-drawn). */
+  phaseInPaidDraw(lineId: string, phaseId: string): boolean {
+    return this.db.draws.some((d) => d.status === "paid" && d.phaseRefs.some((r) => r.lineId === lineId && r.phaseId === phaseId));
   }
 
   // ---- Budget ----

@@ -6,10 +6,11 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  Contract, CostLine, DB, FundingSource, Project, Room, ScopeCell, ScopeItem,
+  Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
   ScheduleKind, ScheduleStatus,
 } from "./types";
+import { lineTotal } from "./money";
 
 // ---- Project ----------------------------------------------------------------
 const project: Project = {
@@ -206,7 +207,8 @@ const hist = (estHigh: number | null, rom: number | null, afterPR: number | null
 };
 
 let cid = 0;
-const cl = (o: Omit<CostLine, "id">): CostLine => ({ id: `cl-${++cid}`, ...o });
+const cl = (o: Omit<CostLine, "id" | "changeOrders" | "phases">): CostLine =>
+  ({ id: `cl-${++cid}`, changeOrders: [], phases: [], ...o });
 
 const costLines: CostLine[] = [
   // ---- Oasis contracted lines (passthrough 20% markup, with plan-review delta)
@@ -250,32 +252,22 @@ const costLines: CostLine[] = [
   cl({ name: "Kitchen Appliances", tradeId: "appliances", category: "Owner Items", owner: "owner", roomIds: ["kitchen"], markupModel: "blackbox", markupPct: 0, status: "allowance", desc: "Fridge, range, microwave, range vent, food-warmer lamp (owner-purchased).", allowanceLow: 12000, allowanceHigh: 18000, history: hist(null, 15000, null) }),
 ];
 
-// ---- Contracts --------------------------------------------------------------
+// ---- Contracts (master terms templates, appended to each line's contract) ---
+export const MASTER_TERMS = "No lien shall be filed against the property for any reason. Change orders require written owner approval before work proceeds; each is attached as a numbered Exhibit to this contract. The parties agree to good-faith negotiation on any disputed scope or pricing. Work performed in a neat, workmanlike manner and to current local code.";
 const contracts: Contract[] = [
   {
     id: "c-oasis",
     name: "Oasis (General Contractor)",
     tradeIds: ["general-conditions", "hvac", "electrical", "rough-carpentry", "plumbing", "roofing", "waterproofing", "insulation", "masonry", "footings", "siding"],
-    terms: "Transparent pass-through with agreed 20% markup. Permits billed at cost. No lien to be filed against the property for any reason. Change orders require written owner approval before work proceeds. Good-faith negotiation on disputed scope.",
+    terms: `Transparent pass-through with agreed 20% markup. Permits billed at cost. ${MASTER_TERMS}`,
     termsAccepted: true,
-    phases: [
-      { id: "p-oasis-0", name: "Phase 0 — Early / Stabilization", pct: 10, gate: "Roof, gutters, furnace, temp power & water complete and inspected.", released: true },
-      { id: "p-oasis-1", name: "Phase 1 — Demo & Rough-in", pct: 30, gate: "Demo complete; framing, rough electrical/plumbing/HVAC passed inspection.", released: true },
-      { id: "p-oasis-2", name: "Phase 2 — Insulation & Drywall", pct: 25, gate: "Insulation inspected; drywall hung & finished; ready for finishes.", released: false },
-      { id: "p-oasis-3", name: "Phase 3 — Finishes", pct: 25, gate: "Cabinets, tile, trim, paint complete; punch list started.", released: false },
-      { id: "p-oasis-4", name: "Phase 4 — Punch & Closeout", pct: 10, gate: "Final inspections passed; punch list signed off by owner.", released: false },
-    ],
   },
   {
     id: "c-windows",
     name: "Diverse Windows",
     tradeIds: ["windows"],
-    terms: "Window restoration. 40% deposit, balance on completion. No lien clause accepted.",
+    terms: `Window restoration. 40% deposit, balance on completion. ${MASTER_TERMS}`,
     termsAccepted: true,
-    phases: [
-      { id: "p-win-0", name: "Deposit", pct: 40, gate: "Materials ordered; first batch removed for restoration.", released: true },
-      { id: "p-win-1", name: "Balance", pct: 60, gate: "All windows reinstalled and operable.", released: false },
-    ],
   },
 ];
 
@@ -373,6 +365,46 @@ schedule.forEach((s) => {
   if (deps.length) s.deps = deps;
 });
 
+// ---- Lock baselines + per-line contracts + phases on contracted work --------
+// Contracted lines are treated as locked-in: baseline = their all-in total, with
+// a standard 40/40/20 phase split and the master terms appended.
+costLines.forEach((l) => {
+  l.contractMode = l.owner === "owner" ? "direct" : "appendix";
+  l.termsAppended = true;
+  l.contractSummary = l.desc;
+  if (l.status === "contracted") {
+    l.locked = true;
+    l.baseline = lineTotal(l);
+    l.phases = [
+      { id: `${l.id}-ph1`, name: "Mobilization / Deposit", mode: "pct", value: 40 },
+      { id: `${l.id}-ph2`, name: "Substantial completion", mode: "pct", value: 40 },
+      { id: `${l.id}-ph3`, name: "Final / punch", mode: "pct", value: 20 },
+    ];
+  }
+});
+
+// A couple of real-world change orders + a found saving, as contract exhibits.
+const addCO = (lineId: string, co: { kind: "change" | "savings"; title: string; desc: string; amount: number; date: string; status: "proposed" | "approved" }) => {
+  const l = costLines.find((x) => x.id === lineId);
+  if (!l) return;
+  l.changeOrders.push({ id: `${lineId}-co${l.changeOrders.length + 1}`, exhibit: `Exhibit ${String.fromCharCode(65 + l.changeOrders.length)}`, ...co });
+};
+const byName = (name: string) => costLines.find((l) => l.name === name)?.id;
+const masonryId = byName("Masonry");
+if (masonryId) addCO(masonryId, { kind: "change", title: "Dining room chimney tuckpoint", desc: "Owner-requested CO to tuckpoint and assess the dining-room chimney once the mason is on site.", amount: 1800, date: "2026-06-20", status: "proposed" });
+const demoId = byName("Insulation, Drywall & Demo") ?? byName("Insulation");
+if (demoId) addCO(demoId, { kind: "savings", title: "Demo carved out of drywall bid", desc: "Aaron confirmed demo represented ~$5k of the combined bid; removed and tracked as a saving.", amount: 5000, date: "2026-05-20", status: "approved" });
+
+// ---- Draws (Payments tab) ---------------------------------------------------
+// Draw 1 (paid): the mobilization phase of the early structural/MEP work.
+const ph1 = (name: string) => { const id = byName(name); return id ? { lineId: id, phaseId: `${id}-ph1` } : null; };
+const draw1Refs = ["General Conditions", "Waterproofing", "Footings", "Roof for Additions", "Masonry"].map(ph1).filter(Boolean) as { lineId: string; phaseId: string }[];
+const draw2Refs = ["HVAC", "Electrical", "Plumbing", "Framing"].map(ph1).filter(Boolean) as { lineId: string; phaseId: string }[];
+const draws: Draw[] = [
+  { id: "draw-1", name: "Draw 1 — Mobilization", phaseRefs: draw1Refs, status: "paid", paidDate: "2026-06-15", note: "Initial mobilization across early structural & site work." },
+  { id: "draw-2", name: "Draw 2 — Rough-in", phaseRefs: draw2Refs, status: "planned", note: "Released after rough inspections pass." },
+];
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -387,6 +419,7 @@ export function buildDB(): DB {
     funding,
     schedule,
     notifications: [],
+    draws,
   };
 }
 

@@ -3,7 +3,7 @@
 // number, so Building Costs, the Budget, and the dashboard all agree.
 // ----------------------------------------------------------------------------
 
-import type { CostLine, DB, MacroCategory } from "./types";
+import type { CostLine, DB, Draw, LinePhase, MacroCategory } from "./types";
 
 export function fmt(n: number, opts: { cents?: boolean } = {}): string {
   return n.toLocaleString("en-US", {
@@ -34,7 +34,7 @@ export function lineMarkup(line: CostLine): number {
   return line.markupModel === "passthrough" ? lineBase(line) * (line.markupPct / 100) : 0;
 }
 
-/** All-in cost the payer sees. Passthrough adds markup; black-box already includes fees. */
+/** All-in cost from the price history + markup (pre-baseline-lock figure). */
 export function lineTotal(line: CostLine): number {
   return lineBase(line) + lineMarkup(line);
 }
@@ -42,6 +42,46 @@ export function lineTotal(line: CostLine): number {
 /** Change in base cost from the first to the latest price point. */
 export function lineDelta(line: CostLine): number {
   return lineBase(line) - lineStart(line);
+}
+
+// ---- Baseline + change orders ----------------------------------------------
+/** The locked original budget, or the live computed total before lock. */
+export function lineBaseline(line: CostLine): number {
+  return line.baseline ?? lineTotal(line);
+}
+/** Net of approved change orders (+changes, −savings). */
+export function approvedNetChange(line: CostLine): number {
+  return (line.changeOrders ?? []).filter((c) => c.status === "approved")
+    .reduce((a, c) => a + (c.kind === "savings" ? -c.amount : c.amount), 0);
+}
+export function approvedChanges(line: CostLine): number {
+  return (line.changeOrders ?? []).filter((c) => c.status === "approved" && c.kind === "change").reduce((a, c) => a + c.amount, 0);
+}
+export function approvedSavings(line: CostLine): number {
+  return (line.changeOrders ?? []).filter((c) => c.status === "approved" && c.kind === "savings").reduce((a, c) => a + c.amount, 0);
+}
+/** What the line costs now = baseline + approved change orders − savings. */
+export function lineCurrent(line: CostLine): number {
+  return lineBaseline(line) + approvedNetChange(line);
+}
+
+// ---- Phases + draws --------------------------------------------------------
+export function phaseAmount(line: CostLine, phase: LinePhase): number {
+  return phase.mode === "pct" ? (lineCurrent(line) * phase.value) / 100 : phase.value;
+}
+export function phasesTotal(line: CostLine): number {
+  return (line.phases ?? []).reduce((a, p) => a + phaseAmount(line, p), 0);
+}
+export function findPhase(db: DB, lineId: string, phaseId: string): { line: CostLine; phase: LinePhase } | null {
+  const line = db.costLines.find((l) => l.id === lineId);
+  const phase = line?.phases.find((p) => p.id === phaseId);
+  return line && phase ? { line, phase } : null;
+}
+export function drawAmount(db: DB, draw: Draw): number {
+  return draw.phaseRefs.reduce((a, ref) => {
+    const f = findPhase(db, ref.lineId, ref.phaseId);
+    return a + (f ? phaseAmount(f.line, f.phase) : 0);
+  }, 0);
 }
 
 export type Rollup = { key: string; label: string; total: number; base: number; markup: number; count: number };
@@ -54,7 +94,7 @@ export function rollupBy(
   for (const l of lines) {
     const { key, label } = keyer(l);
     const r = map.get(key) ?? { key, label, total: 0, base: 0, markup: 0, count: 0 };
-    r.total += lineTotal(l);
+    r.total += lineCurrent(l);
     r.base += lineBase(l);
     r.markup += lineMarkup(l);
     r.count++;
@@ -77,18 +117,19 @@ export function byTrade(db: DB, lines: CostLine[]): Rollup[] {
 
 /** All-in cost carried by a single trade (sum of its cost lines). */
 export function tradeCost(db: DB, tradeId: string): number {
-  return db.costLines.filter((l) => l.tradeId === tradeId).reduce((a, l) => a + lineTotal(l), 0);
+  return db.costLines.filter((l) => l.tradeId === tradeId).reduce((a, l) => a + lineCurrent(l), 0);
 }
 
 export function totals(lines: CostLine[]) {
   const builder = lines.filter((l) => l.owner === "builder");
   const owner = lines.filter((l) => l.owner === "owner");
-  const sum = (ls: CostLine[]) => ls.reduce((a, l) => a + lineTotal(l), 0);
+  const sum = (ls: CostLine[]) => ls.reduce((a, l) => a + lineCurrent(l), 0);
   return {
     builder: sum(builder),
     owner: sum(owner),
     grand: sum(lines),
     markup: lines.reduce((a, l) => a + lineMarkup(l), 0),
+    baseline: lines.reduce((a, l) => a + lineBaseline(l), 0),
   };
 }
 
