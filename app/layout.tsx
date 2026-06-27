@@ -6,12 +6,19 @@ export const metadata: Metadata = {
   title: "Evergreen — 31810 Evergreen Rd Restoration",
   description:
     "A platform to manage the 31810 Evergreen Rd renovation: scope, building costs, financing, and trade coordination — replacing the working spreadsheets.",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Evergreen" },
+  icons: {
+    icon: "/icons/favicon-64.png",
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
   themeColor: "#3a2f25",
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

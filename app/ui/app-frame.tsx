@@ -103,14 +103,15 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
           <PersonaSwitcher current={role} onPick={(r) => store.setRole(r)} onLogout={() => store.logout()} canViewAs={role === "full_admin"} name={store.session.displayName} />
         </header>
-        <main style={{ padding: "22px 24px 64px", maxWidth: 1180, width: "100%", margin: "0 auto" }}>{children}</main>
+        <main className="ever-main" style={{ padding: "22px 24px 64px", maxWidth: 1180, width: "100%", margin: "0 auto" }}>{children}</main>
       </div>
 
       <style>{`
         @media (max-width: 860px) {
-          .ever-sidebar { position: fixed; z-index: 40; transform: translateX(-100%); transition: transform .2s; }
-          .ever-sidebar[style*="translateX(0)"] { transform: translateX(0) !important; }
+          .ever-sidebar { position: fixed !important; left: 0; top: 0; height: 100vh !important; z-index: 40; transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 0 200vmax rgba(0,0,0,0); }
+          .ever-sidebar[style*="translateX(0)"] { transform: translateX(0) !important; box-shadow: 0 0 0 200vmax rgba(28,22,16,.45); }
           .ever-burger { display: inline-flex !important; }
+          .ever-main { padding: 16px 14px 64px !important; }
         }
       `}</style>
     </div>
