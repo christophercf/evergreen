@@ -29,7 +29,8 @@ export class SupabaseBackend implements Backend {
       .select("db")
       .eq("id", PROJECT_ID)
       .maybeSingle();
-    if (data?.db) return data.db as DB;
+    // Merge over a fresh seed so rows saved before a new top-level field get defaults.
+    if (data?.db) return { ...buildDB(), ...(data.db as DB) };
     const fresh = buildDB();
     await this.persistDB(fresh);
     return fresh;

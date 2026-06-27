@@ -299,7 +299,10 @@ let sid = 0;
 const sch = (
   label: string, start: string, end: string, durationLabel: string,
   tradeId: string | undefined, kind: ScheduleKind, status: ScheduleStatus,
-): ScheduleItem => ({ id: `sch-${++sid}`, label, start, end, durationLabel, tradeId, kind, status });
+): ScheduleItem => ({
+  id: `sch-${++sid}`, label, start, end, durationLabel, tradeId, kind, status,
+  confirm: "confirmed", confirmedStart: start, confirmedEnd: end,
+});
 
 const schedule: ScheduleItem[] = [
   sch("Order kitchen cabinets & Windows (Time Sensitive)", "2026-06-16", "2026-07-28", "4 to 6 Weeks", "cabinets", "procurement", "in_progress"),
@@ -335,6 +338,41 @@ const schedule: ScheduleItem[] = [
   sch("Punch list walkthrough", "2026-09-10", "2026-09-23", "2 Weeks", "general-conditions", "milestone", "not_started"),
 ];
 
+// Assign trade users (for confirmations + notifications) where we have one.
+const TRADE_USER: Record<string, string> = { electrical: "u-electric", plumbing: "u-plumb", windows: "u-windows" };
+schedule.forEach((s) => { if (s.tradeId && TRADE_USER[s.tradeId]) s.assignedUserId = TRADE_USER[s.tradeId]; });
+
+// Critical-path dependencies (by label → predecessor labels).
+const byLabel = (l: string) => schedule.find((s) => s.label === l)?.id;
+const DEPS: Record<string, string[]> = {
+  "Rough Plumbing": ["Framing and temp shoring"],
+  "Rough Electrical": ["Framing and temp shoring"],
+  "HVAC": ["Framing and temp shoring"],
+  "Exterior Sheathing and Tyvek": ["Framing and temp shoring"],
+  "Rough Inspections (Milestone)": ["Rough Plumbing", "Rough Electrical", "HVAC"],
+  "Insulation": ["Rough Inspections (Milestone)"],
+  "Drywall": ["Insulation"],
+  "Finish trim and doors": ["Drywall"],
+  "Prime and paint": ["Drywall"],
+  "Tile work": ["Drywall"],
+  "Install kitchen cabinets": ["Drywall", "Order kitchen cabinets & Windows (Time Sensitive)"],
+  "Specialty carpentry": ["Drywall"],
+  "Countertops": ["Install kitchen cabinets", "Order countertops (Time Sensitive)"],
+  "Floor repairs/sanding/install": ["Prime and paint"],
+  "Install finish hardware": ["Prime and paint"],
+  "Finish Plumbing": ["Countertops"],
+  "Finish HVAC": ["Drywall"],
+  "Finish electrical": ["Prime and paint"],
+  "Final Inspections (Milestone)": ["Finish Plumbing", "Finish electrical", "Finish HVAC"],
+  "Punch list walkthrough": ["Final Inspections (Milestone)"],
+  "Siding": ["Exterior Sheathing and Tyvek"],
+  "Windows": ["Exterior Sheathing and Tyvek"],
+};
+schedule.forEach((s) => {
+  const deps = (DEPS[s.label] ?? []).map(byLabel).filter(Boolean) as string[];
+  if (deps.length) s.deps = deps;
+});
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -348,6 +386,7 @@ export function buildDB(): DB {
     contracts,
     funding,
     schedule,
+    notifications: [],
   };
 }
 

@@ -6,8 +6,8 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, Contract, CostLine, DB, FundingSource, ModuleKey, PricePoint,
-  Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus, Session, User,
+  AccessLevel, AppNotification, Contract, CostLine, DB, FundingSource, ModuleKey,
+  PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus, Session, User,
 } from "./types";
 import { buildDB } from "./seed";
 import { type Backend, makeBackend, defaultSession } from "./backend";
@@ -158,7 +158,7 @@ class Store {
       const cell = this.ensureCell(db, roomId, tradeId);
       const it = cell.items.find((x) => x.id === itemId);
       if (!it) return;
-      const now = new Date().toISOString().slice(0, 10);
+      const now = new Date().toISOString();
       if (party === "owner") {
         it.ownerSignedBy = it.ownerSignedBy ? undefined : name;
         it.ownerSignedAt = it.ownerSignedBy ? now : undefined;
@@ -295,12 +295,60 @@ class Store {
       if (s) s.status = status;
     });
   }
-  setScheduleDates(id: string, start: string, end: string) {
+
+  /** Direct dependents of a schedule item (tasks listing it as a dependency). */
+  dependentsOf(id: string): ScheduleItem[] {
+    return this.db.schedule.filter((s) => (s.deps ?? []).includes(id));
+  }
+
+  /**
+   * Builder moves a task's dates. If a trade is assigned, the change goes
+   * "pending" and the trade is notified to confirm; otherwise it auto-confirms
+   * so the owner sees it immediately.
+   */
+  pushSchedule(id: string, start: string, end: string) {
     this.mutate((db) => {
       const s = db.schedule.find((x) => x.id === id);
-      if (s) { s.start = start; s.end = end; }
+      if (!s) return;
+      const movedLater = end > (s.confirmedEnd ?? s.end) || start > (s.confirmedStart ?? s.start);
+      s.start = start;
+      s.end = end;
+      if (s.assignedUserId) {
+        s.confirm = "pending";
+        this.notify(db, {
+          toUserId: s.assignedUserId,
+          kind: "schedule_pushed",
+          message: `${this.session.displayName} ${movedLater ? "pushed back" : "rescheduled"} "${s.label}" to ${start} → ${end}. Please confirm.`,
+          scheduleItemId: s.id,
+        });
+      } else {
+        s.confirm = "confirmed";
+        s.confirmedStart = start;
+        s.confirmedEnd = end;
+      }
     });
   }
+
+  /** Trade confirms or declines a proposed date change. */
+  respondSchedule(id: string, accept: boolean, name: string) {
+    this.mutate((db) => {
+      const s = db.schedule.find((x) => x.id === id);
+      if (!s) return;
+      const now = new Date().toISOString();
+      if (accept) {
+        s.confirm = "confirmed";
+        s.confirmedStart = s.start;
+        s.confirmedEnd = s.end;
+        s.confirmedAt = now;
+        s.confirmedBy = name;
+        this.notify(db, { toRole: "builder", kind: "schedule_confirmed", message: `${name} confirmed new dates for "${s.label}" (${s.start} → ${s.end}).`, scheduleItemId: s.id });
+      } else {
+        s.confirm = "declined";
+        this.notify(db, { toRole: "builder", kind: "schedule_declined", message: `${name} declined the date change for "${s.label}". Please coordinate.`, scheduleItemId: s.id });
+      }
+    });
+  }
+
   addScheduleItem(item: Omit<ScheduleItem, "id">) {
     this.mutate((db) => {
       db.schedule.push({ id: newId("sch"), ...item });
@@ -309,6 +357,34 @@ class Store {
   removeScheduleItem(id: string) {
     this.mutate((db) => {
       db.schedule = db.schedule.filter((s) => s.id !== id);
+      db.schedule.forEach((s) => { if (s.deps) s.deps = s.deps.filter((d) => d !== id); });
+    });
+  }
+  setScheduleDeps(id: string, deps: string[]) {
+    this.mutate((db) => {
+      const s = db.schedule.find((x) => x.id === id);
+      if (s) s.deps = deps;
+    });
+  }
+
+  // ---- Notifications ----
+  private notify(db: DB, n: Omit<AppNotification, "id" | "createdAt" | "read">) {
+    db.notifications.unshift({ id: newId("ntf"), createdAt: new Date().toISOString(), read: false, ...n });
+  }
+  notificationsFor(user: User | undefined, role: Role): AppNotification[] {
+    return this.db.notifications.filter((n) => (n.toUserId && n.toUserId === user?.id) || (n.toRole && n.toRole === role));
+  }
+  markNotificationRead(id: string) {
+    this.mutate((db) => {
+      const n = db.notifications.find((x) => x.id === id);
+      if (n) n.read = true;
+    });
+  }
+  clearNotifications(user: User | undefined, role: Role) {
+    this.mutate((db) => {
+      db.notifications.forEach((n) => {
+        if ((n.toUserId && n.toUserId === user?.id) || (n.toRole && n.toRole === role)) n.read = true;
+      });
     });
   }
 }

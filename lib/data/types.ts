@@ -156,6 +156,11 @@ export const SCHEDULE_LABEL: Record<ScheduleStatus, string> = {
 // What kind of bar this is — drives styling and whether it carries cost.
 export type ScheduleKind = "work" | "procurement" | "milestone";
 
+// Trade confirmation state for a date change. Builder edits dates → goes
+// "pending" until the assigned trade confirms; only confirmed dates surface to
+// the owner.
+export type ConfirmState = "confirmed" | "pending" | "declined";
+
 // One Gantt bar. `tradeId` pairs the task to Building Costs so its cost and QC
 // progress are derived live from the cost lines + scope items rather than
 // duplicated here. Milestones/procurement may have no trade.
@@ -164,13 +169,35 @@ export interface ScheduleItem {
   label: string; // real task name from the schedule
   tradeId?: string;
   kind: ScheduleKind;
-  start: string; // ISO yyyy-mm-dd
+  start: string; // ISO yyyy-mm-dd — builder's working dates
   end: string; // ISO yyyy-mm-dd
   durationLabel?: string;
   status: ScheduleStatus;
+  /** Critical-path predecessors: other schedule item ids this depends on. */
+  deps?: string[];
+  /** Trade person responsible (for confirmation + notifications). */
+  assignedUserId?: string;
+  /** Dates the trade has confirmed — what the owner sees. */
+  confirmedStart?: string;
+  confirmedEnd?: string;
+  confirm: ConfirmState;
+  confirmedAt?: string;
+  confirmedBy?: string;
   /** Optional link to a contract funding phase (gate / % release). */
   contractId?: string;
   phaseId?: string;
+}
+
+// In-app notification (email later). Targeted at a user or a whole role.
+export interface AppNotification {
+  id: string;
+  toUserId?: string;
+  toRole?: Role;
+  kind: "schedule_pushed" | "schedule_confirmed" | "schedule_declined" | "info";
+  message: string;
+  scheduleItemId?: string;
+  createdAt: string;
+  read: boolean;
 }
 
 // ---- Contracts & funding phases --------------------------------------------
@@ -228,6 +255,7 @@ export interface DB {
   contracts: Contract[];
   funding: FundingSource[];
   schedule: ScheduleItem[];
+  notifications: AppNotification[];
 }
 
 // ---- Session ----------------------------------------------------------------
