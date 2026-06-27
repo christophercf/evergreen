@@ -7,7 +7,7 @@
 
 import type {
   AccessLevel, AppNotification, ChangeOrder, Contact, Contract, CostLine, DB, Draw, FundingSource,
-  LinePhase, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
+  LinePhase, Material, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
   Session, User,
 } from "./types";
 import { buildDB } from "./seed";
@@ -37,12 +37,18 @@ class Store {
     if (this.started || typeof window === "undefined") return;
     this.started = true;
     this.backend = makeBackend();
-    void this.backend.loadDB().then((db) => {
-      this.db = db;
-      this.emit();
-    });
-    void this.backend.loadSession().then((s) => {
-      this.session = s;
+    const pDB = this.backend.loadDB().then((db) => { this.db = db; });
+    const pS = this.backend.loadSession().then((s) => { this.session = s; });
+    void Promise.all([pDB, pS]).then(() => {
+      // Process an invite link AFTER state has loaded (avoids a load race).
+      if (typeof window !== "undefined") {
+        const tok = new URLSearchParams(window.location.search).get("invite");
+        if (tok && this.acceptInvite(tok)) {
+          const url = new URL(window.location.href);
+          url.searchParams.delete("invite");
+          window.history.replaceState({}, "", url.toString());
+        }
+      }
       this.emit();
     });
     this.backend.onRemoteDB((db) => {
@@ -75,9 +81,9 @@ class Store {
   }
 
   setRole(role: Role) {
-    // Jump to a representative user of that role for a believable persona.
+    // "View as" (admin impersonation / demo). Jumps to a representative user.
     const u = this.db.users.find((x) => x.role === role) ?? this.currentUser;
-    this.session = { role, userId: u?.id ?? this.session.userId, displayName: u?.name ?? this.session.displayName };
+    this.session = { ...this.session, role, userId: u?.id ?? this.session.userId, displayName: u?.name ?? this.session.displayName };
     void this.backend?.persistSession(this.session);
     this.emit();
   }
@@ -85,9 +91,62 @@ class Store {
   setUser(userId: string) {
     const u = this.db.users.find((x) => x.id === userId);
     if (!u) return;
-    this.session = { role: u.role, userId: u.id, displayName: u.name };
+    this.session = { ...this.session, role: u.role, userId: u.id, displayName: u.name };
     void this.backend?.persistSession(this.session);
     this.emit();
+  }
+
+  // ---- Auth (app-level; graduates to Supabase Auth later) ----
+  private enter(u: User) {
+    this.session = { role: u.role, userId: u.id, displayName: u.name, authed: true };
+    void this.backend?.persistSession(this.session);
+    this.emit();
+  }
+  /** Log in by email — must match a non-invited account. */
+  login(email: string): { ok: boolean; error?: string } {
+    const u = this.db.users.find((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase());
+    if (!u) return { ok: false, error: "No account with that email. Ask an admin to invite you, or request access." };
+    if (u.status === "invited") return { ok: false, error: "You have a pending invite — use your invite link to finish setting up." };
+    this.enter(u);
+    return { ok: true };
+  }
+  /** Demo / impersonation sign-in straight to a known user. */
+  loginAs(userId: string) {
+    const u = this.db.users.find((x) => x.id === userId);
+    if (u) this.enter(u);
+  }
+  /** Self-signup → creates a pending viewer and signs them in. */
+  signup(name: string, email: string): { ok: boolean; error?: string } {
+    if (!name.trim() || !email.trim()) return { ok: false, error: "Name and email required." };
+    if (this.db.users.some((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase())) return { ok: false, error: "That email already has an account — log in instead." };
+    const u: User = { id: newId("u"), name: name.trim(), email: email.trim(), role: "viewer", status: "pending" };
+    this.mutate((db) => { db.users.push(u); });
+    this.enter(u);
+    return { ok: true };
+  }
+  logout() {
+    this.session = { ...this.session, authed: false };
+    void this.backend?.persistSession(this.session);
+    this.emit();
+  }
+
+  /** Invite a user; returns the invite token for a shareable link. */
+  inviteUser(u: { name: string; email: string; role: Role; tradeIds?: string[]; managedBy?: "builder" | "owner" }): string {
+    const token = `inv-${Math.random().toString(36).slice(2, 10)}`;
+    this.mutate((db) => { db.users.push({ id: newId("u"), name: u.name.trim(), email: u.email.trim(), role: u.role, tradeIds: u.tradeIds, managedBy: u.managedBy, status: "invited", inviteToken: token }); });
+    return token;
+  }
+  /** Accept an invite (from the link) → activates the account and signs in. */
+  acceptInvite(token: string): boolean {
+    const u = this.db.users.find((x) => x.inviteToken === token);
+    if (!u) return false;
+    this.mutate((db) => { const x = db.users.find((y) => y.id === u.id); if (x) { x.status = "active"; x.inviteToken = undefined; } });
+    const fresh = this.db.users.find((x) => x.id === u.id);
+    if (fresh) this.enter(fresh);
+    return true;
+  }
+  approveUser(userId: string) {
+    this.mutate((db) => { const u = db.users.find((x) => x.id === userId); if (u) u.status = "active"; });
   }
 
   async reset() {
@@ -471,6 +530,23 @@ class Store {
   /** Phases already committed to a PAID draw (locked, can't be re-drawn). */
   phaseInPaidDraw(lineId: string, phaseId: string): boolean {
     return this.db.draws.some((d) => d.status === "paid" && d.phaseRefs.some((r) => r.lineId === lineId && r.phaseId === phaseId));
+  }
+
+  // ---- Materials ----
+  addMaterial(mat: Omit<Material, "id">) {
+    this.mutate((db) => { db.materials.push({ id: newId("mat"), ...mat }); });
+  }
+  updateMaterial(id: string, patch: Partial<Material>) {
+    this.mutate((db) => { const m = db.materials.find((x) => x.id === id); if (m) Object.assign(m, patch); });
+  }
+  removeMaterial(id: string) {
+    this.mutate((db) => { db.materials = db.materials.filter((m) => m.id !== id); });
+  }
+  bulkAssignPurchaser(ids: string[], purchaser: Material["purchaser"]) {
+    this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.purchaser = purchaser; }); });
+  }
+  bulkSetMaterialStatus(ids: string[], status: Material["status"]) {
+    this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.status = status; }); });
   }
 
   // ---- Vendor agreements ----

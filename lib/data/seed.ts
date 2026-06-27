@@ -8,7 +8,7 @@
 import type {
   Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
-  ScheduleKind, ScheduleStatus, VendorAgreement,
+  ScheduleKind, ScheduleStatus, VendorAgreement, Material,
 } from "./types";
 import { lineTotal } from "./money";
 
@@ -23,14 +23,15 @@ const project: Project = {
 
 // ---- Users ------------------------------------------------------------------
 const users: User[] = [
-  { id: "u-owner", name: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "", role: "full_admin" },
-  { id: "u-owner2", name: "Emily Johnson", email: "emily@johnson.family", role: "owner" },
-  { id: "u-builder", name: "Aaron — Oasis", email: "aaron@oasisbuild.example", phone: "248-555-0142", role: "builder", doorCode: "1822",
+  { id: "u-owner", name: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "", role: "full_admin", status: "active" },
+  { id: "u-owner2", name: "Emily Johnson", email: "emily@johnson.family", role: "owner", status: "active" },
+  { id: "u-builder", name: "Aaron — Oasis", email: "aaron@oasisbuild.example", phone: "248-555-0142", role: "builder", doorCode: "1822", status: "active",
     secondaryContacts: [{ id: "c-aaron-1", label: "Office", name: "Oasis Build LLC", phone: "248-555-0100", email: "office@oasisbuild.example" }] },
-  { id: "u-electric", name: "Electrician (Oasis sub)", email: "electric@oasisbuild.example", phone: "248-555-0188", role: "trade", tradeIds: ["electrical"], managedBy: "builder", doorCode: "1822" },
-  { id: "u-plumb", name: "Lakeside Plumbing — Danny", email: "danny@lakeside.example", phone: "313-554-1900", role: "trade", tradeIds: ["plumbing"], managedBy: "builder", doorCode: "1822" },
-  { id: "u-windows", name: "Diverse Windows", email: "info@windowsdiverse.example", phone: "313-655-5684", role: "trade", tradeIds: ["windows"], managedBy: "owner" },
-  { id: "u-design", name: "Designer (TBD)", email: "design@example.com", role: "viewer" },
+  { id: "u-electric", name: "Electrician (Oasis sub)", email: "electric@oasisbuild.example", phone: "248-555-0188", role: "trade", tradeIds: ["electrical"], managedBy: "builder", doorCode: "1822", status: "active" },
+  { id: "u-plumb", name: "Lakeside Plumbing — Danny", email: "danny@lakeside.example", phone: "313-554-1900", role: "trade", tradeIds: ["plumbing"], managedBy: "builder", doorCode: "1822", status: "active" },
+  { id: "u-windows", name: "Diverse Windows", email: "info@windowsdiverse.example", phone: "313-655-5684", role: "trade", tradeIds: ["windows"], managedBy: "owner", status: "active" },
+  { id: "u-design", name: "Designer (TBD)", email: "design@example.com", role: "viewer", status: "active" },
+  { id: "u-tile", name: "Tile Vendor (invited)", email: "tile@example.com", role: "trade", tradeIds: ["tile"], managedBy: "builder", status: "invited", inviteToken: "demo-tile-invite" },
 ];
 
 // ---- Trades -----------------------------------------------------------------
@@ -419,6 +420,75 @@ if (plumbA) { plumbA.drawRequest = "30% deposit on contract signing, then monthl
 const elecA = va("electrical");
 if (elecA) elecA.drawRequest = "25% mobilization, 50% at rough-in inspection, 25% at finish; net-30.";
 
+// ---- Materials (from the real materials list) -------------------------------
+let mid = 0;
+const m = (o: Omit<Material, "id">): Material => ({ id: `mat-${++mid}`, ...o });
+const materials: Material[] = [
+  m({ item: "Shower Trim", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Vent", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Faucet 1", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Faucet 2", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Toilet", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Tub", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Trim Kit (TP Holder, Towel Bar, etc)", roomId: "primary-bath", roomLabel: "Primary Bathroom", status: "needed", purchaser: "owner" }),
+  m({ item: "Mirror (2)", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Vanities (2)", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Cabinet Pulls", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "cabinets", status: "needed", notes: "Might not be needed", purchaser: "owner" }),
+  m({ item: "SteamSpa Kit", roomId: "primary-bath", roomLabel: "Master Bathroom", tradeId: "appliances", qty: 1, status: "ordered", location: "InGarage", purchaser: "owner" }),
+  m({ item: "Wall sconces", roomId: "primary-bed", roomLabel: "Primary Bedroom", tradeId: "electrical", status: "needed", purchaser: "trade" }),
+  m({ item: "Water tap", roomId: "primary-balcony", roomLabel: "Primary Balcony", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Shower Trim", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Vent", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Faucet 1", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Faucet 2", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Tub", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Toilet", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Mirror", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Vanity", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "cabinets", status: "needed", notes: "3 x 3 drawers if avail", purchaser: "owner" }),
+  m({ item: "Cabinet Pulls", roomId: "kids-bath", roomLabel: "Kids Bathroom", tradeId: "cabinets", status: "needed", notes: "Might not be needed", purchaser: "owner" }),
+  m({ item: "Faucet 1", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Vent", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Toilet", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "plumbing", specLink: "https://www.bedbathandbeyond.com/Home-Garden/Dark-Oak-High-Tank-Pull-Chain-Toilet-Renovators-Supply/34791514/product.html", status: "needed", purchaser: "trade" }),
+  m({ item: "Trim Kit (TP Holder, Towel Bar, etc)", roomId: "powder", roomLabel: "First Floor Bathroom", status: "needed", purchaser: "owner" }),
+  m({ item: "Mirror", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Vanity", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "cabinets", specLink: "https://www.wayfair.com/home-improvement/pdp/house-of-hampton-vintage-console-bathroom-vanities-set-w115767035.html", status: "needed", purchaser: "owner" }),
+  m({ item: "Cabinet Pulls", roomId: "powder", roomLabel: "First Floor Bathroom", tradeId: "cabinets", status: "needed", notes: "Might not be needed", purchaser: "owner" }),
+  m({ item: "Drain (p-trap)", tradeId: "plumbing", specLink: "https://www.wayfair.com/home-improvement/pdp/kingston-brass-vintage-p-trap-kbbb3267.html", status: "needed", purchaser: "trade" }),
+  m({ item: "Faucet", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Disposal Switch", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Cup Rinser", roomId: "kitchen", roomLabel: "Kitchen or bar?", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Sink", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "plumbing", status: "needed", purchaser: "trade" }),
+  m({ item: "Cabinet Pulls - 1", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Cabinet Pulls - 2", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "cabinets", status: "needed", purchaser: "owner" }),
+  m({ item: "Range Vent", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "appliances", status: "needed", purchaser: "owner" }),
+  m({ item: "Fridge", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "appliances", status: "needed", purchaser: "owner" }),
+  m({ item: "Range", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "appliances", status: "needed", purchaser: "owner" }),
+  m({ item: "Microwave", roomId: "kitchen", roomLabel: "Kitchen", status: "needed", purchaser: "owner" }),
+  m({ item: "Food Warmer Lamp", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "appliances", status: "purchased", location: "InGarage", purchaser: "owner" }),
+  m({ item: "Pendant Light", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "electrical", status: "needed", purchaser: "trade" }),
+  m({ item: "Breakers - 20A", roomId: "basement-finished", roomLabel: "Basement", tradeId: "electrical", qty: 14, status: "ordered", location: "InGarage", purchaser: "trade" }),
+  m({ item: "Breakers - 15A", roomId: "basement-finished", roomLabel: "Basement", tradeId: "electrical", qty: 10, status: "ordered", location: "InGarage", purchaser: "trade" }),
+  m({ item: "Breakers - 20A - Remote Control", roomId: "basement-finished", roomLabel: "Basement", tradeId: "electrical", qty: 3, status: "ordered", location: "InGarage", notes: "Need to know what we want on these circuits", purchaser: "trade" }),
+  m({ item: "Breakers - 50A - Remote Control", roomId: "basement-finished", roomLabel: "Basement", tradeId: "electrical", qty: 1, status: "ordered", location: "InGarage", notes: "Need to know what we want on this circuit", purchaser: "trade" }),
+  m({ item: "Smart Smoke Detectors", roomId: "whole-house", roomLabel: "Entire House", tradeId: "electrical", qty: 9, status: "ordered", location: "InGarage", notes: "Discuss locations", purchaser: "trade" }),
+  m({ item: "Single Pole Push Button Dimmers", tradeId: "electrical", qty: 14, status: "ordered", location: "InGarage", notes: "Need locations", purchaser: "trade" }),
+  m({ item: "Movie Screen Kit", roomId: "basement-finished", roomLabel: "Basement", tradeId: "electrical", status: "needed", purchaser: "trade" }),
+  m({ item: "Sink", roomId: "basement-finished", roomLabel: "Basement", tradeId: "plumbing", specLink: "https://www.homedepot.com/p/HOROW-Wall-Mounted-Vessel-Sink/323330758", status: "needed", purchaser: "trade" }),
+  m({ item: "Toilet", roomId: "basement-finished", roomLabel: "Basement", tradeId: "plumbing", specLink: "https://www.homedepot.com/p/KOHLER-Highline-Arc-Toilet/327529133", status: "needed", purchaser: "trade" }),
+  m({ item: "Water heater", roomId: "basement-finished", roomLabel: "Basement", tradeId: "plumbing", specLink: "https://www.lowes.com/pd/A-O-Smith-80-Gallon-Hybrid-Heat-Pump-Water-Heater/5013803451", status: "needed", purchaser: "trade" }),
+  m({ item: "Ext Door", roomId: "primary-bath", roomLabel: "Primary Bathroom", tradeId: "windows", desc: "30'' ext door", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 1", roomId: "bed-4", roomLabel: "Bed 4", tradeId: "windows", desc: "3'x5' - Egress", status: "needed", notes: "Reuse removed window (measure)", purchaser: "owner" }),
+  m({ item: "Window 2", roomId: "bed-4", roomLabel: "Bed 4", tradeId: "windows", desc: "3'x5' - Egress", status: "needed", notes: "Reuse removed window (measure)", purchaser: "owner" }),
+  m({ item: "Window 3", roomId: "bed-4", roomLabel: "Bed 4", tradeId: "windows", desc: "2'8''x3'6'' - Tempered", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 1", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "windows", desc: "2'6''x3'6''", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 2", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "windows", desc: "2'6''x3'6'' DH", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 3", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "windows", desc: "2'6''x3'6'' DH", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 4", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "windows", desc: "2'6''x3'6'' DH", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 5", roomId: "kitchen", roomLabel: "Kitchen", tradeId: "windows", desc: "2'6''x3'6''", status: "needed", purchaser: "owner" }),
+  m({ item: "Window 1", roomId: "mudroom", roomLabel: "Mud Hall", tradeId: "windows", desc: "2'4''x3'6''", status: "needed", purchaser: "owner" }),
+  m({ item: "Ext Door", roomId: "mudroom", roomLabel: "Mud Hall", tradeId: "windows", desc: "32''", status: "needed", notes: "Transom door w/ window (measure)", purchaser: "owner" }),
+];
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -435,6 +505,7 @@ export function buildDB(): DB {
     notifications: [],
     draws,
     vendorAgreements,
+    materials,
   };
 }
 

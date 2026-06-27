@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { IS_MOCK } from "@/lib/data/config";
 import { ROLE_LABEL, accessFor, type ModuleKey, type Role } from "@/lib/data/types";
+import { Landing } from "./landing";
 import {
   HomeIcon, GridIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon,
 } from "./icons";
@@ -19,7 +20,7 @@ const NAV: NavItem[] = [
   { href: "/payments", label: "Payment Tracker", mod: "payments", Icon: ReceiptIcon },
   { href: "/budget", label: "Budget", mod: "budget", Icon: WalletIcon },
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
-  { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon, phase2: true },
+  { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon },
   { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon, phase2: true },
 ];
@@ -32,6 +33,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const [navOpen, setNavOpen] = useState(false);
   const role = store.session.role;
   const user = store.currentUser;
+
+  if (!store.session.authed) return <Landing />;
 
   const visible = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
 
@@ -98,7 +101,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           <div style={{ flex: 1, fontSize: 13, color: "var(--muted)" }}>
             Renovation management — replacing the working spreadsheets
           </div>
-          <PersonaSwitcher current={role} onPick={(r) => store.setRole(r)} name={store.session.displayName} />
+          <PersonaSwitcher current={role} onPick={(r) => store.setRole(r)} onLogout={() => store.logout()} canViewAs={role === "full_admin"} name={store.session.displayName} />
         </header>
         <main style={{ padding: "22px 24px 64px", maxWidth: 1180, width: "100%", margin: "0 auto" }}>{children}</main>
       </div>
@@ -114,7 +117,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PersonaSwitcher({ current, onPick, name }: { current: Role; onPick: (r: Role) => void; name: string }) {
+function PersonaSwitcher({ current, onPick, onLogout, canViewAs, name }: { current: Role; onPick: (r: Role) => void; onLogout: () => void; canViewAs: boolean; name: string }) {
   const [open, setOpen] = useState(false);
   return (
     <div style={{ position: "relative" }}>
@@ -130,20 +133,19 @@ function PersonaSwitcher({ current, onPick, name }: { current: Role; onPick: (r:
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 30 }} onClick={() => setOpen(false)} />
           <div className="card" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 31, width: 230, padding: 8 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", textTransform: "uppercase", padding: "4px 8px" }}>View as</div>
-            {ROLES.map((r) => (
-              <button
-                key={r}
-                onClick={() => { onPick(r); setOpen(false); }}
-                className="btn btn-sm"
-                style={{ width: "100%", justifyContent: "flex-start", border: "none", background: r === current ? "var(--sage-tint)" : "transparent", marginTop: 2 }}
-              >
-                {ROLE_LABEL[r]}
-              </button>
-            ))}
-            <div style={{ fontSize: 11, color: "var(--muted)", padding: "8px 8px 4px", borderTop: "1px solid var(--line)", marginTop: 6 }}>
-              Demo persona switch. In production this follows the signed-in account.
-            </div>
+            {canViewAs && <>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", color: "var(--muted)", textTransform: "uppercase", padding: "4px 8px" }}>View as (admin)</div>
+              {ROLES.map((r) => (
+                <button key={r} onClick={() => { onPick(r); setOpen(false); }} className="btn btn-sm"
+                  style={{ width: "100%", justifyContent: "flex-start", border: "none", background: r === current ? "var(--sage-tint)" : "transparent", marginTop: 2 }}>
+                  {ROLE_LABEL[r]}
+                </button>
+              ))}
+              <div style={{ borderTop: "1px solid var(--line)", margin: "8px 0 6px" }} />
+            </>}
+            <button onClick={() => { onLogout(); setOpen(false); }} className="btn btn-sm" style={{ width: "100%", justifyContent: "flex-start", border: "none", background: "transparent", color: "var(--rust)" }}>
+              ⎋ Sign out
+            </button>
           </div>
         </>
       )}

@@ -318,6 +318,13 @@ function UsersTab({ ro }: { ro: boolean }) {
                 </select>
                 {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => store.removeUser(u.id)}>✕</button>}
               </div>
+              {(u.status && u.status !== "active") && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                  <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
+                  {!ro && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
+                  {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
+                </div>
+              )}
 
               {u.role === "trade" && (
                 <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
@@ -379,15 +386,62 @@ function UsersTab({ ro }: { ro: boolean }) {
         })}
       </div>
 
-      {!ro && (
-        <div className="card" style={{ padding: 12, marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-          <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+      {!ro && <InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} />}
+    </>
+  );
+}
+
+function CopyInvite({ token }: { token: string }) {
+  const [copied, setCopied] = useState(false);
+  const link = (typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token;
+  return (
+    <button className="btn btn-sm" onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); }} title={link}>
+      {copied ? "✓ Copied invite link" : "Copy invite link"}
+    </button>
+  );
+}
+
+function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNrole }: {
+  viewerRole: Role; name: string; setName: (s: string) => void; email: string; setEmail: (s: string) => void; nrole: Role; setNrole: (r: Role) => void;
+}) {
+  const store = useStore();
+  const [lastLink, setLastLink] = useState<string | null>(null);
+  const canInviteAny = viewerRole === "full_admin";
+  const canInviteVendor = viewerRole === "full_admin" || viewerRole === "builder" || viewerRole === "owner";
+  // Full admin chooses role; others can only invite vendors (trade).
+  const inviteRole: Role = canInviteAny ? nrole : "trade";
+
+  const doInvite = () => {
+    if (!name.trim() || !email.trim()) return;
+    const token = store.inviteUser({ name: name.trim(), email: email.trim(), role: inviteRole, ...(inviteRole === "trade" ? { managedBy: viewerRole === "owner" ? ("owner" as const) : ("builder" as const) } : {}) });
+    setLastLink((typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token);
+    setName(""); setEmail("");
+  };
+
+  if (!canInviteAny && !canInviteVendor) return null;
+  return (
+    <div className="card" style={{ padding: 14, marginTop: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+        {canInviteAny ? "Add or invite a user" : "Invite a vendor"}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
+        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        {canInviteAny ? (
           <select value={nrole} onChange={(e) => setNrole(e.target.value as Role)}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select>
-          <button className="btn btn-primary" onClick={() => { if (name.trim()) { store.addUser({ name: name.trim(), email: email.trim(), role: nrole, ...(nrole === "trade" ? { managedBy: "builder" as const } : {}) }); setName(""); setEmail(""); } }}>+ Add user</button>
+        ) : (
+          <Pill bg="var(--cream-2)">Trade / Vendor</Pill>
+        )}
+        <button className="btn btn-primary" onClick={doInvite}>✉ Send invite</button>
+        {canInviteAny && <button className="btn" onClick={() => { if (name.trim()) { store.addUser({ name: name.trim(), email: email.trim(), role: nrole, status: "active", ...(nrole === "trade" ? { managedBy: "builder" as const } : {}) }); setName(""); setEmail(""); } }}>+ Add directly</button>}
+      </div>
+      {lastLink && (
+        <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--sage-tint)", borderRadius: 8, fontSize: 12 }}>
+          Invite created. Share this link: <code style={{ fontSize: 11.5 }}>{lastLink}</code>
+          <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => navigator.clipboard?.writeText(lastLink)}>Copy</button>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

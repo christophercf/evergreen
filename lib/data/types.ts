@@ -56,6 +56,10 @@ export interface User {
   doorCode?: string;
   /** Per-module overrides; falls back to the role default when absent. */
   access?: Partial<Record<ModuleKey, AccessLevel>>;
+  /** Account status. active = can log in; invited = awaiting accept; pending = self-signup awaiting approval. */
+  status?: "active" | "invited" | "pending";
+  /** One-time token for an invite link. */
+  inviteToken?: string;
 }
 
 // ---- Trades & rooms ---------------------------------------------------------
@@ -222,6 +226,31 @@ export interface Draw {
   note?: string;
 }
 
+// ---- Materials --------------------------------------------------------------
+export type MaterialStatus = "needed" | "ordered" | "purchased" | "delivered";
+export type Purchaser = "owner" | "trade" | "builder";
+
+export const MATERIAL_STATUS_LABEL: Record<MaterialStatus, string> = {
+  needed: "Needed", ordered: "Ordered", purchased: "Purchased", delivered: "Delivered",
+};
+
+export interface Material {
+  id: string;
+  item: string;
+  roomId?: string;
+  roomLabel?: string; // original/free-text room when not mapped to a room id
+  tradeId?: string;
+  desc?: string;
+  specLink?: string;
+  qty?: number; // required volume
+  status: MaterialStatus;
+  location?: string; // where it's stored
+  notes?: string;
+  purchaser: Purchaser; // who buys it
+  dueDate?: string; // critical-path selection due date
+  critical?: boolean;
+}
+
 // ---- Schedule (Gantt) -------------------------------------------------------
 export type ScheduleStatus = "not_started" | "in_progress" | "blocked" | "done";
 
@@ -329,6 +358,7 @@ export interface DB {
   notifications: AppNotification[];
   draws: Draw[];
   vendorAgreements: VendorAgreement[];
+  materials: Material[];
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -336,6 +366,8 @@ export interface Session {
   role: Role;
   userId: string;
   displayName: string;
+  /** Whether the device has signed in (gates the app vs the landing page). */
+  authed: boolean;
 }
 
 // Default per-role module access. Owner sees all; builder sees all but budget;
