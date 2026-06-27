@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "evergreen",
+      "runtimeExecutable": "C:\\Users\\cjohnson2\\AppData\\Local\\nodejs-portable\\node-v20.18.0-win-x64\\node.exe",
+      "runtimeArgs": [
+        "C:\\Users\\cjohnson2\\Desktop\\GIT\\evergreen\\node_modules\\next\\dist\\bin\\next",
+        "dev",
+        "C:\\Users\\cjohnson2\\Desktop\\GIT\\evergreen",
+        "--port",
+        "3180"
+      ],
+      "port": 3180
+    }
+  ]
+}

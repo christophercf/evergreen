@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+/* ----------------------------------------------------------------------------
+   Evergreen — 31810 Evergreen Rd, an 1822 farmhouse restoration.
+   Warm, historic, natural-material palette: aged plaster cream, sage green,
+   walnut, and brass accents. Patina over polish.
+---------------------------------------------------------------------------- */
+:root {
+  --cream: #f5f0e4;        /* aged plaster background */
+  --cream-2: #efe8d6;
+  --paper: #fffdf7;        /* card surface */
+  --walnut: #3a2f25;       /* deep wood — top bar / headings */
+  --walnut-2: #4d4032;
+  --sage: #6b7f5b;         /* primary accent */
+  --sage-2: #56684a;
+  --sage-tint: #e6ebdd;
+  --brass: #b08a3e;        /* highlight / money */
+  --brass-2: #8f6f2e;
+  --ink: #2c241c;          /* text */
+  --muted: #7a6f60;        /* secondary text */
+  --line: #ddd2bd;         /* hairlines */
+  --rust: #a8553c;         /* over-budget / alert */
+  --ok: #5e7d4f;           /* positive */
+
+  /* scope status colors */
+  --sc-in: #5e7d4f;
+  --sc-out: #b0635a;
+  --sc-existing: #9a8347;
+  --sc-unset: #b8ad99;
+
+  --background: var(--cream);
+  --foreground: var(--ink);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-cream: var(--cream);
+  --color-paper: var(--paper);
+  --color-walnut: var(--walnut);
+  --color-sage: var(--sage);
+  --color-brass: var(--brass);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-rust: var(--rust);
+  --font-serif: Georgia, "Times New Roman", serif;
+}
+
+* { box-sizing: border-box; }
+html, body { padding: 0; margin: 0; }
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .serif { font-family: var(--font-serif); }
+
+a { color: inherit; text-decoration: none; }
+
+/* utility helpers reused across pages */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(58, 47, 37, 0.05);
+}
+.hairline { border-color: var(--line); }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600;
+  padding: 7px 12px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  cursor: pointer; transition: all .12s ease;
+}
+.btn:hover { background: var(--cream-2); }
+.btn-primary { background: var(--sage); border-color: var(--sage-2); color: #fff; }
+.btn-primary:hover { background: var(--sage-2); }
+.btn-sm { padding: 4px 8px; font-size: 12px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  padding: 2px 9px; border-radius: 999px;
+}
+
+input, select, textarea {
+  font: inherit; color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line); border-radius: 7px;
+  padding: 6px 9px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--sage-tint); border-color: var(--sage); }
+input[type="range"] { accent-color: var(--sage); padding: 0; border: none; background: transparent; }
+input[type="checkbox"] { accent-color: var(--sage); }
+
+table { border-collapse: collapse; width: 100%; }
+
+::-webkit-scrollbar { height: 10px; width: 10px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+
+.scope-btn {
+  width: 100%; border: 1px solid var(--line); background: var(--paper);
+  border-radius: 6px; padding: 4px 0; font-size: 11px; font-weight: 700; cursor: pointer;
+}
