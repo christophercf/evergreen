@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { MASTER_TERMS } from "@/lib/data/seed";
-import { accessFor, type CostLine, type CostOwner, type LinePhase, type MarkupModel } from "@/lib/data/types";
+import { accessFor, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
   lineBase, lineStart, lineDelta, totals, byCategory, byTrade,
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
@@ -31,6 +31,10 @@ export default function CostsPage() {
   const netChange = t.grand - t.baseline;
   const anyUnlocked = db.costLines.some((l) => !l.locked);
   const groups = groupLines(db.costLines, group, db);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
+  const toggleGroup = (k: string) => setCollapsed((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const toggleAll = () => setCollapsed(allCollapsed ? new Set() : new Set(groups.map((g) => g.key)));
 
   return (
     <>
@@ -64,7 +68,12 @@ export default function CostsPage() {
         </div>
       )}
 
-      <div className="card" style={{ padding: 16, marginTop: 14 }}>
+      {/* Cumulative cost-over-time, building to the budget; change orders show their impact */}
+      <SectionTitle>Cost Over Time</SectionTitle>
+      <CostChart />
+
+      <SectionTitle>Project Mix</SectionTitle>
+      <div className="card" style={{ padding: 16 }}>
         <StackBar height={13} segments={MACRO_ORDER.map((c) => ({ value: byCategory(db.costLines).find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12 }}>
           {MACRO_ORDER.map((c) => {
@@ -75,8 +84,11 @@ export default function CostsPage() {
         </div>
       </div>
 
+      {!ro && <AddRoomCard />}
+
       <SectionTitle right={
-        <div style={{ display: "flex", gap: 6 }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <button className="btn btn-sm" onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</button>
           {(["category", "trade", "owner"] as GroupBy[]).map((g) => (
             <button key={g} className="btn btn-sm" onClick={() => setGroup(g)} style={{ background: group === g ? "var(--sage-tint)" : undefined, fontWeight: 700 }}>by {g}</button>
           ))}
@@ -85,24 +97,134 @@ export default function CostsPage() {
         Cost Lines
       </SectionTitle>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-        {groups.map((grp) => (
-          <div key={grp.key}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 7px" }}>
-              <span style={{ width: 12, height: 12, borderRadius: 3, background: grp.color }} />
-              <h3 className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)" }}>{grp.label}</h3>
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>{grp.lines.length} line{grp.lines.length === 1 ? "" : "s"}</span>
-              <span style={{ marginLeft: "auto", fontWeight: 700 }}><Money value={grp.lines.reduce((a, l) => a + lineCurrent(l), 0)} /></span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {groups.map((grp) => {
+          const isCollapsed = collapsed.has(grp.key);
+          return (
+            <div key={grp.key}>
+              <div onClick={() => toggleGroup(grp.key)} style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 7px", cursor: "pointer" }}>
+                <span style={{ fontSize: 11, color: "var(--muted)", width: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
+                <span style={{ width: 12, height: 12, borderRadius: 3, background: grp.color }} />
+                <h3 className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)" }}>{grp.label}</h3>
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>{grp.lines.length} line{grp.lines.length === 1 ? "" : "s"}</span>
+                <span style={{ marginLeft: "auto", fontWeight: 700 }}><Money value={grp.lines.reduce((a, l) => a + lineCurrent(l), 0)} /></span>
+              </div>
+              {!isCollapsed && (
+                <div className="card" style={{ overflow: "hidden" }}>
+                  {grp.lines.map((l, i) => (<CostRow key={l.id} line={l} ro={ro} first={i === 0} onAi={() => setAiFor(l.id)} />))}
+                </div>
+              )}
             </div>
-            <div className="card" style={{ overflow: "hidden" }}>
-              {grp.lines.map((l, i) => (<CostRow key={l.id} line={l} ro={ro} first={i === 0} onAi={() => setAiFor(l.id)} />))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {aiFor && <AiModal line={db.costLines.find((l) => l.id === aiFor)!} onClose={() => setAiFor(null)} />}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add a room here — shared with the Admin tab, no duplicates.
+function AddRoomCard() {
+  const store = useStore();
+  const [name, setName] = useState("");
+  const [floor, setFloor] = useState<RoomFloor>("First Floor");
+  const [warn, setWarn] = useState(false);
+  const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Basement", "Exterior"];
+  return (
+    <div className="card" style={{ padding: 12, marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <strong style={{ fontSize: 13 }}>Add a room</strong>
+      <span style={{ fontSize: 12, color: "var(--muted)" }}>shared with the Admin tab</span>
+      <input placeholder="Room name…" value={name} onChange={(e) => { setName(e.target.value); setWarn(false); }} style={{ flex: 1, minWidth: 160 }} />
+      <select value={floor} onChange={(e) => setFloor(e.target.value as RoomFloor)}>{FLOORS.map((f) => <option key={f}>{f}</option>)}</select>
+      <button className="btn btn-primary" onClick={() => { const ok = store.addRoom(name, floor); if (ok) setName(""); else setWarn(true); }}>+ Add room</button>
+      {warn && <span style={{ fontSize: 12, color: "var(--rust)" }}>That room already exists.</span>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Cumulative cost over the project timeline, stacked by category, building to
+// the budget. Approved change orders accrue at their date so their impact shows.
+function CostChart() {
+  const store = useStore();
+  const db = store.db;
+  const monthIdx = (d: string) => { const dt = new Date(`${d}T00:00:00`); return dt.getFullYear() * 12 + dt.getMonth(); };
+  const fmtMonth = (idx: number) => new Date(Math.floor(idx / 12), idx % 12, 1).toLocaleString("en-US", { month: "short", year: "2-digit" });
+
+  // When each line "lands" = latest scheduled end for its trade (else project start).
+  const endIdxOf = (l: CostLine) => {
+    const ends = db.schedule.filter((s) => s.tradeId === l.tradeId).map((s) => monthIdx(s.end));
+    return ends.length ? Math.max(...ends) : null;
+  };
+  const sIdx = db.schedule.map((s) => monthIdx(s.start));
+  const coIdx = db.costLines.flatMap((l) => l.changeOrders.filter((c) => c.status === "approved").map((c) => monthIdx(c.date)));
+  const first = Math.min(...sIdx, ...coIdx);
+  const last = Math.max(...db.schedule.map((s) => monthIdx(s.end)), ...coIdx);
+  const months: number[] = [];
+  for (let i = first; i <= last; i++) months.push(i);
+
+  const baseTotal = totals(db.costLines).baseline;
+  const grand = totals(db.costLines).grand;
+  const maxV = Math.max(baseTotal, grand) || 1;
+
+  // cumulative value by category at each month
+  const cum = (uptoIdx: number, cat: MacroCategory) =>
+    db.costLines.filter((l) => l.category === cat).reduce((a, l) => {
+      const end = endIdxOf(l);
+      const landed = end === null ? first : end;
+      const base = landed <= uptoIdx ? lineBaseline(l) : 0;
+      const co = l.changeOrders.filter((c) => c.status === "approved" && monthIdx(c.date) <= uptoIdx)
+        .reduce((s, c) => s + (c.kind === "savings" ? -c.amount : c.amount), 0);
+      return a + base + (landed <= uptoIdx ? co : 0);
+    }, 0);
+
+  const W = 720, H = 230, padL = 56, padB = 26, padT = 10;
+  const plotW = W - padL - 8, plotH = H - padB - padT;
+  const colW = months.length ? Math.min(70, plotW / months.length) : plotW;
+  const y = (v: number) => padT + plotH - (v / maxV) * plotH;
+  const budgetY = y(baseTotal);
+
+  return (
+    <div className="card" style={{ padding: 16, overflowX: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 520, display: "block" }}>
+        {/* y gridlines */}
+        {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+          <g key={f}>
+            <line x1={padL} x2={W - 8} y1={padT + plotH * (1 - f)} y2={padT + plotH * (1 - f)} stroke="var(--line)" strokeWidth={1} />
+            <text x={padL - 6} y={padT + plotH * (1 - f) + 3} textAnchor="end" fontSize={9} fill="var(--muted)">{fmt(maxV * f)}</text>
+          </g>
+        ))}
+        {/* budget reference line */}
+        <line x1={padL} x2={W - 8} y1={budgetY} y2={budgetY} stroke="var(--brass)" strokeWidth={1.5} strokeDasharray="5 4" />
+        <text x={W - 10} y={budgetY - 4} textAnchor="end" fontSize={9.5} fill="var(--brass-2)" fontWeight={700}>Baseline budget {fmt(baseTotal)}</text>
+        {/* stacked bars per month */}
+        {months.map((m, i) => {
+          let yTop = padT + plotH;
+          const x = padL + i * colW + colW * 0.15;
+          const bw = colW * 0.7;
+          return (
+            <g key={m}>
+              {MACRO_ORDER.map((c) => {
+                const v = cum(m, c);
+                if (v <= 0) return null;
+                const h = (v / maxV) * plotH;
+                yTop -= h;
+                return <rect key={c} x={x} y={yTop} width={bw} height={h} fill={MACRO_COLOR[c]} opacity={0.92} />;
+              })}
+              <text x={x + bw / 2} y={H - padB + 14} textAnchor="middle" fontSize={9} fill="var(--muted)">{fmtMonth(m)}</text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6, fontSize: 11 }}>
+        {MACRO_ORDER.map((c) => db.costLines.some((l) => l.category === c) && (
+          <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: MACRO_COLOR[c] }} />{c}</span>
+        ))}
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Costs accrue as each trade’s work completes on the schedule, stacking by category up to the baseline budget (dashed). Approved change orders push the stack above the line.</p>
+    </div>
   );
 }
 

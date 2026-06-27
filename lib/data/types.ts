@@ -191,6 +191,26 @@ export interface CostLine {
   phases: LinePhase[];
 }
 
+// ---- Vendor management ------------------------------------------------------
+// A digital signature on a contract round.
+export interface VendorSig {
+  party: "builder" | "trade" | "owner";
+  name: string;
+  at: string;
+}
+
+// Per-trade vendor agreement, signed in two rounds:
+//  round1 = scope + total cost; round2 = draw schedule + start/finish dates.
+export interface VendorAgreement {
+  tradeId: string;
+  /** Vendor's requested draw parameters — advises the builder's draw plan. */
+  drawRequest?: string;
+  startDate?: string;
+  finishDate?: string;
+  round1: VendorSig[];
+  round2: VendorSig[];
+}
+
 // A client payment that bundles one or more line phases. Once paid, those
 // amounts lock (lines can still grow via change orders → new phases/draws).
 export interface Draw {
@@ -308,6 +328,7 @@ export interface DB {
   schedule: ScheduleItem[];
   notifications: AppNotification[];
   draws: Draw[];
+  vendorAgreements: VendorAgreement[];
 }
 
 // ---- Session ----------------------------------------------------------------

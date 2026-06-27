@@ -20,7 +20,7 @@ const NAV: NavItem[] = [
   { href: "/budget", label: "Budget", mod: "budget", Icon: WalletIcon },
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon, phase2: true },
-  { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon, phase2: true },
+  { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon, phase2: true },
 ];
 

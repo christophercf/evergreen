@@ -473,6 +473,29 @@ class Store {
     return this.db.draws.some((d) => d.status === "paid" && d.phaseRefs.some((r) => r.lineId === lineId && r.phaseId === phaseId));
   }
 
+  // ---- Vendor agreements ----
+  private ensureAgreement(db: DB, tradeId: string) {
+    let a = db.vendorAgreements.find((x) => x.tradeId === tradeId);
+    if (!a) { a = { tradeId, round1: [], round2: [] }; db.vendorAgreements.push(a); }
+    return a;
+  }
+  setVendorDrawRequest(tradeId: string, text: string) {
+    this.mutate((db) => { this.ensureAgreement(db, tradeId).drawRequest = text; });
+  }
+  setVendorDates(tradeId: string, startDate: string, finishDate: string) {
+    this.mutate((db) => { const a = this.ensureAgreement(db, tradeId); a.startDate = startDate; a.finishDate = finishDate; });
+  }
+  /** Toggle a digital signature for a party on a contract round. */
+  signVendorRound(tradeId: string, round: 1 | 2, party: "builder" | "trade" | "owner", name: string) {
+    this.mutate((db) => {
+      const a = this.ensureAgreement(db, tradeId);
+      const arr = round === 1 ? a.round1 : a.round2;
+      const i = arr.findIndex((s) => s.party === party);
+      if (i >= 0) arr.splice(i, 1);
+      else arr.push({ party, name, at: new Date().toISOString() });
+    });
+  }
+
   // ---- Budget ----
   updateFunding(id: string, patch: Partial<FundingSource>) {
     this.mutate((db) => {

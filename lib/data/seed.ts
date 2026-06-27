@@ -8,7 +8,7 @@
 import type {
   Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
-  ScheduleKind, ScheduleStatus,
+  ScheduleKind, ScheduleStatus, VendorAgreement,
 } from "./types";
 import { lineTotal } from "./money";
 
@@ -406,6 +406,19 @@ const draws: Draw[] = [
   { id: "draw-2", name: "Draw 2 — Rough-in", phaseRefs: draw2Refs, status: "planned", note: "Released after rough inspections pass." },
 ];
 
+// ---- Vendor agreements ------------------------------------------------------
+// One per trade that has any cost line. Round 1 = scope+cost, Round 2 = draw
+// schedule + dates. A few are pre-populated to show the signing flow.
+const activeTradeIds = Array.from(new Set(costLines.map((l) => l.tradeId)));
+const vendorAgreements: VendorAgreement[] = activeTradeIds.map((tradeId) => ({
+  tradeId, round1: [], round2: [],
+}));
+const va = (tradeId: string) => vendorAgreements.find((a) => a.tradeId === tradeId);
+const plumbA = va("plumbing");
+if (plumbA) { plumbA.drawRequest = "30% deposit on contract signing, then monthly progress draws on % complete; net-15 terms."; plumbA.round1 = [{ party: "builder", name: "Aaron — Oasis", at: "2026-05-10T15:00:00Z" }, { party: "trade", name: "Lakeside Plumbing — Danny", at: "2026-05-11T18:00:00Z" }]; }
+const elecA = va("electrical");
+if (elecA) elecA.drawRequest = "25% mobilization, 50% at rough-in inspection, 25% at finish; net-30.";
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -421,6 +434,7 @@ export function buildDB(): DB {
     schedule,
     notifications: [],
     draws,
+    vendorAgreements,
   };
 }
 
