@@ -6,24 +6,13 @@ import { LeafIcon } from "./icons";
 
 export function Landing() {
   const store = useStore();
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [err, setErr] = useState("");
-  const [info, setInfo] = useState("");
-
-  const demos = store.db.users.filter((u) => ["u-owner", "u-builder", "u-plumb", "u-owner2"].includes(u.id));
 
   const submit = () => {
-    setErr(""); setInfo("");
-    if (mode === "login") {
-      const r = store.login(email);
-      if (!r.ok) setErr(r.error ?? "Login failed.");
-    } else {
-      const r = store.signup(name, email);
-      if (!r.ok) setErr(r.error ?? "Sign-up failed.");
-      else setInfo("Welcome! Your account is pending admin approval — you have viewer access for now.");
-    }
+    setErr("");
+    const r = store.login(email);
+    if (!r.ok) setErr(r.error ?? "Login failed.");
   };
 
   return (
@@ -58,43 +47,23 @@ export function Landing() {
 
           {/* right: auth card */}
           <div style={{ background: "var(--paper)", color: "var(--ink)", borderRadius: 16, padding: 26, boxShadow: "0 20px 50px rgba(0,0,0,.35)" }}>
-            <div style={{ display: "flex", gap: 6, marginBottom: 18, background: "var(--cream-2)", borderRadius: 10, padding: 4 }}>
-              {(["login", "signup"] as const).map((m) => (
-                <button key={m} onClick={() => { setMode(m); setErr(""); setInfo(""); }} className="btn"
-                  style={{ flex: 1, border: "none", background: mode === m ? "var(--paper)" : "transparent", fontWeight: 700, boxShadow: mode === m ? "0 1px 2px rgba(0,0,0,.1)" : "none" }}>
-                  {m === "login" ? "Log in" : "New here"}
-                </button>
-              ))}
-            </div>
+            <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Log in</div>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Use the email your project admin invited.</p>
 
-            {mode === "signup" && (
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Full name
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Contractor" style={{ width: "100%", marginTop: 4, marginBottom: 12 }} />
-              </label>
-            )}
             <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email
               <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={(e) => e.key === "Enter" && submit()} style={{ width: "100%", marginTop: 4 }} />
             </label>
 
             {err && <div style={{ fontSize: 12.5, color: "var(--rust)", marginTop: 10 }}>{err}</div>}
-            {info && <div style={{ fontSize: 12.5, color: "var(--sage-2)", marginTop: 10 }}>{info}</div>}
 
-            <button className="btn btn-primary" style={{ width: "100%", marginTop: 16, justifyContent: "center", padding: "10px" }} onClick={submit}>
-              {mode === "login" ? "Log in →" : "Create account →"}
-            </button>
+            <button className="btn btn-primary" style={{ width: "100%", marginTop: 16, justifyContent: "center", padding: "10px" }} onClick={submit}>Log in →</button>
 
             <div style={{ borderTop: "1px solid var(--line)", margin: "18px 0 12px" }} />
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 8 }}>Quick demo sign-in</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {demos.map((u) => (
-                <button key={u.id} className="btn btn-sm" onClick={() => store.loginAs(u.id)} style={{ justifyContent: "flex-start" }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 99, background: "var(--sage)", flexShrink: 0 }} />
-                  <span style={{ textAlign: "left", lineHeight: 1.1 }}>
-                    <span style={{ display: "block", fontSize: 12 }}>{u.name.split(" — ")[0]}</span>
-                    <span style={{ display: "block", fontSize: 10, color: "var(--muted)" }}>{u.role.replace("_", " ")}</span>
-                  </span>
-                </button>
-              ))}
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>
+              <strong>Invited?</strong> Open the invite link your admin sent — it sets up your account automatically.
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
+              <strong>Need access?</strong> Ask the project’s Full Admin to invite you. Accounts are invite-only.
             </div>
           </div>
         </div>
