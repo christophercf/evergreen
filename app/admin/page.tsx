@@ -323,6 +323,7 @@ function UsersTab({ ro }: { ro: boolean }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                   <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
                   {!ro && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
+                  {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
                   {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
                 </div>
               )}
@@ -389,6 +390,27 @@ function UsersTab({ ro }: { ro: boolean }) {
 
       {!ro && <InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} />}
     </>
+  );
+}
+
+function RefreshInvite({ email }: { email: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [msg, setMsg] = useState("");
+  const run = async () => {
+    setState("busy"); setMsg("");
+    const r = await sendInviteEmail(email);
+    setState("done");
+    if (!r.ok) setMsg(r.error ?? "Failed.");
+    else if (r.emailed) setMsg("✓ Invite re-emailed.");
+    else if (r.link) { if (navigator.clipboard) navigator.clipboard.writeText(r.link); setMsg("✓ Fresh link copied (email re-send needs SMTP)."); }
+    else setMsg("✓ Done.");
+    setTimeout(() => setState("idle"), 200);
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <button className="btn btn-sm" disabled={state === "busy"} onClick={run} title="Re-send a fresh invite (current link)">{state === "busy" ? "…" : "↻ Refresh invite"}</button>
+      {msg && <span style={{ fontSize: 11, color: msg.startsWith("✓") ? "var(--sage-2)" : "var(--rust)" }}>{msg}</span>}
+    </span>
   );
 }
 

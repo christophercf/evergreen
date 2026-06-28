@@ -28,7 +28,16 @@ export async function POST(req: Request) {
   const { data: caller, error: callerErr } = await admin.auth.getUser(token);
   if (callerErr || !caller?.user) return NextResponse.json({ ok: false, error: "Not authorized." }, { status: 401 });
 
+  // First try to invite + email. If the user already exists (e.g. a re-invite),
+  // generate a FRESH invite link with the current redirect so the admin can share it.
   const { error } = await admin.auth.admin.inviteUserByEmail(email, redirectTo ? { redirectTo } : undefined);
-  if (error) return NextResponse.json({ ok: false, error: error.message });
-  return NextResponse.json({ ok: true });
+  if (!error) return NextResponse.json({ ok: true, emailed: true });
+
+  const { data: gl, error: gerr } = await admin.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: redirectTo ? { redirectTo } : undefined,
+  });
+  if (gerr || !gl?.properties?.action_link) return NextResponse.json({ ok: false, error: error.message });
+  return NextResponse.json({ ok: true, emailed: false, link: gl.properties.action_link });
 }

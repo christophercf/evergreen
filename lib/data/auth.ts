@@ -58,7 +58,7 @@ export async function authSendReset(email: string) {
 }
 
 /** Send an invite email to the address (server route uses the service_role key). */
-export async function sendInviteEmail(email: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendInviteEmail(email: string): Promise<{ ok: boolean; error?: string; emailed?: boolean; link?: string }> {
   let token: string | null = null;
   const s = c();
   if (s) { const { data } = await s.auth.getSession(); token = data.session?.access_token ?? null; }
