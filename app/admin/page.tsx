@@ -8,7 +8,7 @@ import {
   type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor,
 } from "@/lib/data/types";
 import { MACRO_ORDER } from "@/lib/data/money";
-import { sendInviteEmail } from "@/lib/data/auth";
+import { sendInviteEmail, removeAuthUser } from "@/lib/data/auth";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
@@ -299,9 +299,11 @@ function UsersTab({ ro }: { ro: boolean }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [nrole, setNrole] = useState<Role>("trade");
+  const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string; email: string } | null>(null);
 
   return (
     <>
+      {confirmRemove && <RemoveDialog target={confirmRemove} onClose={() => setConfirmRemove(null)} />}
       <SectionTitle>Users &amp; Access</SectionTitle>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 12 }}>
         Builders have general admin access (everything except the owner-only Budget). The owner can remove the builder and manage their own trades; the builder manages subs. Owner-managed trade contacts are shared with the builder; builder-managed trade contacts are private from the owner.
@@ -317,7 +319,7 @@ function UsersTab({ ro }: { ro: boolean }) {
                 <select value={u.role} disabled={ro} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
                   {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>
-                {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => store.removeUser(u.id)}>✕</button>}
+                {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => setConfirmRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
               </div>
               {(u.status && u.status !== "active") && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
@@ -390,6 +392,38 @@ function UsersTab({ ro }: { ro: boolean }) {
 
       {!ro && <InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} />}
     </>
+  );
+}
+
+function RemoveDialog({ target, onClose }: { target: { id: string; name: string; email: string }; onClose: () => void }) {
+  const store = useStore();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const remove = async () => {
+    setBusy(true); setMsg("Removing…");
+    // 1) delete the Supabase auth account (best-effort — needs service role)
+    const r = await removeAuthUser(target.email);
+    // 2) remove the app record from the database
+    store.removeUser(target.id);
+    setBusy(false);
+    if (r.ok) onClose();
+    else { setMsg(`App access removed. Auth account: ${r.error}`); setTimeout(onClose, 2500); }
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.5)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 440, width: "100%", padding: 22 }} onClick={(e) => e.stopPropagation()}>
+        <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>Remove {target.name}?</h3>
+        <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 4px" }}>
+          This permanently removes <strong>{target.email}</strong> from the project and <strong>deletes their account from the database</strong>. They’ll lose all access immediately and can’t sign in.
+        </p>
+        <p style={{ fontSize: 12, color: "var(--muted)" }}>This can’t be undone. You can always re-invite them later.</p>
+        {msg && <div style={{ fontSize: 12, color: "var(--brass-2)", marginTop: 8 }}>{msg}</div>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}>
+          <button className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy} style={{ background: "var(--rust)", borderColor: "var(--rust)" }} onClick={remove}>{busy ? "…" : "Yes, remove & delete"}</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
