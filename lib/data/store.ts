@@ -181,7 +181,10 @@ class Store {
   /** Invite a user; returns the invite token for a shareable link. */
   inviteUser(u: { name: string; email: string; role: Role; tradeIds?: string[]; managedBy?: "builder" | "owner" }): string {
     const token = `inv-${Math.random().toString(36).slice(2, 10)}`;
-    this.mutate((db) => { db.users.push({ id: newId("u"), name: u.name.trim(), email: u.email.trim(), role: u.role, tradeIds: u.tradeIds, managedBy: u.managedBy, status: "invited", inviteToken: token }); });
+    // Non-admins can only invite trades (never invite someone in as a higher role).
+    const role: Role = this.canManageAccess ? u.role : "trade";
+    const managedBy = role === "trade" ? (u.managedBy ?? "builder") : undefined;
+    this.mutate((db) => { db.users.push({ id: newId("u"), name: u.name.trim(), email: u.email.trim(), role, tradeIds: u.tradeIds, managedBy, status: "invited", inviteToken: token }); });
     return token;
   }
   /** Accept an invite (from the link) → activates the account and signs in. */
@@ -194,6 +197,7 @@ class Store {
     return true;
   }
   approveUser(userId: string) {
+    if (this.session.role !== "full_admin") return;
     this.mutate((db) => { const u = db.users.find((x) => x.id === userId); if (u) u.status = "active"; });
   }
 
@@ -356,7 +360,12 @@ class Store {
   }
 
   // ---- Users & access ----
+  /** Only a Full Admin may change access rights (roles, module permissions, managedBy). */
+  private get canManageAccess(): boolean {
+    return this.session.role === "full_admin";
+  }
   setUserAccess(userId: string, mod: ModuleKey, level: AccessLevel) {
+    if (!this.canManageAccess) return;
     this.mutate((db) => {
       const u = db.users.find((x) => x.id === userId);
       if (!u) return;
@@ -370,14 +379,20 @@ class Store {
     });
   }
   updateUser(userId: string, patch: Partial<User>) {
+    // Non-admins can edit profile fields but never role/permissions/management.
+    const safe = { ...patch };
+    if (!this.canManageAccess) { delete safe.role; delete safe.access; delete safe.managedBy; }
+    if (!Object.keys(safe).length) return;
     this.mutate((db) => {
       const u = db.users.find((x) => x.id === userId);
-      if (u) Object.assign(u, patch);
+      if (u) Object.assign(u, safe);
     });
   }
   addUser(u: Omit<User, "id">) {
+    // Non-admins can only create trade accounts (no privilege escalation via add/invite).
+    const clamped = this.canManageAccess ? u : { ...u, role: "trade" as const, managedBy: (u.managedBy ?? "builder") as "builder" | "owner" };
     this.mutate((db) => {
-      db.users.push({ id: newId("u"), ...u });
+      db.users.push({ id: newId("u"), ...clamped });
     });
   }
   removeUser(userId: string) {

@@ -296,6 +296,7 @@ function UsersTab({ ro }: { ro: boolean }) {
   const db = store.db;
   const viewerRole = store.session.role;
   const viewer = store.currentUser;
+  const canManageAccess = viewerRole === "full_admin"; // only Full Admin changes roles/permissions
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [nrole, setNrole] = useState<Role>("trade");
@@ -306,7 +307,7 @@ function UsersTab({ ro }: { ro: boolean }) {
       {confirmRemove && <RemoveDialog target={confirmRemove} onClose={() => setConfirmRemove(null)} />}
       <SectionTitle>Users &amp; Access</SectionTitle>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 12 }}>
-        Builders have general admin access (everything except the owner-only Budget). The owner can remove the builder and manage their own trades; the builder manages subs. Owner-managed trade contacts are shared with the builder; builder-managed trade contacts are private from the owner.
+        Only a <strong>Full Admin</strong> can change roles &amp; module permissions. Builders may invite trade subs and manage their contacts, but can’t change anyone’s access level.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
         {db.users.map((u) => {
@@ -316,15 +317,19 @@ function UsersTab({ ro }: { ro: boolean }) {
             <div key={u.id} className="card" style={{ padding: 14 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <input defaultValue={u.name} disabled={ro} onBlur={(e) => e.target.value.trim() && store.updateUser(u.id, { name: e.target.value.trim() })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, flex: 1, fontFamily: "var(--font-serif)", color: "var(--walnut)" }} />
-                <select value={u.role} disabled={ro} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
-                  {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                </select>
+                {canManageAccess ? (
+                  <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
+                    {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                  </select>
+                ) : (
+                  <Pill bg="var(--cream-2)">{ROLE_LABEL[u.role]}</Pill>
+                )}
                 {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => setConfirmRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
               </div>
               {(u.status && u.status !== "active") && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
                   <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
-                  {!ro && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
+                  {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
                   {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
                   {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
                 </div>
@@ -333,7 +338,7 @@ function UsersTab({ ro }: { ro: boolean }) {
               {u.role === "trade" && (
                 <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
                   Managed by
-                  <select value={u.managedBy ?? "builder"} disabled={ro} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 11.5 }}>
+                  <select value={u.managedBy ?? "builder"} disabled={!canManageAccess} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 11.5 }}>
                     <option value="builder">Builder</option>
                     <option value="owner">Owner</option>
                   </select>
@@ -370,14 +375,14 @@ function UsersTab({ ro }: { ro: boolean }) {
 
               {/* Access */}
               <div style={{ marginTop: 10 }}>
-                <Lbl>Module access</Lbl>
+                <Lbl>Module access {!canManageAccess && <span style={{ color: "var(--muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· Full Admin only</span>}</Lbl>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginTop: 4 }}>
                   {MODULES.map((m) => {
                     const eff = accessFor(u, u.role, m.key);
                     return (
                       <label key={m.key} style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
                         {m.label}
-                        <select value={eff} disabled={ro} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} style={{ fontSize: 11, padding: "2px 4px", color: eff === "none" ? "var(--muted)" : eff === "edit" ? "var(--sage-2)" : "var(--ink)" }}>
+                        <select value={eff} disabled={!canManageAccess} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} style={{ fontSize: 11, padding: "2px 4px", color: eff === "none" ? "var(--muted)" : eff === "edit" ? "var(--sage-2)" : "var(--ink)" }}>
                           {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
                         </select>
                       </label>
