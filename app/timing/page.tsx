@@ -61,6 +61,10 @@ export default function TimingPage() {
   const ownerView = role === "owner";
   const canDrag = canEdit && editing;
 
+  // Trades only see their own tasks (+ milestones for inspection context).
+  const myTradeIds = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
+  const visible = myTradeIds ? db.schedule.filter((s) => (s.tradeId && myTradeIds.has(s.tradeId)) || s.kind === "milestone") : db.schedule;
+
   const catOf = (tradeId?: string): MacroCategory | undefined => db.trades.find((t) => t.id === tradeId)?.category;
   const colorOf = (s: ScheduleItem) => (s.kind === "milestone" ? "var(--walnut)" : MACRO_COLOR[catOf(s.tradeId) ?? "Soft Costs"]);
   // Owner sees confirmed dates; builder/editor see working dates.
@@ -150,9 +154,9 @@ export default function TimingPage() {
 
   if (access === "none") return <NoAccess module="Timing" />;
 
-  const distinctTrades = [...new Set(db.schedule.map((s) => s.tradeId).filter(Boolean) as string[])];
+  const distinctTrades = [...new Set(visible.map((s) => s.tradeId).filter(Boolean) as string[])];
   const scheduledCost = distinctTrades.reduce((a, id) => a + tradeCost(db, id), 0);
-  const pending = db.schedule.filter((s) => s.confirm === "pending");
+  const pending = visible.filter((s) => s.confirm === "pending");
   const notifs = store.notificationsFor(user, role).filter((n) => !n.read);
 
   return (
@@ -181,7 +185,7 @@ export default function TimingPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Scheduled Trades Cost" value={<Money value={scheduledCost} />} sub="live from Building Costs" accent="var(--brass-2)" />
-        <StatCard label="Tasks" value={`${db.schedule.length}`} sub={`${db.schedule.filter((s) => s.status === "done").length} done`} />
+        <StatCard label="Tasks" value={`${visible.length}`} sub={`${visible.filter((s) => s.status === "done").length} done`} />
         <StatCard label="Awaiting Trade Confirm" value={`${pending.length}`} accent={pending.length ? "var(--rust)" : "var(--ok)"} sub="date changes pending" />
         <StatCard label="Revisions" value={`${db.scheduleRevisions.length}`} sub="published timing changes" />
       </div>
@@ -236,7 +240,7 @@ export default function TimingPage() {
             </div>
           </div>
 
-          {db.schedule.map((s) => {
+          {visible.map((s) => {
             const [ds, de] = datesOf(s);
             const isDrag = drag?.id === s.id;
             const moveDays = isDrag && drag!.mode === "move" ? drag!.days : 0;

@@ -405,25 +405,36 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
   viewerRole: Role; name: string; setName: (s: string) => void; email: string; setEmail: (s: string) => void; nrole: Role; setNrole: (r: Role) => void;
 }) {
   const store = useStore();
+  const db = store.db;
   const [lastLink, setLastLink] = useState<string | null>(null);
+  const [tradeId, setTradeId] = useState("");
+  const [warn, setWarn] = useState("");
   const canInviteAny = viewerRole === "full_admin";
   const canInviteVendor = viewerRole === "full_admin" || viewerRole === "builder" || viewerRole === "owner";
-  // Full admin chooses role; others can only invite vendors (trade).
+  // Full admin chooses any role; builder/owner can only invite trades.
   const inviteRole: Role = canInviteAny ? nrole : "trade";
+  const needsTrade = inviteRole === "trade";
+  const managedBy = viewerRole === "owner" ? ("owner" as const) : ("builder" as const);
 
-  const doInvite = () => {
-    if (!name.trim() || !email.trim()) return;
-    const token = store.inviteUser({ name: name.trim(), email: email.trim(), role: inviteRole, ...(inviteRole === "trade" ? { managedBy: viewerRole === "owner" ? ("owner" as const) : ("builder" as const) } : {}) });
-    setLastLink((typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token);
-    setName(""); setEmail("");
+  const assign = () => {
+    setWarn("");
+    if (!name.trim() || !email.trim()) { setWarn("Name and email required."); return null; }
+    if (needsTrade && !tradeId) { setWarn("Assign which trade this vendor will do."); return null; }
+    return { name: name.trim(), email: email.trim(), role: inviteRole, ...(needsTrade ? { tradeIds: [tradeId], managedBy } : {}) };
   };
+  const doInvite = () => {
+    const u = assign(); if (!u) return;
+    const token = store.inviteUser(u);
+    setLastLink((typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token);
+    setName(""); setEmail(""); setTradeId("");
+  };
+  const doAdd = () => { const u = assign(); if (!u) return; store.addUser({ ...u, status: "active" }); setName(""); setEmail(""); setTradeId(""); };
 
   if (!canInviteAny && !canInviteVendor) return null;
   return (
     <div className="card" style={{ padding: 14, marginTop: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
-        {canInviteAny ? "Add or invite a user" : "Invite a vendor"}
-      </div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{canInviteAny ? "Invite a user" : "Invite a trade / vendor"}</div>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>Access is granted only by invite — the person is assigned their role{needsTrade ? " and trade" : ""} here, before they sign up.</div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
@@ -432,12 +443,21 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
         ) : (
           <Pill bg="var(--cream-2)">Trade / Vendor</Pill>
         )}
+        {needsTrade && (
+          <select value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ borderColor: needsTrade && !tradeId ? "var(--rust)" : undefined }}>
+            <option value="">Assign trade…</option>
+            {MACRO_ORDER.map((c) => (
+              <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
+            ))}
+          </select>
+        )}
         <button className="btn btn-primary" onClick={doInvite}>✉ Send invite</button>
-        {canInviteAny && <button className="btn" onClick={() => { if (name.trim()) { store.addUser({ name: name.trim(), email: email.trim(), role: nrole, status: "active", ...(nrole === "trade" ? { managedBy: "builder" as const } : {}) }); setName(""); setEmail(""); } }}>+ Add directly</button>}
+        {canInviteAny && <button className="btn" onClick={doAdd}>+ Add directly</button>}
       </div>
+      {warn && <div style={{ fontSize: 12, color: "var(--rust)", marginTop: 8 }}>{warn}</div>}
       {lastLink && (
         <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--sage-tint)", borderRadius: 8, fontSize: 12 }}>
-          Invite created. Share this link: <code style={{ fontSize: 11.5 }}>{lastLink}</code>
+          Invite created &amp; assigned. Share this link: <code style={{ fontSize: 11.5 }}>{lastLink}</code>
           <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => navigator.clipboard?.writeText(lastLink)}>Copy</button>
         </div>
       )}

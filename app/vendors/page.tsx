@@ -16,7 +16,9 @@ export default function VendorsPage() {
   const access = accessFor(user, role, "vendors");
   if (access === "none") return <NoAccess module="Vendor Management" />;
 
+  const myTrades = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
   const activeTradeIds = Array.from(new Set(db.costLines.map((l) => l.tradeId)))
+    .filter((id) => !myTrades || myTrades.has(id))
     .sort((a, b) => tradeCost(db, b) - tradeCost(db, a));
 
   return (

@@ -40,6 +40,9 @@ export default function Dashboard() {
     .filter((x) => x.days <= 30)
     .sort((a, b) => a.days - b.days);
 
+  // Trades get a focused dashboard — only their own work, no project financials.
+  if (role === "trade") return <TradeDashboard />;
+
   return (
     <>
       <PageHeader
@@ -126,6 +129,73 @@ export default function Dashboard() {
         </div>
       </div>
 
+      <style>{`@media (max-width: 760px){ .ever-two{ grid-template-columns: 1fr !important; } }`}</style>
+    </>
+  );
+}
+
+// Trade-only dashboard: their tasks, their materials, their QC — nothing else.
+function TradeDashboard() {
+  const store = useStore();
+  const db = store.db;
+  const user = store.currentUser;
+  const mine = new Set(user?.tradeIds ?? []);
+  const tradeNames = [...mine].map((t) => db.trades.find((x) => x.id === t)?.name ?? t).join(", ");
+  const tasks = db.schedule.filter((s) => s.tradeId && mine.has(s.tradeId));
+  const inProg = tasks.filter((s) => s.status === "in_progress").length;
+  const pendingConfirm = tasks.filter((s) => s.confirm === "pending" && s.assignedUserId === user?.id);
+  const mats = db.materials.filter((m) => m.tradeId && mine.has(m.tradeId));
+  const matsDue = mats.filter((m) => m.dueDate && m.status !== "purchased" && m.status !== "delivered")
+    .map((m) => ({ m, days: Math.round((new Date(`${m.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) }))
+    .sort((a, b) => a.days - b.days);
+  let qcSigned = 0, qcTotal = 0;
+  db.scope.filter((c) => c.status === "in" && mine.has(c.tradeId)).forEach((c) => c.items.forEach((it) => { if (it.included) { qcTotal++; if (it.done) qcSigned++; } }));
+  const fmtD = (d?: string) => (d ? new Date(`${d}T00:00:00`).toLocaleString("en-US", { month: "short", day: "numeric" }) : "");
+
+  return (
+    <>
+      <PageHeader title={`Welcome, ${user?.name?.split(" — ")[0] ?? "Trade"}`} subtitle={`Your work on ${db.project.name}${tradeNames ? ` · ${tradeNames}` : ""}. You only see tasks, materials, and sign-offs for your trade.`} />
+
+      {pendingConfirm.length > 0 && (
+        <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--brass)" }}>
+          <strong style={{ fontSize: 13.5 }}>🔔 {pendingConfirm.length} date change{pendingConfirm.length === 1 ? "" : "s"} need your confirmation</strong>
+          <div style={{ marginTop: 6 }}><Link href="/timing" className="btn btn-sm">Review in Timing →</Link></div>
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
+        <StatCard label="My Tasks" value={`${tasks.length}`} sub={`${tasks.filter((s) => s.status === "done").length} done`} />
+        <StatCard label="In Progress" value={`${inProg}`} accent="var(--sage)" />
+        <StatCard label="My Materials Due" value={`${matsDue.length}`} accent={matsDue.length ? "var(--rust)" : "var(--ok)"} sub="not yet purchased" />
+        <StatCard label="My QC Sign-offs" value={`${qcSigned}/${qcTotal}`} sub="owner + builder" />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }} className="ever-two">
+        <div>
+          <SectionTitle right={<Link href="/timing" className="btn btn-sm">Timing →</Link>}>My Schedule</SectionTitle>
+          <div className="card" style={{ padding: 12 }}>
+            {tasks.length ? tasks.slice(0, 8).map((s) => (
+              <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: 12.5 }}>
+                <span style={{ flex: 1 }}>{s.label}</span>
+                <span style={{ color: "var(--muted)" }}>{fmtD(s.start)}–{fmtD(s.end)}</span>
+                <Pill color="#fff" bg={s.status === "done" ? "var(--ok)" : s.status === "in_progress" ? "var(--sage)" : s.status === "blocked" ? "var(--rust)" : "var(--sc-unset)"}>{s.status.replace("_", " ")}</Pill>
+              </div>
+            )) : <div style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>No tasks assigned to your trade yet.</div>}
+          </div>
+        </div>
+        <div>
+          <SectionTitle right={<Link href="/materials" className="btn btn-sm">Materials →</Link>}>My Materials Due</SectionTitle>
+          <div className="card" style={{ padding: 12 }}>
+            {matsDue.length ? matsDue.slice(0, 8).map(({ m, days }) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: 12.5 }}>
+                <Pill color="#fff" bg={days <= 7 ? "var(--rust)" : "var(--brass)"}>{days < 0 ? `${-days}d late` : `${days}d`}</Pill>
+                <span style={{ flex: 1 }}>{m.item}</span>
+                <span style={{ color: "var(--muted)" }}>due {fmtD(m.dueDate)}</span>
+              </div>
+            )) : <div style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>Nothing due — you’re clear.</div>}
+          </div>
+        </div>
+      </div>
       <style>{`@media (max-width: 760px){ .ever-two{ grid-template-columns: 1fr !important; } }`}</style>
     </>
   );

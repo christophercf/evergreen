@@ -27,7 +27,11 @@ type Res = { ok: boolean; error?: string; needsVerify?: boolean; email?: string 
 export async function authSignUp(email: string, password: string): Promise<Res> {
   const s = c();
   if (!s) return { ok: false, error: "Auth not configured." };
-  const { data, error } = await s.auth.signUp({ email: email.trim(), password });
+  const { data, error } = await s.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+  });
   if (error) return { ok: false, error: error.message };
   // With email confirmation on, there's no session until the email is verified.
   return { ok: true, needsVerify: !data.session };
