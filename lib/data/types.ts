@@ -277,7 +277,12 @@ export interface Material {
   notes?: string;
   purchaser: Purchaser; // who buys it
   dueDate?: string; // critical-path selection due date
-  critical?: boolean;
+  critical?: boolean; // critical-path item tied to the timing grid
+  linkedScheduleId?: string; // schedule task this gates
+  imageUrl?: string; // product image (pulled from the spec URL)
+  specs?: string; // product specs/notes pulled from the URL
+  designerApproved?: boolean; // designer sign-off
+  approvalRequested?: boolean; // approval requested from the designer
 }
 
 // ---- Schedule (Gantt) -------------------------------------------------------

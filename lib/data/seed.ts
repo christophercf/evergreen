@@ -488,6 +488,15 @@ const materials: Material[] = [
   m({ item: "Window 1", roomId: "mudroom", roomLabel: "Mud Hall", tradeId: "windows", desc: "2'4''x3'6''", status: "needed", purchaser: "owner" }),
   m({ item: "Ext Door", roomId: "mudroom", roomLabel: "Mud Hall", tradeId: "windows", desc: "32''", status: "needed", notes: "Transom door w/ window (measure)", purchaser: "owner" }),
 ];
+// Critical-path selections + designer approval states (demo).
+const matBy = (item: string, room?: string) => materials.find((x) => x.item === item && (!room || x.roomLabel === room));
+const mc = (item: string, room: string | undefined, due: string, opts: Partial<Material> = {}) => { const x = matBy(item, room); if (x) Object.assign(x, { critical: true, dueDate: due, ...opts }); };
+mc("Vanity", "First Floor Bathroom", "2026-07-05", { approvalRequested: true });
+mc("Toilet", "First Floor Bathroom", "2026-07-05", { designerApproved: true });
+mc("Tub", "Primary Bathroom", "2026-07-12");
+mc("Sink", "Kitchen", "2026-07-15", { approvalRequested: true });
+mc("Water heater", "Basement", "2026-07-01", { designerApproved: true });
+const steam = matBy("SteamSpa Kit"); if (steam) steam.designerApproved = true;
 
 // ---- Artifacts (document library) -------------------------------------------
 let aid = 0;

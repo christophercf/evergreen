@@ -564,6 +564,47 @@ class Store {
   bulkSetMaterialStatus(ids: string[], status: Material["status"]) {
     this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.status = status; }); });
   }
+  /** Designer signs off (or revokes) on a material selection. */
+  setMaterialApproved(id: string, approved: boolean, by: string) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === id);
+      if (!m) return;
+      m.designerApproved = approved;
+      m.approvalRequested = false;
+      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} approved "${m.item}".` });
+    });
+  }
+  requestMaterialApproval(id: string, by: string) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === id);
+      if (!m) return;
+      m.approvalRequested = true;
+      const designer = db.users.find((u) => u.role === "viewer");
+      this.notify(db, { toUserId: designer?.id, toRole: designer ? undefined : "viewer", kind: "info", message: `🎨 ${by} requests designer approval for "${m.item}".` });
+    });
+  }
+  /** Anyone (trade/designer/builder) can request details/specs for an item. */
+  requestMaterialDetails(id: string, by: string) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === id);
+      if (!m) return;
+      this.notify(db, { toRole: "builder", kind: "info", message: `❓ ${by} requested details for "${m.item}".` });
+    });
+  }
+  /** Stub: "pull" image + specs from the product URL (real fetch comes later). */
+  fetchMaterialFromUrl(id: string) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === id);
+      if (!m || !m.specLink) return;
+      let host = "store";
+      try { host = new URL(m.specLink).hostname.replace("www.", ""); } catch { /* ignore */ }
+      m.imageUrl = `https://placehold.co/320x220/efe8d6/3a2f25?text=${encodeURIComponent(m.item.slice(0, 20))}`;
+      m.specs = m.specs || `Fetched from ${host} (stub). Wire a live fetch/AI to pull real title, image, dimensions, finish, and price.`;
+    });
+  }
+  toggleMaterialCritical(id: string) {
+    this.mutate((db) => { const m = db.materials.find((x) => x.id === id); if (m) m.critical = !m.critical; });
+  }
 
   // ---- Vendor agreements ----
   private ensureAgreement(db: DB, tradeId: string) {

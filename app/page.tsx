@@ -32,6 +32,14 @@ export default function Dashboard() {
   const paidTotal = paidDraws.reduce((a, d) => a + drawAmount(db, d), 0);
   const remaining = Math.max(0, t.grand - paidTotal);
 
+  // Critical-path materials nearing their selection due date (next 30 days, not purchased).
+  const today = Date.now();
+  const soon = db.materials
+    .filter((m) => m.critical && m.dueDate && m.status !== "purchased" && m.status !== "delivered")
+    .map((m) => ({ m, days: Math.round((new Date(`${m.dueDate}T00:00:00`).getTime() - today) / 86400000) }))
+    .filter((x) => x.days <= 30)
+    .sort((a, b) => a.days - b.days);
+
   return (
     <>
       <PageHeader
@@ -46,6 +54,25 @@ export default function Dashboard() {
         {canBudget && <StatCard label="Funding Available" value={<Money value={available} />} accent={coverage >= 1 ? "var(--ok)" : "var(--rust)"} sub={`${Math.round(coverage * 100)}% of all-in covered`} />}
         <StatCard label="QC Sign-offs" value={`${signed}/${items.length}`} sub="Owner + builder dual sign-off" />
       </div>
+
+      {soon.length > 0 && (
+        <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--rust)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <strong style={{ fontSize: 14, color: "var(--rust)" }}>⏰ Critical-path selections due soon</strong>
+            <Link href="/materials" className="btn btn-sm" style={{ marginLeft: "auto" }}>Materials →</Link>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {soon.slice(0, 6).map(({ m, days }) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                <Pill color="#fff" bg={days < 0 ? "var(--rust)" : days <= 7 ? "var(--rust)" : "var(--brass)"}>{days < 0 ? `${-days}d overdue` : `${days}d`}</Pill>
+                <span style={{ flex: 1 }}><strong>{m.item}</strong> <span style={{ color: "var(--muted)" }}>· {m.roomLabel ?? ""}</span></span>
+                <span style={{ color: "var(--muted)" }}>{m.designerApproved ? "approved" : m.approvalRequested ? "awaiting designer" : "needs approval"}</span>
+                <span style={{ color: "var(--muted)" }}>due {m.dueDate}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Building Costs →</Link>}>Cost by Category</SectionTitle>
       <div className="card" style={{ padding: 16 }}>

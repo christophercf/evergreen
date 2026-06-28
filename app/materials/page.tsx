@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
-import { PageHeader, NoAccess, StatCard } from "../ui/bits";
+import { PageHeader, NoAccess, StatCard, Pill } from "../ui/bits";
 import { accessFor, MATERIAL_STATUS_LABEL, type Material, type MaterialStatus, type Purchaser } from "@/lib/data/types";
 import { tradeName, MACRO_ORDER } from "@/lib/data/money";
 
@@ -23,14 +23,18 @@ export default function MaterialsPage() {
   const [sort, setSort] = useState<SortKey>("room");
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [ai, setAi] = useState<Material | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   if (access === "none") return <NoAccess module="Materials" />;
   const ro = access !== "edit";
 
   const roomLabel = (mt: Material) => mt.roomId ? (db.rooms.find((r) => r.id === mt.roomId)?.name ?? mt.roomLabel ?? "—") : (mt.roomLabel ?? "—");
 
+  // Trades only see items essential to their job (auto-flagged by trade).
+  const myTradeIds = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
   const filtered = useMemo(() => {
     const list = db.materials.filter((mt) =>
+      (!myTradeIds || (mt.tradeId ? myTradeIds.has(mt.tradeId) : false)) &&
       (room === "all" || mt.roomId === room || mt.roomLabel === room) &&
       (trade === "all" || mt.tradeId === trade) &&
       (status === "all" || mt.status === status));
@@ -85,17 +89,22 @@ export default function MaterialsPage() {
               {!ro && <th style={th}></th>}
               <th style={th}>Item</th><th style={th}>Room</th><th style={th}>Trade</th>
               <th style={thC}>Qty</th><th style={th}>Status</th><th style={th}>Buyer</th>
-              <th style={th}>Due</th><th style={th}>Stored</th><th style={th}>Spec</th>{!ro && <th style={th}></th>}
+              <th style={th}>Due</th><th style={th}>Approval</th><th style={th}>Spec</th>{!ro && <th style={th}></th>}
             </tr>
           </thead>
           <tbody>
-            {filtered.map((mt) => (
-              <tr key={mt.id} style={{ background: sel.has(mt.id) ? "var(--sage-tint)" : undefined }}>
+            {filtered.map((mt) => {
+              const open = openId === mt.id;
+              const colSpan = ro ? 10 : 12;
+              return (
+              <Fragment key={mt.id}>
+              <tr style={{ background: open ? "var(--sage-tint)" : sel.has(mt.id) ? "var(--sage-tint)" : undefined }}>
                 {!ro && <td style={td}><input type="checkbox" checked={sel.has(mt.id)} onChange={() => toggleSel(mt.id)} /></td>}
                 <td style={td}>
-                  <div style={{ fontWeight: 600 }}>{mt.item}</div>
-                  {mt.desc && <div style={{ fontSize: 11, color: "var(--muted)" }}>{mt.desc}</div>}
-                  {mt.notes && <div style={{ fontSize: 11, color: "var(--brass-2)" }}>{mt.notes}</div>}
+                  <button onClick={() => setOpenId(open ? null : mt.id)} style={{ border: "none", background: "transparent", textAlign: "left", cursor: "pointer", padding: 0 }}>
+                    <div style={{ fontWeight: 600 }}>{mt.critical && <span title="Critical path" style={{ color: "var(--rust)" }}>★ </span>}{mt.item} <span style={{ color: "var(--muted)", fontSize: 11 }}>{open ? "▾" : "▸"}</span></div>
+                    {mt.desc && <div style={{ fontSize: 11, color: "var(--muted)" }}>{mt.desc}</div>}
+                  </button>
                 </td>
                 <td style={td}>{roomLabel(mt)}</td>
                 <td style={td}>{mt.tradeId ? tradeName(db, mt.tradeId) : "—"}</td>
@@ -110,8 +119,8 @@ export default function MaterialsPage() {
                     {PURCH.map((p) => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </td>
-                <td style={td}><input type="date" value={mt.dueDate ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { dueDate: e.target.value })} style={{ fontSize: 11, width: 120 }} /></td>
-                <td style={td}><input value={mt.location ?? ""} disabled={ro} placeholder="—" onChange={(e) => store.updateMaterial(mt.id, { location: e.target.value })} style={{ fontSize: 11.5, width: 84 }} /></td>
+                <td style={td}><input type="date" value={mt.dueDate ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { dueDate: e.target.value })} style={{ fontSize: 11, width: 118 }} /></td>
+                <td style={td}>{mt.designerApproved ? <Pill color="#fff" bg="var(--ok)">approved</Pill> : mt.approvalRequested ? <Pill color="var(--brass-2)" bg="#f0e6cd">requested</Pill> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
                 <td style={td}>{mt.specLink ? <a href={mt.specLink} target="_blank" rel="noreferrer" style={{ color: "var(--sage-2)", fontWeight: 600 }}>link ↗</a> : <span style={{ color: "var(--muted)" }}>—</span>}</td>
                 {!ro && <td style={td}>
                   <div style={{ display: "flex", gap: 4 }}>
@@ -120,7 +129,10 @@ export default function MaterialsPage() {
                   </div>
                 </td>}
               </tr>
-            ))}
+              {open && <tr><td colSpan={colSpan} style={{ padding: 0, background: "var(--cream)", borderBottom: "1px solid var(--line)" }}><MaterialDetail mt={mt} ro={ro} /></td></tr>}
+              </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -140,6 +152,62 @@ function Filter({ label, value, onChange, options }: { label: string; value: str
     </label>
   );
 }
+
+function MaterialDetail({ mt, ro }: { mt: Material; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const role = store.session.role;
+  const name = store.session.displayName;
+  const canApprove = role === "viewer" || role === "full_admin" || role === "owner"; // designer/admin
+  const linked = db.schedule.find((s) => s.id === mt.linkedScheduleId);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, padding: 16 }} className="ever-two">
+      {/* image / preview */}
+      <div>
+        {mt.imageUrl ? <img src={mt.imageUrl} alt={mt.item} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
+          : <div style={{ width: "100%", height: 130, borderRadius: 8, border: "1px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 8 }}>No image yet — add a spec URL and fetch.</div>}
+        {!ro && mt.specLink && <button className="btn btn-sm" style={{ marginTop: 6, width: "100%" }} onClick={() => store.fetchMaterialFromUrl(mt.id)}>✨ Fetch image &amp; specs</button>}
+      </div>
+      {/* details */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontSize: 11, color: "var(--muted)", flex: 1, minWidth: 200 }}>Product URL
+            <input value={mt.specLink ?? ""} disabled={ro} placeholder="https://…" onChange={(e) => store.updateMaterial(mt.id, { specLink: e.target.value })} style={{ width: "100%", fontSize: 12 }} />
+          </label>
+          {mt.specLink && <a href={mt.specLink} target="_blank" rel="noreferrer" className="btn btn-sm" style={{ alignSelf: "flex-end" }}>Open ↗</a>}
+        </div>
+        {mt.specs && <div style={{ fontSize: 12, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>{mt.specs}</div>}
+        {mt.notes && <div style={{ fontSize: 12, color: "var(--brass-2)" }}>Note: {mt.notes}</div>}
+
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
+          <span style={{ color: "var(--muted)" }}>Auto-shared with: <strong style={{ color: "var(--ink)" }}>{mt.tradeId ? tradeName(db, mt.tradeId) : "all trades"}</strong></span>
+          {!ro && <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><input type="checkbox" checked={!!mt.critical} onChange={() => store.toggleMaterialCritical(mt.id)} /> Critical-path item</label>}
+          {!ro && (
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "var(--muted)" }}>Tie to task
+              <select value={mt.linkedScheduleId ?? ""} onChange={(e) => store.updateMaterial(mt.id, { linkedScheduleId: e.target.value || undefined })} style={{ fontSize: 11 }}>
+                <option value="">—</option>
+                {db.schedule.filter((s) => !mt.tradeId || s.tradeId === mt.tradeId || s.kind !== "work").map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </label>
+          )}
+          {linked && <span style={{ color: "var(--sage-2)" }}>⛓ gates “{linked.label}” ({fmtDate(linked.start)})</span>}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>Designer approval:</span>
+          {mt.designerApproved ? <Pill color="#fff" bg="var(--ok)">✓ Approved</Pill> : mt.approvalRequested ? <Pill color="var(--brass-2)" bg="#f0e6cd">requested</Pill> : <Pill color="var(--muted)">not requested</Pill>}
+          {canApprove && (mt.designerApproved
+            ? <button className="btn btn-sm" onClick={() => store.setMaterialApproved(mt.id, false, name)}>Revoke</button>
+            : <button className="btn btn-sm btn-primary" onClick={() => store.setMaterialApproved(mt.id, true, name)}>✓ Approve (designer)</button>)}
+          {!mt.designerApproved && !canApprove && <button className="btn btn-sm" onClick={() => store.requestMaterialApproval(mt.id, name)}>Request approval</button>}
+          <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => store.requestMaterialDetails(mt.id, name)}>❓ Request details</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function fmtDate(d: string) { return new Date(`${d}T00:00:00`).toLocaleString("en-US", { month: "short", day: "numeric" }); }
 
 function AddMaterial() {
   const store = useStore();
