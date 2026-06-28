@@ -53,8 +53,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
             <span style={{ color: "var(--brass)" }}><LeafIcon width={22} height={22} /></span>
             <div>
-              <div className="serif" style={{ fontSize: 18, fontWeight: 700, color: "#fdf8ee", lineHeight: 1 }}>Evergreen</div>
-              <div style={{ fontSize: 10.5, color: "#b7ab97", letterSpacing: ".04em", marginTop: 2 }}>31810 EVERGREEN RD · EST. 1822</div>
+              <div className="serif" style={{ fontSize: 18, fontWeight: 700, color: "#fdf8ee", lineHeight: 1 }}>Evergreen <span style={{ color: "var(--brass)" }}>AI</span></div>
+              <div style={{ fontSize: 10, color: "#b7ab97", letterSpacing: ".03em", marginTop: 2 }}>AI-ASSISTED RENOVATION PM</div>
             </div>
           </div>
         </div>
@@ -99,7 +99,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         >
           <button className="btn btn-sm ever-burger" onClick={() => setNavOpen((v) => !v)} style={{ display: "none" }}>☰</button>
           <div style={{ flex: 1, fontSize: 13, color: "var(--muted)" }} className="ever-tagline">
-            Renovation management — replacing the working spreadsheets
+            <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: ".06em", color: "var(--muted)" }}>Project</span> · <strong style={{ color: "var(--walnut)" }}>{store.db.project.name}</strong> <span style={{ color: "var(--muted)" }}>· {store.db.project.built}</span>
           </div>
           {role !== "viewer" && (
             <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo last change">↶ Undo</button>

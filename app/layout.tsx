@@ -3,11 +3,11 @@ import "./globals.css";
 import { AppFrame } from "./ui/app-frame";
 
 export const metadata: Metadata = {
-  title: "Evergreen — 31810 Evergreen Rd Restoration",
+  title: "Evergreen AI — AI-Assisted Renovation Project Management",
   description:
-    "A platform to manage the 31810 Evergreen Rd renovation: scope, building costs, financing, and trade coordination — replacing the working spreadsheets.",
+    "Evergreen AI — an end-to-end, AI-assisted renovation project management tool for builders and their clients. Active project: 31810 Evergreen Rd.",
   manifest: "/manifest.webmanifest",
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Evergreen" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Evergreen AI" },
   icons: {
     icon: "/icons/favicon-64.png",
     apple: "/icons/apple-touch-icon.png",

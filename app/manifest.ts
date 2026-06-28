@@ -3,9 +3,9 @@ import type { MetadataRoute } from "next";
 // PWA manifest — lets the app be installed to a phone home screen.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Evergreen — 31810 Evergreen Rd",
-    short_name: "Evergreen",
-    description: "Manage the 31810 Evergreen Rd renovation: scope, schedule, costs, draws, and trades.",
+    name: "Evergreen AI — Renovation Project Management",
+    short_name: "Evergreen AI",
+    description: "End-to-end, AI-assisted renovation project management for builders and their clients. Active project: 31810 Evergreen Rd.",
     start_url: "/",
     display: "standalone",
     background_color: "#2c241c",

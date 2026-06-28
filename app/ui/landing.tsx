@@ -53,12 +53,16 @@ export function Landing() {
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
               <span style={{ color: "var(--brass)" }}><LeafIcon width={34} height={34} /></span>
               <div>
-                <div className="serif" style={{ fontSize: 30, fontWeight: 700, color: "#fdf8ee", lineHeight: 1 }}>Evergreen</div>
-                <div style={{ fontSize: 12, letterSpacing: ".14em", color: "#b7ab97", marginTop: 4 }}>31810 EVERGREEN RD · EST. 1822</div>
+                <div className="serif" style={{ fontSize: 30, fontWeight: 700, color: "#fdf8ee", lineHeight: 1 }}>Evergreen <span style={{ color: "var(--brass)" }}>AI</span></div>
+                <div style={{ fontSize: 11.5, letterSpacing: ".1em", color: "#b7ab97", marginTop: 4 }}>AI-ASSISTED RENOVATION PROJECT MANAGEMENT</div>
               </div>
             </div>
-            <h1 className="serif" style={{ fontSize: 40, lineHeight: 1.1, color: "#fdf8ee", fontWeight: 700, maxWidth: 520 }}>One home for your whole renovation.</h1>
-            <p style={{ fontSize: 16, color: "#cabda7", marginTop: 16, maxWidth: 460, lineHeight: 1.5 }}>Scope, schedule, building costs, draws, and trades — owner and builder on the same page, in real time. The spreadsheets, finally retired.</p>
+            <h1 className="serif" style={{ fontSize: 38, lineHeight: 1.12, color: "#fdf8ee", fontWeight: 700, maxWidth: 540 }}>End-to-end renovation management for builders &amp; their clients.</h1>
+            <p style={{ fontSize: 16, color: "#cabda7", marginTop: 16, maxWidth: 470, lineHeight: 1.5 }}>Scope, schedule, building costs, draws, and trades — builder and client on the same page, in real time, with AI assistance throughout.</p>
+            <div style={{ marginTop: 18, display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(176,138,62,.14)", border: "1px solid rgba(176,138,62,.35)", borderRadius: 999, padding: "5px 12px" }}>
+              <span style={{ fontSize: 10.5, letterSpacing: ".08em", color: "#b7ab97" }}>ACTIVE PROJECT</span>
+              <span className="serif" style={{ fontSize: 13, color: "#fdf8ee", fontWeight: 700 }}>31810 Evergreen Rd · Est. 1822</span>
+            </div>
             <div style={{ display: "flex", gap: 20, marginTop: 28, flexWrap: "wrap" }}>
               {[["Scope matrix", "room × trade"], ["Live Gantt", "with QC sign-off"], ["Budget → draws", "no surprises"]].map(([a, b]) => (
                 <div key={a}><div className="serif" style={{ fontSize: 16, color: "var(--brass)", fontWeight: 700 }}>{a}</div><div style={{ fontSize: 12, color: "#9a8e79" }}>{b}</div></div>
@@ -108,7 +112,7 @@ export function Landing() {
           </div>
         </div>
       </div>
-      <div style={{ textAlign: "center", padding: 14, fontSize: 11.5, color: "#9a8e79" }}>Evergreen · a private renovation workspace. Secured by Supabase Auth.</div>
+      <div style={{ textAlign: "center", padding: 14, fontSize: 11.5, color: "#9a8e79" }}>Evergreen AI · end-to-end renovation project management. Secured by Supabase Auth.</div>
       <style>{`@media (max-width: 760px){ .ever-landing{ grid-template-columns: 1fr !important; gap: 28px !important; } }`}</style>
     </div>
   );
