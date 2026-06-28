@@ -13,6 +13,7 @@ import type {
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
+import { authEnabled, authOnChange, authSignOut } from "./auth";
 
 type Listener = () => void;
 
@@ -24,6 +25,8 @@ class Store {
   db: DB = buildDB();
   session: Session = defaultSession();
   version = 0;
+  /** Set when a verified user signs in but their email isn't on the project. */
+  authNoAccess: string | null = null;
 
   private backend: Backend | null = null;
   private listeners = new Set<Listener>();
@@ -42,8 +45,13 @@ class Store {
     const pDB = this.backend.loadDB().then((db) => { this.db = db; });
     const pS = this.backend.loadSession().then((s) => { this.session = s; });
     void Promise.all([pDB, pS]).then(() => {
-      // Process an invite link AFTER state has loaded (avoids a load race).
-      if (typeof window !== "undefined") {
+      if (authEnabled()) {
+        // Real auth: the Supabase session is the source of truth. Don't trust a
+        // persisted app session; bind/unbind as auth state changes.
+        this.session = { ...this.session, authed: false };
+        authOnChange((email) => { if (email) this.bindAuthEmail(email); else this.unbindAuth(); });
+      } else if (typeof window !== "undefined") {
+        // Mock mode: accept an invite link directly (no password).
         const tok = new URLSearchParams(window.location.search).get("invite");
         if (tok && this.acceptInvite(tok)) {
           const url = new URL(window.location.href);
@@ -142,7 +150,31 @@ class Store {
   }
   logout() {
     this.session = { ...this.session, authed: false };
+    this.authNoAccess = null;
     void this.backend?.persistSession(this.session);
+    void authSignOut();
+    this.emit();
+  }
+
+  /** Is this email on the project (invited or active)? Gates invite-only signup. */
+  isKnownEmail(email: string): boolean {
+    const e = email.trim().toLowerCase();
+    return this.db.users.some((u) => u.email.trim().toLowerCase() === e);
+  }
+  /** Bind a verified Supabase session to its app user (role/permissions). */
+  bindAuthEmail(email: string): boolean {
+    const u = this.db.users.find((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase());
+    if (!u) { this.session = { ...this.session, authed: false }; this.authNoAccess = email; this.emit(); return false; }
+    if (u.status === "invited") this.mutate((db) => { const x = db.users.find((y) => y.id === u.id); if (x) { x.status = "active"; x.inviteToken = undefined; } });
+    const fresh = this.db.users.find((x) => x.id === u.id)!;
+    this.session = { role: fresh.role, userId: fresh.id, displayName: fresh.name, authed: true };
+    this.authNoAccess = null;
+    void this.backend?.persistSession(this.session);
+    this.emit();
+    return true;
+  }
+  unbindAuth() {
+    this.session = { ...this.session, authed: false };
     this.emit();
   }
 
