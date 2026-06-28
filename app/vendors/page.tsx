@@ -5,8 +5,59 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
 import { MASTER_TERMS } from "@/lib/data/seed";
-import { accessFor, type VendorAgreement } from "@/lib/data/types";
+import { accessFor, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
+import { jsPDF } from "jspdf";
+
+// Build a downloadable "trade packet" PDF: header, scope/rooms, materials, terms.
+function downloadTradePdf(db: DB, tradeId: string) {
+  const doc = new jsPDF({ unit: "pt", format: "letter" });
+  const M = 48, W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  let y = M;
+  const ensure = (h = 14) => { if (y + h > H - M) { doc.addPage(); y = M; } };
+  const text = (s: string, o: { size?: number; bold?: boolean; color?: [number, number, number]; indent?: number; gap?: number } = {}) => {
+    const size = o.size ?? 10, color = o.color ?? [44, 36, 28], indent = o.indent ?? 0, gap = o.gap ?? 4;
+    doc.setFont("helvetica", o.bold ? "bold" : "normal"); doc.setFontSize(size); doc.setTextColor(color[0], color[1], color[2]);
+    for (const ln of doc.splitTextToSize(s, W - 2 * M - indent)) { ensure(size + gap); doc.text(ln, M + indent, y); y += size + gap; }
+  };
+  const heading = (s: string) => { y += 10; ensure(20); doc.setDrawColor(221, 210, 189); doc.line(M, y - 6, W - M, y - 6); text(s, { size: 12, bold: true, color: [58, 47, 37] }); };
+
+  text("EVERGREEN AI", { size: 9, bold: true, color: [176, 138, 62] });
+  text(`${tradeName(db, tradeId)} — Trade Packet`, { size: 18, bold: true, color: [58, 47, 37], gap: 2 });
+  text(`${db.project.name} · ${db.project.built}`, { size: 10, color: [122, 111, 96] });
+  const vendor = db.users.find((u) => u.tradeIds?.includes(tradeId));
+  if (vendor) text(`Vendor: ${vendor.name}${vendor.email ? ` · ${vendor.email}` : ""}${vendor.phone ? ` · ${vendor.phone}` : ""}`, { size: 10 });
+  text(`Contract value: ${fmt(tradeCost(db, tradeId))}`, { size: 11, bold: true });
+
+  heading("Scope of Work");
+  const cells = db.scope.filter((c) => c.tradeId === tradeId && c.status === "in");
+  const rooms = cells.map((c) => db.rooms.find((r) => r.id === c.roomId)?.name ?? c.roomId);
+  text(`Rooms: ${rooms.length ? rooms.join(", ") : "—"}`, { size: 10 });
+  const items = Array.from(new Set(cells.flatMap((c) => c.items.filter((i) => i.included).map((i) => i.label))));
+  if (items.length) items.forEach((it) => text(`• ${it}`, { size: 10, indent: 8 }));
+  else text("No scope items defined.", { size: 10, color: [122, 111, 96], indent: 8 });
+
+  heading("Materials");
+  const mats = db.materials.filter((m) => m.tradeId === tradeId);
+  if (!mats.length) text("None assigned.", { size: 10, color: [122, 111, 96], indent: 8 });
+  mats.forEach((m) => {
+    const room = m.roomId ? (db.rooms.find((r) => r.id === m.roomId)?.name ?? m.roomLabel) : m.roomLabel;
+    const parts = [m.item];
+    if (m.qty) parts.push(`qty ${m.qty}`);
+    if (room) parts.push(room);
+    parts.push(m.status);
+    parts.push(`buyer: ${m.purchaser}`);
+    if (m.dueDate) parts.push(`due ${m.dueDate}`);
+    text(`• ${parts.join(" · ")}`, { size: 10, indent: 8 });
+    if (m.specLink) text(m.specLink, { size: 8, color: [74, 122, 140], indent: 16 });
+  });
+
+  heading("Terms & Conditions");
+  const terms = db.contracts.find((c) => c.tradeIds.includes(tradeId))?.terms ?? MASTER_TERMS;
+  text(terms, { size: 9, color: [80, 72, 60], gap: 3 });
+
+  doc.save(`${tradeName(db, tradeId).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-packet.pdf`);
+}
 
 export default function VendorsPage() {
   const store = useStore();
@@ -56,6 +107,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const cells = db.scope.filter((c) => c.tradeId === tradeId && c.status === "in");
   const rooms = cells.map((c) => db.rooms.find((r) => r.id === c.roomId)?.name ?? c.roomId);
   const items = Array.from(new Set(cells.flatMap((c) => c.items.filter((i) => i.included).map((i) => i.label))));
+  const mats = db.materials.filter((m) => m.tradeId === tradeId);
   const terms = db.contracts.find((c) => c.tradeIds.includes(tradeId))?.terms ?? MASTER_TERMS;
 
   const r1Done = agreement.round1.some((s) => s.party === "builder") && agreement.round1.some((s) => s.party === "trade");
@@ -79,16 +131,43 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         <Pill color="#fff" bg={r1Done ? "var(--ok)" : "var(--sc-unset)"}>R1 {r1Done ? "executed" : "draft"}</Pill>
         <Pill color="#fff" bg={r2Done ? "var(--ok)" : "var(--sc-unset)"}>R2 {r2Done ? "executed" : "draft"}</Pill>
         <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 16 }}><Money value={cost} /></span>
+        <button className="btn btn-sm" title="Download trade packet (terms, rooms, materials)" onClick={() => downloadTradePdf(db, tradeId)}>⬇ PDF</button>
       </div>
 
       {/* Scope from admin */}
       <div style={{ marginTop: 10 }}>
-        <Lbl>Scope (from Admin matrix)</Lbl>
+        <Lbl>Scope &amp; rooms (from Admin matrix)</Lbl>
         <div style={{ fontSize: 12.5, marginTop: 4 }}>
           {rooms.length ? <><strong>Rooms:</strong> {rooms.join(", ")}</> : <span style={{ color: "var(--muted)" }}>No rooms marked in-scope yet.</span>}
         </div>
         {items.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>{items.map((it) => <Pill key={it} bg="var(--sage-tint)">{it}</Pill>)}</div>}
       </div>
+
+      {/* Materials for this trade */}
+      <div style={{ marginTop: 12 }}>
+        <Lbl>Materials ({mats.length})</Lbl>
+        {mats.length ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
+            {mats.slice(0, 8).map((m) => {
+              const room = m.roomId ? (db.rooms.find((r) => r.id === m.roomId)?.name ?? m.roomLabel) : m.roomLabel;
+              return (
+                <div key={m.id} style={{ display: "flex", gap: 8, fontSize: 12, alignItems: "center" }}>
+                  <span style={{ flex: 1 }}>{m.item}{m.qty ? ` ×${m.qty}` : ""} {room && <span style={{ color: "var(--muted)" }}>· {room}</span>}</span>
+                  <span style={{ color: "var(--muted)" }}>{m.status}</span>
+                  {m.specLink && <a href={m.specLink} target="_blank" rel="noreferrer" style={{ color: "var(--sage-2)" }}>spec ↗</a>}
+                </div>
+              );
+            })}
+            {mats.length > 8 && <Link href="/materials" style={{ fontSize: 11.5, color: "var(--sage-2)" }}>+{mats.length - 8} more in Materials →</Link>}
+          </div>
+        ) : <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>No materials assigned to this trade yet.</div>}
+      </div>
+
+      {/* Terms & conditions (also in the PDF) */}
+      <details style={{ marginTop: 12 }}>
+        <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>Terms &amp; conditions</summary>
+        <p style={{ whiteSpace: "pre-wrap", marginTop: 6, fontSize: 12, color: "var(--muted)" }}>{terms}</p>
+      </details>
 
       {/* Draw parameter request */}
       <div style={{ marginTop: 12 }}>
