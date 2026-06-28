@@ -57,6 +57,23 @@ export async function authSendReset(email: string) {
   await c()?.auth.resetPasswordForEmail(email.trim(), { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined });
 }
 
+/** Send an invite email to the address (server route uses the service_role key). */
+export async function sendInviteEmail(email: string): Promise<{ ok: boolean; error?: string }> {
+  let token: string | null = null;
+  const s = c();
+  if (s) { const { data } = await s.auth.getSession(); token = data.session?.access_token ?? null; }
+  try {
+    const res = await fetch("/api/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ email, redirectTo: typeof window !== "undefined" ? window.location.origin : undefined }),
+    });
+    return await res.json();
+  } catch {
+    return { ok: false, error: "Couldn’t reach the invite service." };
+  }
+}
+
 /** Subscribe to auth changes; cb receives the signed-in email (or null). Fires immediately with current session. */
 export function authOnChange(cb: (email: string | null) => void): () => void {
   const s = c();

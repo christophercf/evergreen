@@ -8,6 +8,7 @@ import {
   type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor,
 } from "@/lib/data/types";
 import { MACRO_ORDER } from "@/lib/data/money";
+import { sendInviteEmail } from "@/lib/data/auth";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
@@ -422,11 +423,16 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
     if (needsTrade && !tradeId) { setWarn("Assign which trade this vendor will do."); return null; }
     return { name: name.trim(), email: email.trim(), role: inviteRole, ...(needsTrade ? { tradeIds: [tradeId], managedBy } : {}) };
   };
-  const doInvite = () => {
+  const [emailMsg, setEmailMsg] = useState("");
+  const doInvite = async () => {
     const u = assign(); if (!u) return;
+    const targetEmail = u.email;
     const token = store.inviteUser(u);
     setLastLink((typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token);
     setName(""); setEmail(""); setTradeId("");
+    setEmailMsg("Sending invite email…");
+    const r = await sendInviteEmail(targetEmail);
+    setEmailMsg(r.ok ? `✓ Invite emailed to ${targetEmail}.` : `Email not sent (${r.error}). Share the link below instead.`);
   };
   const doAdd = () => { const u = assign(); if (!u) return; store.addUser({ ...u, status: "active" }); setName(""); setEmail(""); setTradeId(""); };
 
@@ -455,6 +461,7 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
         {canInviteAny && <button className="btn" onClick={doAdd}>+ Add directly</button>}
       </div>
       {warn && <div style={{ fontSize: 12, color: "var(--rust)", marginTop: 8 }}>{warn}</div>}
+      {emailMsg && <div style={{ fontSize: 12.5, color: emailMsg.startsWith("✓") ? "var(--sage-2)" : "var(--muted)", marginTop: 8 }}>{emailMsg}</div>}
       {lastLink && (
         <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--sage-tint)", borderRadius: 8, fontSize: 12 }}>
           Invite created &amp; assigned. Share this link: <code style={{ fontSize: 11.5 }}>{lastLink}</code>
