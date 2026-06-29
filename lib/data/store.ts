@@ -563,11 +563,24 @@ class Store {
       if (!d.allocations.some((a) => a.lineId === lineId)) d.allocations.push({ lineId, mode, value });
     });
   }
-  setAllocation(drawId: string, lineId: string, patch: Partial<{ mode: "pct" | "flat"; value: number }>) {
+  setAllocation(drawId: string, lineId: string, patch: Partial<{ mode: "pct" | "flat"; value: number; note: string }>) {
     this.mutate((db) => {
       const a = db.draws.find((x) => x.id === drawId)?.allocations.find((y) => y.lineId === lineId);
       if (a) Object.assign(a, patch);
     });
+  }
+  /** Tick which scope-item labels of a line are covered by this draw allocation. */
+  toggleAllocationScope(drawId: string, lineId: string, label: string, on: boolean) {
+    this.mutate((db) => {
+      const a = db.draws.find((x) => x.id === drawId)?.allocations.find((y) => y.lineId === lineId);
+      if (!a) return;
+      const set = new Set(a.includedScope ?? []);
+      if (on) set.add(label); else set.delete(label);
+      a.includedScope = [...set];
+    });
+  }
+  setDrawNote(drawId: string, note: string) {
+    this.mutate((db) => { const d = db.draws.find((x) => x.id === drawId); if (d) d.note = note; });
   }
   removeAllocation(drawId: string, lineId: string) {
     this.mutate((db) => {
@@ -666,14 +679,76 @@ class Store {
     this.mutate((db) => { const a = this.ensureAgreement(db, tradeId); a.startDate = startDate; a.finishDate = finishDate; });
   }
   /** Toggle a digital signature for a party on a contract round. */
-  signVendorRound(tradeId: string, round: 1 | 2, party: "builder" | "trade" | "owner", name: string) {
+  signVendorRound(tradeId: string, round: 1 | 2, party: "builder" | "trade" | "owner", name: string, signatureImg?: string) {
     this.mutate((db) => {
       const a = this.ensureAgreement(db, tradeId);
       const arr = round === 1 ? a.round1 : a.round2;
       const i = arr.findIndex((s) => s.party === party);
       if (i >= 0) arr.splice(i, 1);
-      else arr.push({ party, name, at: new Date().toISOString() });
+      else arr.push({ party, name, at: new Date().toISOString(), signatureImg });
     });
+  }
+
+  // ---- Signatures (adopted, saved to profile) ----
+  setUserSignature(userId: string, signature: string | undefined) {
+    this.mutate((db) => { const u = db.users.find((x) => x.id === userId); if (u) u.signature = signature; });
+  }
+
+  // ---- Terms & Conditions builder (builder / owner / full_admin only) ----
+  private get canEditTerms(): boolean {
+    return ["full_admin", "owner", "builder"].includes(this.session.role);
+  }
+  setTermsField(patch: Partial<{ preamble: string; bindingLanguage: string }>) {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => { Object.assign(db.terms, patch); });
+  }
+  toggleStandardClause(clauseId: string, on: boolean) {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => {
+      const set = new Set(db.terms.enabledClauseIds);
+      if (on) set.add(clauseId); else set.delete(clauseId);
+      db.terms.enabledClauseIds = [...set];
+    });
+  }
+  addCustomClause(c: { cluster: string; title: string; body: string }, tradeId?: string) {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => {
+      const clause = { id: newId("clause"), cluster: c.cluster || "Custom", title: c.title, body: c.body };
+      if (tradeId) {
+        const ov = (db.terms.perTrade[tradeId] ??= {});
+        ov.customClauses = [...(ov.customClauses ?? []), clause];
+      } else {
+        db.terms.customClauses.push(clause);
+        db.terms.enabledClauseIds = [...db.terms.enabledClauseIds, clause.id];
+      }
+    });
+  }
+  removeCustomClause(clauseId: string, tradeId?: string) {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => {
+      if (tradeId) {
+        const ov = db.terms.perTrade[tradeId];
+        if (ov?.customClauses) ov.customClauses = ov.customClauses.filter((c) => c.id !== clauseId);
+      } else {
+        db.terms.customClauses = db.terms.customClauses.filter((c) => c.id !== clauseId);
+        db.terms.enabledClauseIds = db.terms.enabledClauseIds.filter((id) => id !== clauseId);
+      }
+    });
+  }
+  /** Per-trade clause state: "default" (inherit), "include" (force on), "exclude" (force off). */
+  setTradeClause(tradeId: string, clauseId: string, mode: "default" | "include" | "exclude") {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => {
+      const ov = (db.terms.perTrade[tradeId] ??= {});
+      ov.disabledClauseIds = (ov.disabledClauseIds ?? []).filter((id) => id !== clauseId);
+      ov.extraClauseIds = (ov.extraClauseIds ?? []).filter((id) => id !== clauseId);
+      if (mode === "exclude") ov.disabledClauseIds.push(clauseId);
+      if (mode === "include") ov.extraClauseIds.push(clauseId);
+    });
+  }
+  setTradeTermsNote(tradeId: string, note: string) {
+    if (!this.canEditTerms) return;
+    this.mutate((db) => { const ov = (db.terms.perTrade[tradeId] ??= {}); ov.note = note; });
   }
 
   // ---- Budget ----

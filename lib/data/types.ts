@@ -60,6 +60,8 @@ export interface User {
   status?: "active" | "invited" | "pending";
   /** One-time token for an invite link. */
   inviteToken?: string;
+  /** Adopted e-signature (data URL from the signature pad), saved to profile. */
+  signature?: string;
 }
 
 // ---- Trades & rooms ---------------------------------------------------------
@@ -201,6 +203,8 @@ export interface VendorSig {
   party: "builder" | "trade" | "owner";
   name: string;
   at: string;
+  /** Adopted signature image (data URL), copied from the signer's profile. */
+  signatureImg?: string;
 }
 
 // Per-trade vendor agreement, signed in two rounds:
@@ -222,6 +226,10 @@ export interface DrawAllocation {
   lineId: string;
   mode: "pct" | "flat";
   value: number; // percent (0-100) or dollars
+  /** Builder's clarification: which scope-item labels of this line are covered. */
+  includedScope?: string[];
+  /** Free-text note about what this allocation covers. */
+  note?: string;
 }
 export interface Draw {
   id: string;
@@ -369,6 +377,31 @@ export interface Contract {
   termsAccepted: boolean;
 }
 
+// ---- Terms & Conditions builder --------------------------------------------
+// A single selectable clause. Catalog clauses ship with the app; builders can
+// also author their own. Clusters group related clauses for tick-box selection.
+export interface TermClause {
+  id: string;
+  cluster: string;
+  title: string;
+  body: string;
+}
+// Per-trade deviations from the standard set.
+export interface TradeTermsOverride {
+  disabledClauseIds?: string[]; // standard clauses removed for this trade
+  extraClauseIds?: string[];    // catalog clauses added only for this trade
+  customClauses?: TermClause[]; // clauses unique to this trade
+  note?: string;                // trade-specific addendum text
+}
+// The builder's standard T&Cs + per-trade overrides, applied to every contract.
+export interface TermsConfig {
+  preamble: string;             // editable contract preamble
+  bindingLanguage: string;      // "intent to be legally bound" / e-sign language
+  enabledClauseIds: string[];   // standard clauses applied to every contract
+  customClauses: TermClause[];  // builder-authored standard clauses
+  perTrade: Record<string, TradeTermsOverride>;
+}
+
 // ---- Owner budget (financing) ----------------------------------------------
 export interface FundingSource {
   id: string;
@@ -403,6 +436,7 @@ export interface DB {
   scope: ScopeCell[];
   costLines: CostLine[];
   contracts: Contract[];
+  terms: TermsConfig;
   funding: FundingSource[];
   schedule: ScheduleItem[];
   notifications: AppNotification[];

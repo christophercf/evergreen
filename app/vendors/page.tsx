@@ -4,9 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
-import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
+import { renderTerms } from "@/lib/data/terms";
+import { SignaturePad, SignatureMark } from "../ui/signature-pad";
 import { jsPDF } from "jspdf";
 
 // Build a downloadable "trade packet" PDF: header, scope/rooms, materials, terms.
@@ -53,8 +54,20 @@ function downloadTradePdf(db: DB, tradeId: string) {
   });
 
   heading("Terms & Conditions");
-  const terms = db.contracts.find((c) => c.tradeIds.includes(tradeId))?.terms ?? MASTER_TERMS;
-  text(terms, { size: 9, color: [80, 72, 60], gap: 3 });
+  text(renderTerms(db, tradeId), { size: 9, color: [80, 72, 60], gap: 3 });
+
+  heading("Signatures");
+  const ag = db.vendorAgreements.find((a) => a.tradeId === tradeId);
+  const fmtDt = (s: string) => new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  (["builder", "trade"] as const).forEach((party) => {
+    const label = party === "builder" ? "Builder / GC" : "Trade / Vendor";
+    const sig = ag?.round1.find((s) => s.party === party);
+    ensure(54);
+    if (sig?.signatureImg) { try { doc.addImage(sig.signatureImg, "PNG", M, y, 120, 36); } catch { /* skip bad image */ } y += 40; }
+    text(`${label}: ${sig ? sig.name : "_______________________"}`, { size: 10, bold: true });
+    text(sig ? `Signed ${fmtDt(sig.at)}` : "Date: ____________", { size: 9, color: [122, 111, 96] });
+    y += 4;
+  });
 
   doc.save(`${tradeName(db, tradeId).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-packet.pdf`);
 }
@@ -108,7 +121,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const rooms = cells.map((c) => db.rooms.find((r) => r.id === c.roomId)?.name ?? c.roomId);
   const items = Array.from(new Set(cells.flatMap((c) => c.items.filter((i) => i.included).map((i) => i.label))));
   const mats = db.materials.filter((m) => m.tradeId === tradeId);
-  const terms = db.contracts.find((c) => c.tradeIds.includes(tradeId))?.terms ?? MASTER_TERMS;
+  const terms = renderTerms(db, tradeId);
 
   const r1Done = agreement.round1.some((s) => s.party === "builder") && agreement.round1.some((s) => s.party === "trade");
   const r2Done = agreement.round2.some((s) => s.party === "builder") && agreement.round2.some((s) => s.party === "trade");
@@ -186,8 +199,9 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         <p style={{ fontSize: 12.5, margin: "6px 0", color: "var(--muted)" }}>
           Vendor agrees to the scope above for a total of <strong style={{ color: "var(--ink)" }}>{fmt(cost)}</strong>. Terms &amp; conditions apply.
         </p>
-        <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Terms &amp; conditions</summary><p style={{ whiteSpace: "pre-wrap", marginTop: 6 }}>{terms}</p></details>
-        <SignRow round={1} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} onSign={(party) => store.signVendorRound(tradeId, 1, party, name)} />
+        <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Full terms &amp; conditions</summary><pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{terms}</pre></details>
+        <BindingBlock canEdit={canBuilderSign && !ro} />
+        <SignRow round={1} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
       </div>
 
       {/* Round 2 — draw schedule & timeline */}
@@ -212,37 +226,67 @@ function VendorCard({ tradeId }: { tradeId: string }) {
                 <span style={{ fontWeight: 600 }}>{fmt(amt)}</span>
                 <span style={{ minWidth: 92, textAlign: "right", color: d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass-2)" : "var(--muted)" }}>{d.status}</span>
               </div>
-            )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment Tracker).</span>}
+            )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment &amp; Draw Management).</span>}
           </div>
-          <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} onSign={(party) => store.signVendorRound(tradeId, 2, party, name)} />
+          <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 2, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
         </>}
       </div>
     </div>
   );
 }
 
-function SignRow({ round, agreement, canBuilder, canTrade, onSign }: { round: 1 | 2; agreement: VendorAgreement; canBuilder: boolean; canTrade: boolean; onSign: (party: "builder" | "trade") => void }) {
+// Editable "intent to be legally bound" language, shown above the signatures.
+function BindingBlock({ canEdit }: { canEdit: boolean }) {
+  const store = useStore();
+  const [edit, setEdit] = useState(false);
+  const text = store.db.terms.bindingLanguage;
+  return (
+    <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--paper)", borderRadius: 8, border: "1px solid var(--line)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>Binding agreement</span>
+        {canEdit && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setEdit((v) => !v)}>{edit ? "Done" : "Edit"}</button>}
+      </div>
+      {edit ? (
+        <textarea value={text} onChange={(e) => store.setTermsField({ bindingLanguage: e.target.value })} style={{ width: "100%", minHeight: 84, fontSize: 12, marginTop: 6, resize: "vertical" }} />
+      ) : (
+        <p style={{ fontSize: 12, color: "var(--ink)", margin: "6px 0 0", lineHeight: 1.45 }}>{text}</p>
+      )}
+    </div>
+  );
+}
+
+function SignRow({ round, agreement, canBuilder, canTrade, signerSig, onSign, onAdopt }: { round: 1 | 2; agreement: VendorAgreement; canBuilder: boolean; canTrade: boolean; signerSig?: string; onSign: (party: "builder" | "trade", img?: string) => void; onAdopt: (img: string) => void }) {
+  const [pad, setPad] = useState<null | "builder" | "trade">(null);
   const sigs = round === 1 ? agreement.round1 : agreement.round2;
   const sig = (party: "builder" | "trade") => sigs.find((s) => s.party === party);
-  const fmtTs = (s?: string) => (s ? new Date(s).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
+  const fmtTs = (s?: string) => (s ? new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
   return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
       {(["builder", "trade"] as const).map((party) => {
         const s = sig(party);
         const can = party === "builder" ? canBuilder : canTrade;
         return (
-          <div key={party} style={{ flex: 1, minWidth: 180, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
+          <div key={party} style={{ flex: 1, minWidth: 210, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
             <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 700 }}>{party === "builder" ? "Builder / GC" : "Trade / Vendor"}</div>
             {s ? (
               <div style={{ marginTop: 4 }}>
-                <div style={{ fontFamily: "var(--font-serif)", fontSize: 16, color: "var(--walnut)", fontStyle: "italic" }}>✒ {s.name}</div>
-                <div style={{ fontSize: 11, color: "var(--muted)" }}>signed {fmtTs(s.at)}</div>
+                <SignatureMark img={s.signatureImg} name={s.name} />
+                <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>signed {fmtTs(s.at)}</div>
                 {can && <button className="btn btn-sm" style={{ marginTop: 4, color: "var(--rust)" }} onClick={() => onSign(party)}>Revoke</button>}
               </div>
+            ) : !can ? (
+              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>Awaiting signature</div>
+            ) : pad === party ? (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Draw your signature, then adopt &amp; sign:</div>
+                <SignaturePad onAdopt={(img) => { onAdopt(img); onSign(party, img); setPad(null); }} onCancel={() => setPad(null)} />
+              </div>
             ) : (
-              <button className="btn btn-sm btn-primary" style={{ marginTop: 6 }} disabled={!can} onClick={() => onSign(party)}>
-                {can ? "✒ Sign here" : "Awaiting signature"}
-              </button>
+              <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+                {signerSig && <button className="btn btn-sm btn-primary" onClick={() => onSign(party, signerSig)}>✒ Sign with adopted signature</button>}
+                <button className="btn btn-sm" onClick={() => setPad(party)}>{signerSig ? "Draw a new signature" : "✒ Adopt signature & sign"}</button>
+                {signerSig && <div style={{ fontSize: 10.5, color: "var(--muted)" }}>Your saved signature: <SignatureMark img={signerSig} name="" /></div>}
+              </div>
             )}
           </div>
         );

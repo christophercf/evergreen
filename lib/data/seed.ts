@@ -9,6 +9,7 @@ import type {
   Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
   ScheduleKind, ScheduleStatus, VendorAgreement, Material, Artifact,
+  TermClause, TermsConfig,
 } from "./types";
 import { lineTotal } from "./money";
 
@@ -273,6 +274,68 @@ const contracts: Contract[] = [
   },
 ];
 
+// ---- Terms & Conditions catalog --------------------------------------------
+// Suggested, tick-box clauses grouped into clusters. Builders enable the ones
+// they want as their standard terms, override per trade, or add their own.
+// NOTE: suggested language only — not legal advice; have counsel review.
+export const TERM_CLAUSES: TermClause[] = [
+  // Schedule & Timing
+  { id: "schedule-malus", cluster: "Schedule & Timing", title: "Timing penalty (liquidated damages) for missed dates",
+    body: "Contractor shall start and complete its Work on the start and finish dates assigned in the Project app. If Contractor fails to meet an assigned date, Builder may assess liquidated damages of $250 per day of delay. This penalty shall NOT apply where the delay is caused by a critical-path predecessor item — as identified and tracked within the Project app — that was not completed before Contractor's assigned start date, nor to delays caused by Builder/Owner, approved Change Orders, or force majeure." },
+  { id: "ready-to-work", cluster: "Schedule & Timing", title: "Duty to confirm readiness before start",
+    body: "Contractor shall review the Project app before each assigned start date and promptly notify the Builder if any critical-path predecessor is incomplete, rather than mobilizing into work that cannot be performed." },
+  // Liens & Payment
+  { id: "no-lien", cluster: "Liens & Payment", title: "No-lien clause + lien waivers",
+    body: "To the fullest extent permitted by law, Contractor waives and agrees not to file any mechanic's lien or claim against the Property, and shall obtain like waivers from its subcontractors and suppliers. Contractor shall furnish conditional and unconditional lien waivers as a condition of each progress payment or draw." },
+  { id: "pay-by-draw", cluster: "Liens & Payment", title: "Payment via the app draw schedule",
+    body: "Payment shall be made through the draw schedule maintained in the Project app. Each draw request must be supported by completed scope and the required lien waivers." },
+  // Change Orders
+  { id: "co-process", cluster: "Change Orders", title: "Change-order request & approval process",
+    body: "No change to the scope, price, or schedule is authorized unless requested and approved as a written Change Order in the Project app BEFORE the affected Work proceeds. Each approved Change Order is incorporated as a numbered Exhibit to this Contract." },
+  { id: "co-in-app-accept", cluster: "Change Orders", title: "In-app changes accepted without a CO are included",
+    body: "If a scope change is presented in the Project app and accepted by Contractor without a corresponding Change Order request, that change shall be deemed included within this Contract at no additional cost or time." },
+  { id: "no-verbal", cluster: "Change Orders", title: "No verbal change orders",
+    body: "Verbal instructions do not constitute a Change Order. Contractor proceeds with un-approved extra work at its own risk and waives any claim for additional payment." },
+  // Scope & System of Record
+  { id: "align-app-scope", cluster: "Scope & System of Record", title: "Agreement to align to app-defined scope & terms",
+    body: "Contractor agrees that the scope, materials, selections, schedule, and terms maintained in the Project app, together with this executed Contract, constitute the complete agreement between the parties. Contractor is responsible for reviewing and aligning its Work to the app-defined scope and these terms." },
+  { id: "app-source-of-truth", cluster: "Scope & System of Record", title: "The app is the system of record",
+    body: "Where any conflict arises, the most recently approved scope, selection, or Change Order recorded in the Project app governs, and the parties agree to be bound by the records it maintains." },
+  // General
+  { id: "workmanlike", cluster: "General", title: "Workmanlike quality & code compliance",
+    body: "All Work shall be performed in a good and workmanlike manner, in accordance with the approved plans and current applicable building codes, by appropriately licensed personnel." },
+  { id: "insurance", cluster: "General", title: "Insurance & licensing",
+    body: "Contractor shall maintain general liability and workers' compensation insurance in the amounts required by law, name the Builder/Owner as additional insured, and provide certificates on request." },
+  { id: "warranty", cluster: "General", title: "One-year workmanship warranty",
+    body: "Contractor warrants its Work and materials against defects for one (1) year from substantial completion and shall promptly correct defective Work at no cost to the Owner." },
+  { id: "cleanup", cluster: "General", title: "Daily cleanup & site protection",
+    body: "Contractor shall keep the site clean and safe, protect existing finishes, and remove its debris at the end of each work period." },
+  // Dispute & Execution
+  { id: "dispute", cluster: "Dispute & Execution", title: "Good-faith dispute resolution",
+    body: "The parties shall negotiate in good faith to resolve any dispute; any dispute not so resolved shall be submitted to mediation before either party commences litigation." },
+];
+
+// The "intent to be bound" / e-signature language shown above the signatures.
+export const BINDING_LANGUAGE =
+  "By applying their electronic signatures below, the parties intend to be legally bound by this Contract, including the scope, schedule, and terms maintained in the Project app. Each party agrees that an electronic signature applied within the Project app is valid and enforceable and has the same legal effect as a handwritten signature under applicable electronic-records law (including the U.S. ESIGN Act and the Uniform Electronic Transactions Act). Each signer represents they are authorized to bind their company. This Contract is effective on the date of the last signature below.";
+
+const TERMS_PREAMBLE =
+  "This Trade Contract is entered into between the Builder/General Contractor and the Trade/Vendor named below for work on the Project identified in the Evergreen app. The following terms apply to all Work, in addition to the scope, materials, selections, and schedule maintained in the app.";
+
+// Sensible default standard set — includes the required clauses, with insurance,
+// warranty and dispute available to toggle on.
+const termsConfig: TermsConfig = {
+  preamble: TERMS_PREAMBLE,
+  bindingLanguage: BINDING_LANGUAGE,
+  enabledClauseIds: [
+    "schedule-malus", "ready-to-work", "no-lien", "pay-by-draw",
+    "co-process", "co-in-app-accept", "no-verbal",
+    "align-app-scope", "app-source-of-truth", "workmanlike",
+  ],
+  customClauses: [],
+  perTrade: {},
+};
+
 // ---- Funding sources (owner budget) ----------------------------------------
 const funding: FundingSource[] = [
   { id: "f-bank", name: "Current Bank Cash", amount: 16677, drawn: 0, rate: 0, liquidityRank: 1, timeframe: "Now", note: "On-hand operating cash." },
@@ -523,6 +586,7 @@ export function buildDB(): DB {
     scope: buildScope(),
     costLines,
     contracts,
+    terms: termsConfig,
     funding,
     schedule,
     notifications: [],

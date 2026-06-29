@@ -17,7 +17,7 @@ const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", Icon: HomeIcon },
   { href: "/admin", label: "Administrative", mod: "admin", Icon: GridIcon },
   { href: "/costs", label: "Building Costs", mod: "costs", Icon: CoinsIcon },
-  { href: "/payments", label: "Payment Tracker", mod: "payments", Icon: ReceiptIcon },
+  { href: "/payments", label: "Payment & Draw Mgmt", mod: "payments", Icon: ReceiptIcon },
   { href: "/budget", label: "Budget", mod: "budget", Icon: WalletIcon },
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon },

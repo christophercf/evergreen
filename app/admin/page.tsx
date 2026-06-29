@@ -9,6 +9,7 @@ import {
 } from "@/lib/data/types";
 import { MACRO_ORDER } from "@/lib/data/money";
 import { sendInviteEmail, removeAuthUser } from "@/lib/data/auth";
+import TermsBuilder from "./terms-builder";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
@@ -232,6 +233,8 @@ function TradeScopeTab({ ro }: { ro: boolean }) {
       </div>
 
       {!ro && <ExpandScope tradeId={tradeId} inRoomIds={inCells.map((c) => c.roomId)} />}
+
+      <TermsBuilder tradeId={tradeId} ro={ro} />
     </>
   );
 }
