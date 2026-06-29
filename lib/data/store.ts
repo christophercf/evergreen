@@ -836,6 +836,15 @@ class Store {
     if (!this.canManageContacts) return;
     this.mutate((db) => { const t = db.trades.find((x) => x.id === id); if (t) Object.assign(t, patch); });
   }
+  /** Set a trade owner/builder-managed and keep its trade users' managedBy in sync. */
+  setTradeManaged(tradeId: string, managedBy: "builder" | "owner") {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => {
+      const t = db.trades.find((x) => x.id === tradeId);
+      if (t) t.managedBy = managedBy;
+      db.users.filter((u) => u.role === "trade" && u.tradeIds?.includes(tradeId)).forEach((u) => { u.managedBy = managedBy; });
+    });
+  }
   /** Add a new version; if the artifact is watched, notify the team + its trades. */
   addArtifactVersion(id: string, v: Omit<ArtifactVersion, "id" | "uploadedAt" | "uploadedBy">, by: string) {
     this.mutate((db) => {

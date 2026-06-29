@@ -4,20 +4,19 @@ import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle } from "../ui/bits";
 import {
-  accessFor, canRemoveUser, canSeeContacts, SCOPE_LABEL, ROLE_LABEL,
-  type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor,
+  accessFor, canRemoveUser, canSeeContacts, isOwnerManaged, SCOPE_LABEL, ROLE_LABEL,
+  type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User,
 } from "@/lib/data/types";
-import { MACRO_ORDER } from "@/lib/data/money";
+import { MACRO_ORDER, tradeName } from "@/lib/data/money";
 import { sendInviteEmail, removeAuthUser } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
-import ContactsTab from "./contacts-tab";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
 const cellText = (s: ScopeStatus) => (s === "unset" ? "·" : s === "in" ? "IN" : s === "existing" ? "EX" : "OUT");
 const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Basement", "Exterior"];
 
-type Tab = "matrix" | "trade" | "contacts" | "users";
+type Tab = "matrix" | "trade" | "team";
 
 export default function AdminPage() {
   const store = useStore();
@@ -37,7 +36,7 @@ export default function AdminPage() {
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
-        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["contacts", "Contacts & Billing"], ["users", "Users & Access"]] as [Tab, string][]).map(([k, label]) => (
+        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className="btn btn-sm"
             style={{ border: "none", borderBottom: tab === k ? "2px solid var(--sage)" : "2px solid transparent", background: "transparent", borderRadius: 0, color: tab === k ? "var(--walnut)" : "var(--muted)", fontWeight: 700 }}>
             {label}
@@ -47,8 +46,7 @@ export default function AdminPage() {
 
       {tab === "matrix" && <MatrixTab ro={ro} />}
       {tab === "trade" && <TradeScopeTab ro={ro} />}
-      {tab === "contacts" && <ContactsTab ro={ro} />}
-      {tab === "users" && <UsersTab ro={ro} />}
+      {tab === "team" && <TeamTab ro={ro} />}
     </>
   );
 }
@@ -296,112 +294,288 @@ const MODULES: { key: ModuleKey; label: string }[] = [
 const LEVELS: AccessLevel[] = ["none", "view", "edit"];
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
 
-function UsersTab({ ro }: { ro: boolean }) {
+// One merged tab: companies (Builder/GC, Owner, each Vendor) with their contact &
+// billing on top and the people + their access nested inside — Users & Access and
+// Contacts & Billing unified so there's a single source for each person/company.
+function TeamTab({ ro }: { ro: boolean }) {
   const store = useStore();
   const db = store.db;
   const viewerRole = store.session.role;
-  const viewer = store.currentUser;
-  const canManageAccess = viewerRole === "full_admin"; // only Full Admin changes roles/permissions
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [nrole, setNrole] = useState<Role>("trade");
   const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string; email: string } | null>(null);
 
+  const firstTrade = (u: User) => (u.tradeIds ?? [])[0];
+  const builderUsers = db.users.filter((u) => u.role === "builder" || u.role === "full_admin");
+  const ownerUsers = db.users.filter((u) => u.role === "owner");
+  const tradeUsers = db.users.filter((u) => u.role === "trade");
+  const otherUsers = db.users.filter((u) => u.role === "viewer" || (u.role === "trade" && !firstTrade(u)));
+  const vendorTradeIds = Array.from(new Set([
+    ...db.contacts.filter((c) => c.party === "vendor" && c.tradeId).map((c) => c.tradeId!),
+    ...(tradeUsers.map(firstTrade).filter(Boolean) as string[]),
+  ])).sort((a, b) => tradeName(db, a).localeCompare(tradeName(db, b)));
+
   return (
     <>
       {confirmRemove && <RemoveDialog target={confirmRemove} onClose={() => setConfirmRemove(null)} />}
-      <SectionTitle>Users &amp; Access</SectionTitle>
+      <SectionTitle>Team, Access &amp; Billing</SectionTitle>
       <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 12 }}>
-        Only a <strong>Full Admin</strong> can change roles &amp; module permissions. Builders may invite trade subs and manage their contacts, but can’t change anyone’s access level.
+        One place per company — its contact &amp; billing on top, and the people inside it with their roles &amp; module access. Only a <strong>Full Admin</strong> changes roles/permissions; builders invite &amp; manage trades; the owner keeps their own card and owner-managed vendors.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(330px, 1fr))", gap: 12 }}>
-        {db.users.map((u) => {
-          const seeContacts = canSeeContacts(viewerRole, u);
-          const canRemove = !ro && canRemoveUser(viewerRole, viewer, u);
-          return (
-            <div key={u.id} className="card" style={{ padding: 14 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <input defaultValue={u.name} disabled={ro} onBlur={(e) => e.target.value.trim() && store.updateUser(u.id, { name: e.target.value.trim() })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, flex: 1, fontFamily: "var(--font-serif)", color: "var(--walnut)" }} />
-                {canManageAccess ? (
-                  <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
-                    {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                  </select>
-                ) : (
-                  <Pill bg="var(--cream-2)">{ROLE_LABEL[u.role]}</Pill>
-                )}
-                {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => setConfirmRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
-              </div>
-              {(u.status && u.status !== "active") && (
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                  <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
-                  {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
-                  {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
-                  {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
-                </div>
-              )}
 
-              {u.role === "trade" && (
-                <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                  Managed by
-                  <select value={u.managedBy ?? "builder"} disabled={!canManageAccess} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 11.5 }}>
-                    <option value="builder">Builder</option>
-                    <option value="owner">Owner</option>
-                  </select>
-                </div>
-              )}
+      <Group party="builder" title="Builder / GC" users={builderUsers} ro={ro} onRemove={setConfirmRemove} />
+      <Group party="owner" title="Owner" users={ownerUsers} ro={ro} onRemove={setConfirmRemove} />
 
-              {/* Contacts (gated) */}
-              <div style={{ marginTop: 10 }}>
-                <Lbl>Contacts</Lbl>
-                {seeContacts ? (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 4 }}>
-                    <ContactRow label="Primary email" value={u.email} disabled={ro} onSave={(v) => store.updateUser(u.id, { email: v })} />
-                    <ContactRow label="Primary phone" value={u.phone ?? ""} disabled={ro} onSave={(v) => store.updateUser(u.id, { phone: v })} />
-                    {(u.secondaryContacts ?? []).map((c) => (
-                      <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingLeft: 8, borderLeft: "2px solid var(--line)" }}>
-                        <span style={{ color: "var(--muted)", minWidth: 54 }}>{c.label ?? "Secondary"}</span>
-                        <input defaultValue={c.name ?? ""} placeholder="name" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { name: e.target.value })} style={{ width: 90, fontSize: 12 }} />
-                        <input defaultValue={c.phone ?? ""} placeholder="phone" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { phone: e.target.value })} style={{ width: 100, fontSize: 12 }} />
-                        {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeContact(u.id, c.id)}>✕</button>}
-                      </div>
-                    ))}
-                    {!ro && <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => store.addContact(u.id, { label: "Secondary" })}>+ Secondary contact</button>}
-                  </div>
-                ) : (
-                  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" }}>🔒 Trade contact managed by the builder — hidden from the owner.</div>
-                )}
-              </div>
-
-              {/* Door code */}
-              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-                <Lbl>Door code</Lbl>
-                <input value={u.doorCode ?? ""} disabled={ro} placeholder="—" onChange={(e) => store.setDoorCode(u.id, e.target.value)} style={{ width: 80, fontSize: 12 }} />
-              </div>
-
-              {/* Access */}
-              <div style={{ marginTop: 10 }}>
-                <Lbl>Module access {!canManageAccess && <span style={{ color: "var(--muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· Full Admin only</span>}</Lbl>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginTop: 4 }}>
-                  {MODULES.map((m) => {
-                    const eff = accessFor(u, u.role, m.key);
-                    return (
-                      <label key={m.key} style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
-                        {m.label}
-                        <select value={eff} disabled={!canManageAccess} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} style={{ fontSize: 11, padding: "2px 4px", color: eff === "none" ? "var(--muted)" : eff === "edit" ? "var(--sage-2)" : "var(--ink)" }}>
-                          {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                        </select>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <SectionTitle right={!ro ? <AddVendorTrade /> : undefined}>Vendors</SectionTitle>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {vendorTradeIds.map((tid) => <Group key={tid} party="vendor" tradeId={tid} users={tradeUsers.filter((u) => firstTrade(u) === tid)} ro={ro} onRemove={setConfirmRemove} />)}
+        {!vendorTradeIds.length && <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No vendors yet.</div>}
       </div>
 
-      {!ro && <InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} />}
+      {otherUsers.length > 0 && <Group party="other" title="Designers / viewers" users={otherUsers} ro={ro} onRemove={setConfirmRemove} />}
+
+      {!ro && <div style={{ marginTop: 16 }}><InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} /></div>}
     </>
+  );
+}
+
+function Group({ party, title, tradeId, users, ro, onRemove }: { party: "builder" | "owner" | "vendor" | "other"; title?: string; tradeId?: string; users: User[]; ro: boolean; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+  const store = useStore();
+  const db = store.db;
+  const viewerRole = store.session.role;
+  const trade = tradeId ? db.trades.find((t) => t.id === tradeId) : undefined;
+  const ownerManaged = isOwnerManaged(trade);
+  const sheet = party === "vendor" ? db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId)
+    : party === "builder" ? db.contacts.find((c) => c.party === "builder")
+      : party === "owner" ? db.contacts.find((c) => c.party === "owner") : undefined;
+  const heading = party === "vendor" ? (trade ? tradeName(db, trade.id) : "Vendor") : title;
+  const accent = party === "builder" ? "var(--walnut)" : party === "owner" ? "var(--brass)" : ownerManaged ? "var(--brass)" : party === "other" ? "var(--muted)" : "var(--sage)";
+  const canManage = !ro && (viewerRole === "full_admin" || viewerRole === "builder");
+  const canEditCompany = canManage || (viewerRole === "owner" && (party === "owner" || (party === "vendor" && ownerManaged)));
+
+  return (
+    <div style={{ marginTop: party === "vendor" ? 0 : 16 }}>
+      {party !== "vendor" && <SectionTitle>{heading}</SectionTitle>}
+      <div className="card" style={{ padding: 0, borderTop: `3px solid ${accent}`, overflow: "hidden" }}>
+        {party !== "other" && <CompanyHeader sheet={sheet} party={party} tradeId={tradeId} heading={party === "vendor" ? heading : undefined} ownerManaged={ownerManaged} trade={trade} canEdit={canEditCompany} />}
+        <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 12, background: "var(--cream)" }}>
+          {users.map((u) => <UserCard key={u.id} u={u} ro={ro} onRemove={onRemove} />)}
+          {!users.length && <div style={{ fontSize: 12.5, color: "var(--muted)", padding: 8 }}>No app accounts yet.{party === "vendor" && canManage ? " Invite below." : ""}</div>}
+          {party === "vendor" && canManage && tradeId && <InviteToTrade tradeId={tradeId} ownerManaged={ownerManaged} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, canEdit }: { sheet?: ContactSheet; party: "builder" | "owner" | "vendor" | "other"; tradeId?: string; heading?: string; ownerManaged: boolean; trade?: { id: string }; canEdit: boolean }) {
+  const store = useStore();
+  const [showBilling, setShowBilling] = useState(false);
+  if (!sheet) {
+    return (
+      <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)" }}>
+        {heading && <strong className="serif" style={{ fontSize: 15, color: "var(--walnut)" }}>{heading}</strong>}
+        {ownerManaged && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>No company / billing info yet.</span>
+        {canEdit && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => store.addContactSheet({ party: party === "vendor" ? "vendor" : (party as "builder" | "owner"), tradeId, company: heading ?? (party === "builder" ? "Our company (GC)" : "Owner") })}>＋ Add company &amp; billing</button>}
+      </div>
+    );
+  }
+  const c = sheet;
+  return (
+    <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8, background: "var(--paper)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {heading && <span style={{ fontSize: 12, color: "var(--muted)" }}>{heading} ·</span>}
+        <input value={c.company} disabled={!canEdit} placeholder="Company name" onChange={(e) => store.updateContactSheet(c.id, { company: e.target.value })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", flex: 1, minWidth: 150 }} />
+        {ownerManaged && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
+        {c.shareAll && <Pill bg="var(--sage-tint)">shared</Pill>}
+        <button className="btn btn-sm" onClick={() => setShowBilling((v) => !v)}>💳 Billing {showBilling ? "▾" : "▸"}</button>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Field label="Office email" value={c.email} disabled={!canEdit} onChange={(v) => store.updateContactSheet(c.id, { email: v })} />
+        <Field label="Office phone" value={c.phone} disabled={!canEdit} onChange={(v) => store.updateContactSheet(c.id, { phone: v })} />
+        <Field label="Address" value={c.address} disabled={!canEdit} onChange={(v) => store.updateContactSheet(c.id, { address: v })} />
+      </div>
+      {showBilling && (
+        <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Field label="Payable to / invoice from" value={c.billing?.payableTo} disabled={!canEdit} onChange={(v) => store.updateBilling(c.id, { payableTo: v })} />
+            <Field label="Billing email" value={c.billing?.email} disabled={!canEdit} onChange={(v) => store.updateBilling(c.id, { email: v })} />
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Field label="Tax ID / EIN" value={c.billing?.taxId} disabled={!canEdit} onChange={(v) => store.updateBilling(c.id, { taxId: v })} />
+            <Field label="Payment terms" value={c.billing?.paymentTerms} disabled={!canEdit} onChange={(v) => store.updateBilling(c.id, { paymentTerms: v })} />
+          </div>
+          <Field label="Remittance (ACH / check-to / acct)" value={c.billing?.remittance} disabled={!canEdit} onChange={(v) => store.updateBilling(c.id, { remittance: v })} />
+          <div style={{ fontSize: 11, color: "var(--muted)" }}>Flows onto this vendor’s contract, invoices &amp; draw remittance.</div>
+        </div>
+      )}
+      {party === "vendor" && canEdit && trade && (
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <label style={{ fontSize: 11.5, color: "var(--muted)", display: "inline-flex", gap: 5, alignItems: "center" }}>
+            <input type="checkbox" checked={ownerManaged} onChange={(e) => store.setTradeManaged(trade.id, e.target.checked ? "owner" : "builder")} /> Owner-managed
+          </label>
+          <button className="btn btn-sm" onClick={() => store.toggleContactShare(c.id)} style={{ color: c.shareAll ? "var(--sage-2)" : "var(--muted)" }}>{c.shareAll ? "✓ Shared with team" : "Share with team"}</button>
+          <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => { if (confirm(`Remove company/billing for "${c.company}"? (People stay in the project.)`)) store.removeContactSheet(c.id); }}>Remove company</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Field({ label, value, onChange, disabled }: { label: string; value?: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 2, flex: 1, minWidth: 130 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{label}</span>
+      <input value={value ?? ""} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={{ fontSize: 12.5 }} />
+    </label>
+  );
+}
+
+function InviteToTrade({ tradeId, ownerManaged }: { tradeId: string; ownerManaged: boolean }) {
+  const store = useStore();
+  const [open, setOpen] = useState(false);
+  const [n, setN] = useState("");
+  const [e, setE] = useState("");
+  if (!open) return <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => setOpen(true)}>＋ Invite person</button>;
+  return (
+    <div className="card" style={{ padding: 10, display: "flex", flexDirection: "column", gap: 6 }}>
+      <input placeholder="Name" value={n} onChange={(ev) => setN(ev.target.value)} style={{ fontSize: 12 }} />
+      <input placeholder="Email" value={e} onChange={(ev) => setE(ev.target.value)} style={{ fontSize: 12 }} />
+      <div style={{ display: "flex", gap: 6 }}>
+        <button className="btn btn-sm btn-primary" disabled={!n.trim() || !e.trim()} onClick={() => { store.inviteUser({ name: n.trim(), email: e.trim(), role: "trade", tradeIds: [tradeId], managedBy: ownerManaged ? "owner" : "builder" }); setN(""); setE(""); setOpen(false); }}>Invite to app</button>
+        <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function AddVendorTrade() {
+  const store = useStore();
+  const db = store.db;
+  const isOwnerRole = store.session.role === "owner";
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+  const [tradeId, setTradeId] = useState("");
+  const [newName, setNewName] = useState("");
+  const [cat, setCat] = useState<MacroCategory>("Exterior");
+  const taken = new Set(db.contacts.filter((c) => c.party === "vendor").map((c) => c.tradeId));
+  const trades = db.trades.filter((t) => !taken.has(t.id));
+  if (!open) return <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>＋ Add vendor / trade</button>;
+  return (
+    <div className="card" style={{ padding: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <select value={mode} onChange={(e) => setMode(e.target.value as "existing" | "new")} style={{ fontSize: 12 }}><option value="existing">Existing trade</option><option value="new">New trade</option></select>
+      {mode === "existing" ? (
+        <select value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ fontSize: 12 }}>
+          <option value="">— trade —</option>
+          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+        </select>
+      ) : (
+        <>
+          <input placeholder="New trade name (e.g. Driveway)" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ fontSize: 12, width: 180 }} />
+          <select value={cat} onChange={(e) => setCat(e.target.value as MacroCategory)} style={{ fontSize: 12 }}>{MACRO_ORDER.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+        </>
+      )}
+      {isOwnerRole && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
+      <button className="btn btn-sm btn-primary" disabled={mode === "existing" ? !tradeId : !newName.trim()} onClick={() => {
+        let tid = tradeId;
+        if (mode === "new") tid = store.addTrade({ name: newName.trim(), category: cat, managedBy: isOwnerRole ? "owner" : "builder" });
+        else if (isOwnerRole) store.setTradeManaged(tid, "owner");
+        const tName = mode === "new" ? newName.trim() : db.trades.find((x) => x.id === tid)?.name;
+        store.addContactSheet({ party: "vendor", tradeId: tid, company: `${tName ?? "Vendor"} vendor` });
+        setOpen(false); setTradeId(""); setNewName("");
+      }}>Add</button>
+      <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+    </div>
+  );
+}
+
+function UserCard({ u, ro, onRemove }: { u: User; ro: boolean; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+  const store = useStore();
+  const viewerRole = store.session.role;
+  const viewer = store.currentUser;
+  const canManageAccess = viewerRole === "full_admin";
+  const seeContacts = canSeeContacts(viewerRole, u);
+  const canRemove = !ro && canRemoveUser(viewerRole, viewer, u);
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input defaultValue={u.name} disabled={ro} onBlur={(e) => e.target.value.trim() && store.updateUser(u.id, { name: e.target.value.trim() })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, flex: 1, fontFamily: "var(--font-serif)", color: "var(--walnut)" }} />
+        {canManageAccess ? (
+          <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
+            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select>
+        ) : (
+          <Pill bg="var(--cream-2)">{ROLE_LABEL[u.role]}</Pill>
+        )}
+        {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => onRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
+      </div>
+      {(u.status && u.status !== "active") && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+          <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
+          {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
+          {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
+          {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
+        </div>
+      )}
+
+      {u.role === "trade" && (
+        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+          Managed by
+          <select value={u.managedBy ?? "builder"} disabled={!canManageAccess} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 11.5 }}>
+            <option value="builder">Builder</option>
+            <option value="owner">Owner</option>
+          </select>
+        </div>
+      )}
+
+      {/* Contacts (gated) */}
+      <div style={{ marginTop: 10 }}>
+        <Lbl>Contact</Lbl>
+        {seeContacts ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 4 }}>
+            <ContactRow label="Email" value={u.email} disabled={ro} onSave={(v) => store.updateUser(u.id, { email: v })} />
+            <ContactRow label="Phone" value={u.phone ?? ""} disabled={ro} onSave={(v) => store.updateUser(u.id, { phone: v })} />
+            {(u.secondaryContacts ?? []).map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingLeft: 8, borderLeft: "2px solid var(--line)" }}>
+                <span style={{ color: "var(--muted)", minWidth: 54 }}>{c.label ?? "Secondary"}</span>
+                <input defaultValue={c.name ?? ""} placeholder="name" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { name: e.target.value })} style={{ width: 90, fontSize: 12 }} />
+                <input defaultValue={c.phone ?? ""} placeholder="phone" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { phone: e.target.value })} style={{ width: 100, fontSize: 12 }} />
+                {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeContact(u.id, c.id)}>✕</button>}
+              </div>
+            ))}
+            {!ro && <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => store.addContact(u.id, { label: "Secondary" })}>+ Secondary contact</button>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" }}>🔒 Trade contact managed by the builder — hidden from the owner.</div>
+        )}
+      </div>
+
+      {/* Door code */}
+      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
+        <Lbl>Door code</Lbl>
+        <input value={u.doorCode ?? ""} disabled={ro} placeholder="—" onChange={(e) => store.setDoorCode(u.id, e.target.value)} style={{ width: 80, fontSize: 12 }} />
+      </div>
+
+      {/* Access */}
+      <div style={{ marginTop: 10 }}>
+        <Lbl>Module access {!canManageAccess && <span style={{ color: "var(--muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· Full Admin only</span>}</Lbl>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginTop: 4 }}>
+          {MODULES.map((m) => {
+            const eff = accessFor(u, u.role, m.key);
+            return (
+              <label key={m.key} style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+                {m.label}
+                <select value={eff} disabled={!canManageAccess} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} style={{ fontSize: 11, padding: "2px 4px", color: eff === "none" ? "var(--muted)" : eff === "edit" ? "var(--sage-2)" : "var(--ink)" }}>
+                  {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 
