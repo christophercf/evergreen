@@ -5,6 +5,8 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, StatCard, Pill } from "../ui/bits";
 import { accessFor, MATERIAL_STATUS_LABEL, type Material, type MaterialStatus, type Purchaser } from "@/lib/data/types";
 import { tradeName, MACRO_ORDER } from "@/lib/data/money";
+import { CATALOG_CATEGORIES, optionsForCategory, tradeForCategory } from "@/lib/data/materialCatalog";
+import DesignStudio from "./studio";
 
 const STATUS_BG: Record<MaterialStatus, string> = { needed: "var(--sc-unset)", ordered: "var(--brass)", purchased: "var(--sage)", delivered: "var(--ok)" };
 const PURCH: Purchaser[] = ["owner", "trade", "builder"];
@@ -19,11 +21,13 @@ export default function MaterialsPage() {
   const access = accessFor(user, role, "materials");
   const [room, setRoom] = useState("all");
   const [trade, setTrade] = useState("all");
+  const [cat, setCat] = useState("all");
   const [status, setStatus] = useState<"all" | MaterialStatus>("all");
   const [sort, setSort] = useState<SortKey>("room");
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [ai, setAi] = useState<Material | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [view, setView] = useState<"list" | "studio">("list");
 
   if (access === "none") return <NoAccess module="Materials" />;
   const ro = access !== "edit";
@@ -37,11 +41,13 @@ export default function MaterialsPage() {
       (!myTradeIds || (mt.tradeId ? myTradeIds.has(mt.tradeId) : false)) &&
       (room === "all" || mt.roomId === room || mt.roomLabel === room) &&
       (trade === "all" || mt.tradeId === trade) &&
+      (cat === "all" || mt.category === cat) &&
       (status === "all" || mt.status === status));
     const k = (mt: Material) => sort === "room" ? roomLabel(mt) : sort === "trade" ? (mt.tradeId ?? "~") : sort === "status" ? mt.status : (mt.dueDate ?? "~9999");
     return [...list].sort((a, b) => k(a).localeCompare(k(b)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db.materials, room, trade, status, sort]);
+  }, [db.materials, room, trade, cat, status, sort]);
+  const catsUsed = Array.from(new Set([...CATALOG_CATEGORIES, ...db.materials.map((m) => m.category).filter(Boolean) as string[]]));
 
   const counts = { total: db.materials.length, needed: db.materials.filter((m) => m.status === "needed").length, purchased: db.materials.filter((m) => m.status === "purchased" || m.status === "delivered").length, owner: db.materials.filter((m) => m.purchaser === "owner").length };
   const tradesUsed = Array.from(new Set(db.materials.map((m) => m.tradeId).filter(Boolean) as string[]));
@@ -54,6 +60,15 @@ export default function MaterialsPage() {
     <>
       <PageHeader title="Materials" subtitle="Every material — sortable by room, trade, or status — with critical-path selection dates, spec links, who buys it, quantities, and where it's stored." />
 
+      <div style={{ display: "inline-flex", gap: 6, marginTop: 14, background: "var(--cream-2)", padding: 4, borderRadius: 10 }}>
+        {([["list", "📋 Material list"], ["studio", "✨ Design Studio"]] as const).map(([v, lbl]) => (
+          <button key={v} onClick={() => setView(v)} className="btn btn-sm" style={view === v ? { background: "var(--walnut)", color: "#fff" } : { background: "transparent", border: "none" }}>{lbl}</button>
+        ))}
+      </div>
+
+      {view === "studio" && <DesignStudio db={db} />}
+
+      {view === "list" && <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Materials" value={`${counts.total}`} />
         <StatCard label="Still Needed" value={`${counts.needed}`} accent="var(--rust)" />
@@ -65,6 +80,7 @@ export default function MaterialsPage() {
       <div className="card" style={{ padding: 12, marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <Filter label="Room" value={room} onChange={setRoom} options={[["all", "All rooms"], ...roomsUsed.map((r) => [r, db.rooms.find((x) => x.id === r)?.name ?? r] as [string, string])]} />
         <Filter label="Trade" value={trade} onChange={setTrade} options={[["all", "All trades"], ...tradesUsed.map((t) => [t, tradeName(db, t)] as [string, string])]} />
+        <Filter label="Category" value={cat} onChange={setCat} options={[["all", "All categories"], ...catsUsed.map((c) => [c, c] as [string, string])]} />
         <Filter label="Status" value={status} onChange={(v) => setStatus(v as "all" | MaterialStatus)} options={[["all", "All status"], ...(Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[]).map((s) => [s, MATERIAL_STATUS_LABEL[s]] as [string, string])]} />
         <Filter label="Sort" value={sort} onChange={(v) => setSort(v as SortKey)} options={[["room", "Room"], ["trade", "Trade"], ["status", "Status"], ["due", "Due date"]]} />
         <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>{filtered.length} shown</span>
@@ -138,6 +154,7 @@ export default function MaterialsPage() {
       </div>
 
       {!ro && <AddMaterial />}
+      </>}
 
       {ai && <AiModal mat={ai} onClose={() => setAi(null)} />}
     </>
@@ -209,16 +226,46 @@ function MaterialDetail({ mt, ro }: { mt: Material; ro: boolean }) {
 
 function fmtDate(d: string) { return new Date(`${d}T00:00:00`).toLocaleString("en-US", { month: "short", day: "numeric" }); }
 
-function AddMaterial() {
+function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
   const store = useStore();
   const db = store.db;
-  const [item, setItem] = useState("");
-  const [roomId, setRoomId] = useState("");
+  const [category, setCategory] = useState<string>(CATALOG_CATEGORIES[0] ?? "");
+  const [pick, setPick] = useState<string>("");
+  const [custom, setCustom] = useState("");
+  const [roomId, setRoomId] = useState(defaultRoomId ?? "");
+  const opts = optionsForCategory(category);
+  const isNew = pick === "__new__";
+  const item = isNew ? custom.trim() : pick;
+
+  const add = () => {
+    if (!item) return;
+    store.addMaterial({
+      item,
+      category: category || undefined,
+      tradeId: tradeForCategory(category),
+      roomId: roomId || undefined,
+      roomLabel: roomId ? db.rooms.find((r) => r.id === roomId)?.name : undefined,
+      status: "needed",
+      purchaser: "owner",
+    });
+    setPick(""); setCustom("");
+  };
+
   return (
     <div className="card" style={{ padding: 12, marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-      <input placeholder="New material…" value={item} onChange={(e) => setItem(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+      <strong style={{ fontSize: 13 }}>Add material</strong>
+      <select value={category} onChange={(e) => { setCategory(e.target.value); setPick(""); }}>
+        {CATALOG_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        <option value="">Other / uncategorized</option>
+      </select>
+      <select value={pick} onChange={(e) => setPick(e.target.value)} style={{ minWidth: 180 }}>
+        <option value="" disabled>Choose item…</option>
+        {opts.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="__new__">＋ New custom…</option>
+      </select>
+      {isNew && <input autoFocus placeholder="Custom material name…" value={custom} onChange={(e) => setCustom(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} style={{ minWidth: 160 }} />}
       <select value={roomId} onChange={(e) => setRoomId(e.target.value)}><option value="">No room</option>{db.rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
-      <button className="btn btn-primary" onClick={() => { if (item.trim()) { store.addMaterial({ item: item.trim(), roomId: roomId || undefined, status: "needed", purchaser: "owner" }); setItem(""); } }}>+ Add material</button>
+      <button className="btn btn-primary" disabled={!item} onClick={add}>+ Add{roomId ? ` to ${db.rooms.find((r) => r.id === roomId)?.name ?? "room"}` : ""}</button>
     </div>
   );
 }

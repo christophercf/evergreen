@@ -266,6 +266,7 @@ export const MATERIAL_STATUS_LABEL: Record<MaterialStatus, string> = {
 export interface Material {
   id: string;
   item: string;
+  category?: string; // e.g. "Lighting" (from the material catalog)
   roomId?: string;
   roomLabel?: string; // original/free-text room when not mapped to a room id
   tradeId?: string;
