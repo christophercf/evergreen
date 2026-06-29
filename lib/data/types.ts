@@ -80,6 +80,47 @@ export interface Trade {
   category: MacroCategory;
   /** Who typically carries this trade's cost. */
   defaultOwner: "builder" | "owner";
+  /** Who manages this trade's relationship. "owner" → shown as "Owner Managed". */
+  managedBy?: "builder" | "owner";
+  /** True for trades the owner/builder added beyond the stock set. */
+  custom?: boolean;
+}
+
+// ---- Contacts & billing -----------------------------------------------------
+// Billing details that flow onto invoices, contracts and draw remittance.
+export interface BillingDetails {
+  payableTo?: string;    // legal entity invoices are payable to
+  email?: string;        // invoice / billing email
+  phone?: string;
+  address?: string;
+  taxId?: string;        // EIN / tax id
+  paymentTerms?: string; // "Net 30", "40% deposit, balance on completion"
+  remittance?: string;   // ACH / check-to / account ref
+}
+// A person on a vendor's crew; appAccess flags who should be invited to the app.
+export interface Worker {
+  id: string;
+  name: string;
+  role?: string;         // "Foreman", "Lead electrician"
+  email?: string;
+  phone?: string;
+  appAccess?: boolean;   // should be granted access to the app
+}
+// A managed contact sheet: the GC's own org, the owner's, or a vendor.
+export interface ContactSheet {
+  id: string;
+  party: "builder" | "owner" | "vendor";
+  tradeId?: string;      // for vendor sheets — the trade they cover
+  company: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  billing?: BillingDetails;
+  workers?: Worker[];
+  /** Builder shared this contact with the whole team (otherwise builder/owner-only). */
+  shareAll?: boolean;
+  notes?: string;
 }
 
 export type RoomFloor = "Exterior" | "Basement" | "First Floor" | "Second Floor" | "Whole House";
@@ -495,6 +536,7 @@ export interface DB {
   scope: ScopeCell[];
   costLines: CostLine[];
   contracts: Contract[];
+  contacts: ContactSheet[];
   terms: TermsConfig;
   funding: FundingSource[];
   schedule: ScheduleItem[];
@@ -571,6 +613,10 @@ export function canSeeArtifact(role: Role, user: User | undefined, a: Artifact):
     return (user?.tradeIds ?? []).some((t) => a.tradeIds!.includes(t));
   }
   return true;
+}
+
+export function isOwnerManaged(t: Trade | undefined): boolean {
+  return t?.managedBy === "owner";
 }
 
 export function canSeeContacts(viewerRole: Role, target: User): boolean {

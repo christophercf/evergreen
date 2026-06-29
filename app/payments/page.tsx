@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
-import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt } from "@/lib/data/money";
+import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName } from "@/lib/data/money";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
@@ -151,6 +151,9 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
             {!draw.allocations.length && <div style={{ fontSize: 12, color: "var(--muted)", padding: "10px 0", textAlign: "center", border: "1px dashed var(--line)", borderRadius: 8 }}>{ro ? "No lines." : "Drag budget lines here"}</div>}
           </div>
 
+          <RemitTo draw={draw} />
+
+
           {/* Draw-level note */}
           {(!ro && !locked) ? (
             <textarea value={draw.note ?? ""} placeholder="Draw note (milestone, condition for release, inspection sign-off…)" onChange={(e) => store.setDrawNote(draw.id, e.target.value)} style={{ width: "100%", marginTop: 8, minHeight: 38, fontSize: 12, resize: "vertical" }} />
@@ -222,6 +225,25 @@ function AllocationRow({ draw, alloc, ro, locked }: { draw: Draw; alloc: DrawAll
           <textarea value={alloc.note ?? ""} disabled={!editable} placeholder="Notes on what's included in this draw for this line…" onChange={(e) => store.setAllocation(draw.id, alloc.lineId, { note: e.target.value })} style={{ width: "100%", marginTop: 6, minHeight: 34, fontSize: 12, resize: "vertical" }} />
         </div>
       )}
+    </div>
+  );
+}
+
+// Remit/billing summary for the trades in this draw (from Admin → Contacts).
+function RemitTo({ draw }: { draw: Draw }) {
+  const store = useStore();
+  const db = store.db;
+  const tradeIds = [...new Set(draw.allocations.map((a) => db.costLines.find((l) => l.id === a.lineId)?.tradeId).filter(Boolean) as string[])];
+  const rows = tradeIds.map((tid) => ({ tid, c: db.contacts.find((x) => x.party === "vendor" && x.tradeId === tid), owner: db.trades.find((t) => t.id === tid)?.managedBy === "owner" })).filter((r) => r.c);
+  if (!rows.length) return null;
+  return (
+    <div style={{ marginTop: 8, borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Remit to</div>
+      {rows.map(({ tid, c, owner }) => (
+        <div key={tid} style={{ fontSize: 11.5, marginTop: 2 }}>
+          <strong>{tradeName(db, tid)}</strong>{owner && <span style={{ color: "var(--brass-2)" }}> ⌂ Owner Managed</span>} — {c!.billing?.payableTo ?? c!.company}{c!.billing?.paymentTerms ? <span style={{ color: "var(--muted)" }}> · {c!.billing.paymentTerms}</span> : ""}
+        </div>
+      ))}
     </div>
   );
 }

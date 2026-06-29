@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
-import { accessFor, type DB, type VendorAgreement } from "@/lib/data/types";
+import { accessFor, isOwnerManaged, type ContactSheet, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
 import { renderTerms } from "@/lib/data/terms";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
@@ -53,6 +53,25 @@ function downloadTradePdf(db: DB, tradeId: string) {
     if (m.specLink) text(m.specLink, { size: 8, color: [74, 122, 140], indent: 16 });
   });
 
+  heading("Contacts & Billing");
+  const vC = db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId);
+  const bC = db.contacts.find((c) => c.party === "builder");
+  const oC = db.contacts.find((c) => c.party === "owner");
+  const ownerMgd = db.trades.find((t) => t.id === tradeId)?.managedBy === "owner";
+  const contactLine = (label: string, c?: typeof vC) => {
+    if (!c) { text(`${label}: —`, { size: 9, color: [122, 111, 96] }); return; }
+    text(`${label}: ${c.company}${c.contactName ? ` · ${c.contactName}` : ""}`, { size: 9.5, bold: true });
+    const sub = [c.email, c.phone, c.address].filter(Boolean).join(" · ");
+    if (sub) text(sub, { size: 9, color: [122, 111, 96], indent: 8 });
+    if (c.billing && (c.billing.payableTo || c.billing.paymentTerms || c.billing.remittance || c.billing.taxId)) {
+      const bill = [c.billing.payableTo && `Pay to ${c.billing.payableTo}`, c.billing.taxId && `Tax ID ${c.billing.taxId}`, c.billing.paymentTerms, c.billing.remittance].filter(Boolean).join(" · ");
+      text(`Billing: ${bill}`, { size: 9, color: [80, 72, 60], indent: 8 });
+    }
+  };
+  contactLine(ownerMgd ? "Vendor (Owner Managed)" : "Vendor", vC);
+  contactLine("Builder / GC", bC);
+  contactLine("Owner", oC);
+
   const ag0 = db.vendorAgreements.find((a) => a.tradeId === tradeId);
   if (ag0?.scopeDrawingId) {
     const sd = db.artifacts.find((a) => a.id === ag0.scopeDrawingId);
@@ -87,7 +106,9 @@ export default function VendorsPage() {
   if (access === "none") return <NoAccess module="Vendor Management" />;
 
   const myTrades = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
-  const activeTradeIds = Array.from(new Set(db.costLines.map((l) => l.tradeId)))
+  // Trades with a cost line OR a managed vendor contact (so owner-managed vendors show too).
+  const contactTradeIds = db.contacts.filter((c) => c.party === "vendor" && c.tradeId).map((c) => c.tradeId!);
+  const activeTradeIds = Array.from(new Set([...db.costLines.map((l) => l.tradeId), ...contactTradeIds]))
     .filter((id) => !myTrades || myTrades.has(id))
     .sort((a, b) => tradeCost(db, b) - tradeCost(db, a));
 
@@ -143,16 +164,24 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const [start, setStart] = useState(agreement.startDate ?? "");
   const [finish, setFinish] = useState(agreement.finishDate ?? "");
 
+  const ownerManaged = isOwnerManaged(db.trades.find((t) => t.id === tradeId));
+  const vendorContact = db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId);
+  const builderContact = db.contacts.find((c) => c.party === "builder");
+  const ownerContact = db.contacts.find((c) => c.party === "owner");
+
   return (
     <div className="card" style={{ padding: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <h3 className="serif" style={{ fontSize: 17, fontWeight: 700, color: "var(--walnut)" }}>{tradeName(db, tradeId)}</h3>
+        {ownerManaged && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
         {vendorUser && <Pill bg="var(--cream-2)">{vendorUser.name}</Pill>}
         <Pill color="#fff" bg={r1Done ? "var(--ok)" : "var(--sc-unset)"}>R1 {r1Done ? "executed" : "draft"}</Pill>
         <Pill color="#fff" bg={r2Done ? "var(--ok)" : "var(--sc-unset)"}>R2 {r2Done ? "executed" : "draft"}</Pill>
         <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 16 }}><Money value={cost} /></span>
         <button className="btn btn-sm" title="Download trade packet (terms, rooms, materials)" onClick={() => downloadTradePdf(db, tradeId)}>⬇ PDF</button>
       </div>
+
+      <ContactsBilling vendor={vendorContact} builder={builderContact} owner={ownerContact} ownerManaged={ownerManaged} />
 
       {/* Scope from admin */}
       <div style={{ marginTop: 10 }}>
@@ -303,6 +332,43 @@ function SignRow({ round, agreement, canBuilder, canTrade, canOwner, signerSig, 
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ContactBlock({ title, c, accent }: { title: string; c?: ContactSheet; accent: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 200, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", borderTop: `2px solid ${accent}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{title}</div>
+      {c ? (
+        <div style={{ fontSize: 12, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ fontWeight: 700 }}>{c.company}</div>
+          {c.contactName && <div>{c.contactName}</div>}
+          {c.email && <div style={{ color: "var(--muted)" }}>{c.email}</div>}
+          {c.phone && <div style={{ color: "var(--muted)" }}>{c.phone}</div>}
+          {c.billing && (c.billing.payableTo || c.billing.paymentTerms || c.billing.remittance) && (
+            <div style={{ marginTop: 4, paddingTop: 4, borderTop: "1px dashed var(--line)", color: "var(--ink)" }}>
+              {c.billing.payableTo && <div>💳 Pay to: <strong>{c.billing.payableTo}</strong></div>}
+              {c.billing.paymentTerms && <div style={{ color: "var(--muted)" }}>Terms: {c.billing.paymentTerms}</div>}
+              {c.billing.taxId && <div style={{ color: "var(--muted)" }}>Tax ID: {c.billing.taxId}</div>}
+              {c.billing.remittance && <div style={{ color: "var(--muted)" }}>{c.billing.remittance}</div>}
+            </div>
+          )}
+        </div>
+      ) : <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3 }}>Add in <Link href="/admin" style={{ color: "var(--sage-2)" }}>Admin → Contacts</Link>.</div>}
+    </div>
+  );
+}
+
+function ContactsBilling({ vendor, builder, owner, ownerManaged }: { vendor?: ContactSheet; builder?: ContactSheet; owner?: ContactSheet; ownerManaged: boolean }) {
+  return (
+    <div style={{ marginTop: 12 }}>
+      <Lbl>Contacts &amp; billing (on contract &amp; draws)</Lbl>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+        <ContactBlock title={ownerManaged ? "Vendor · Owner Managed" : "Vendor"} c={vendor} accent={ownerManaged ? "var(--brass)" : "var(--sage)"} />
+        <ContactBlock title="Builder / GC" c={builder} accent="var(--walnut)" />
+        <ContactBlock title="Owner" c={owner} accent="var(--brass)" />
+      </div>
     </div>
   );
 }

@@ -6,9 +6,9 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, Contract, CostLine, DB, Draw,
+  AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, Role, Room, RoomZone, ScheduleItem,
-  ScheduleStatus, ScopeStatus, Session, User,
+  ScheduleStatus, ScopeStatus, Session, Trade, User, Worker,
 } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
@@ -782,6 +782,59 @@ class Store {
         this.notify(db, { toRole: "builder", kind: "info", message: `✅ "${a.name}" issued — work cleared to start for ${who}.` });
       }
     });
+  }
+
+  // ---- Contacts & billing (builder / owner / full_admin) ----
+  private get canManageContacts(): boolean {
+    return ["full_admin", "builder", "owner"].includes(this.session.role);
+  }
+  addContactSheet(c: Omit<ContactSheet, "id">): string {
+    const id = newId("contact");
+    if (this.canManageContacts) this.mutate((db) => { db.contacts.push({ id, ...c }); });
+    return id;
+  }
+  updateContactSheet(id: string, patch: Partial<ContactSheet>) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const c = db.contacts.find((x) => x.id === id); if (c) Object.assign(c, patch); });
+  }
+  updateBilling(id: string, patch: Partial<NonNullable<ContactSheet["billing"]>>) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const c = db.contacts.find((x) => x.id === id); if (c) c.billing = { ...c.billing, ...patch }; });
+  }
+  removeContactSheet(id: string) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { db.contacts = db.contacts.filter((c) => c.id !== id); });
+  }
+  toggleContactShare(id: string) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const c = db.contacts.find((x) => x.id === id); if (c) c.shareAll = !c.shareAll; });
+  }
+  addWorker(sheetId: string, w: Omit<Worker, "id">) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const c = db.contacts.find((x) => x.id === sheetId); if (c) c.workers = [...(c.workers ?? []), { id: newId("wkr"), ...w }]; });
+  }
+  updateWorker(sheetId: string, workerId: string, patch: Partial<Worker>) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const w = db.contacts.find((x) => x.id === sheetId)?.workers?.find((y) => y.id === workerId); if (w) Object.assign(w, patch); });
+  }
+  removeWorker(sheetId: string, workerId: string) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const c = db.contacts.find((x) => x.id === sheetId); if (c?.workers) c.workers = c.workers.filter((w) => w.id !== workerId); });
+  }
+  /** Add a trade (owner can add their own — flagged Owner Managed). */
+  addTrade(t: { name: string; category: Trade["category"]; managedBy?: "builder" | "owner" }): string {
+    const id = newId("trade");
+    if (this.canManageContacts && t.name.trim()) {
+      this.mutate((db) => {
+        const managedBy = t.managedBy ?? "builder";
+        db.trades.push({ id, name: t.name.trim(), category: t.category, defaultOwner: managedBy, managedBy, custom: true });
+      });
+    }
+    return id;
+  }
+  updateTrade(id: string, patch: Partial<Trade>) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => { const t = db.trades.find((x) => x.id === id); if (t) Object.assign(t, patch); });
   }
   /** Add a new version; if the artifact is watched, notify the team + its trades. */
   addArtifactVersion(id: string, v: Omit<ArtifactVersion, "id" | "uploadedAt" | "uploadedBy">, by: string) {

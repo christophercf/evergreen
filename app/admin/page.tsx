@@ -10,13 +10,14 @@ import {
 import { MACRO_ORDER } from "@/lib/data/money";
 import { sendInviteEmail, removeAuthUser } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
+import ContactsTab from "./contacts-tab";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
 const cellText = (s: ScopeStatus) => (s === "unset" ? "·" : s === "in" ? "IN" : s === "existing" ? "EX" : "OUT");
 const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Basement", "Exterior"];
 
-type Tab = "matrix" | "trade" | "users";
+type Tab = "matrix" | "trade" | "contacts" | "users";
 
 export default function AdminPage() {
   const store = useStore();
@@ -36,7 +37,7 @@ export default function AdminPage() {
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
-        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["users", "Users & Access"]] as [Tab, string][]).map(([k, label]) => (
+        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["contacts", "Contacts & Billing"], ["users", "Users & Access"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className="btn btn-sm"
             style={{ border: "none", borderBottom: tab === k ? "2px solid var(--sage)" : "2px solid transparent", background: "transparent", borderRadius: 0, color: tab === k ? "var(--walnut)" : "var(--muted)", fontWeight: 700 }}>
             {label}
@@ -46,6 +47,7 @@ export default function AdminPage() {
 
       {tab === "matrix" && <MatrixTab ro={ro} />}
       {tab === "trade" && <TradeScopeTab ro={ro} />}
+      {tab === "contacts" && <ContactsTab ro={ro} />}
       {tab === "users" && <UsersTab ro={ro} />}
     </>
   );

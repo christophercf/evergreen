@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { MASTER_TERMS } from "@/lib/data/seed";
-import { accessFor, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
+import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
   lineBase, lineStart, lineDelta, totals, byCategory, byTrade,
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
@@ -264,6 +264,7 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</span>
+            {isOwnerManaged(db.trades.find((t) => t.id === line.tradeId)) && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
             <Pill color="#fff" bg={line.owner === "owner" ? "var(--brass)" : "var(--sage)"}>{line.owner}</Pill>
             {line.locked ? <Pill color="var(--walnut)" bg="var(--cream-2)">🔒 baseline</Pill> : <StatusPill status={line.status} />}
             {line.changeOrders.length > 0 && <Pill color="var(--brass-2)" bg="#f0e6cd">{line.changeOrders.length} exhibit{line.changeOrders.length === 1 ? "" : "s"}</Pill>}

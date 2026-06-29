@@ -9,7 +9,7 @@ import type {
   Contract, CostLine, DB, Draw, FundingSource, Project, Room, ScopeCell, ScopeItem,
   Trade, TradeScopeTemplate, User, MacroCategory, ScopeStatus, ScheduleItem,
   ScheduleKind, ScheduleStatus, VendorAgreement, Material, Artifact,
-  TermClause, TermsConfig,
+  TermClause, TermsConfig, ContactSheet,
 } from "./types";
 import { lineTotal } from "./money";
 
@@ -86,6 +86,7 @@ const trades: Trade[] = [
   T("painter-exterior", "Painter (Exterior)", "Exterior"),
   T("hardscape", "Hardscape (Landscaping)", "Exterior", "owner"),
   T("landscaping", "Landscaping", "Exterior", "owner"),
+  { id: "driveway", name: "Driveway & Paving", category: "Exterior", defaultOwner: "owner", managedBy: "owner", custom: true },
   // Owner items
   T("appliances", "Appliances", "Owner Items", "owner"),
   T("fixtures", "Finish Fixtures", "Owner Items", "owner"),
@@ -579,6 +580,24 @@ const artifacts: Artifact[] = [
   af({ name: "Pinterest References", kind: "design", source: "Owner", url: "https://pinterest.com" }),
 ];
 
+// ---- Contacts & billing -----------------------------------------------------
+let ctid = 0;
+const ct = (o: Omit<ContactSheet, "id">): ContactSheet => ({ id: `contact-${++ctid}`, ...o });
+const contacts: ContactSheet[] = [
+  ct({ party: "builder", company: "Oasis Builders (General Contractor)", contactName: "Marcus Reed", email: "marcus@oasisbuilders.com", phone: "(248) 555-0142", address: "1100 Industrial Row, Royal Oak, MI",
+    billing: { payableTo: "Oasis Builders LLC", email: "ar@oasisbuilders.com", taxId: "38-1234567", paymentTerms: "Net 15 on approved draws", remittance: "ACH on file / checks to Oasis Builders LLC" },
+    workers: [{ id: "w-b1", name: "Marcus Reed", role: "Project Lead / GC", email: "marcus@oasisbuilders.com", phone: "(248) 555-0142", appAccess: true }, { id: "w-b2", name: "Dana Cole", role: "Site Super", phone: "(248) 555-0177", appAccess: true }] }),
+  ct({ party: "owner", company: "The Johnson Family (Owner)", contactName: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "(248) 555-0190", address: "31810 Evergreen Rd",
+    billing: { payableTo: "Christopher Johnson", email: "christopher.cf@gmail.com", paymentTerms: "Funds draws per schedule" } }),
+  ct({ party: "vendor", tradeId: "electrical", company: "Brightwire Electric", contactName: "Sam Ortiz", email: "sam@brightwire.com", phone: "(586) 555-0233",
+    billing: { payableTo: "Brightwire Electric Inc.", email: "billing@brightwire.com", taxId: "38-7654321", paymentTerms: "40% deposit, balance on inspection" },
+    workers: [{ id: "w-e1", name: "Sam Ortiz", role: "Master Electrician", email: "sam@brightwire.com", appAccess: true }, { id: "w-e2", name: "Leo Park", role: "Apprentice", appAccess: false }] }),
+  ct({ party: "vendor", tradeId: "windows", company: "Diverse Windows", contactName: "Rita Vance", email: "rita@diversewindows.com", phone: "(313) 555-0288",
+    billing: { payableTo: "Diverse Windows LLC", paymentTerms: "40% deposit, balance on completion" } }),
+  ct({ party: "vendor", tradeId: "driveway", company: "Johnson-managed paver (TBD)", contactName: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "(248) 555-0190", notes: "Owner is sourcing the driveway/paving vendor directly.",
+    billing: { paymentTerms: "Owner pays vendor directly" } }),
+];
+
 // ---- Assemble ---------------------------------------------------------------
 export function buildDB(): DB {
   return {
@@ -590,6 +609,7 @@ export function buildDB(): DB {
     scope: buildScope(),
     costLines,
     contracts,
+    contacts,
     terms: termsConfig,
     funding,
     schedule,
