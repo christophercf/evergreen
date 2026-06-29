@@ -766,6 +766,9 @@ class Store {
   toggleArtifactWatch(id: string) {
     this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.watch = !a.watch; });
   }
+  setArtifactArchived(id: string, archived: boolean) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.archived = archived; });
+  }
   /** Add a new version; if the artifact is watched, notify the team + its trades. */
   addArtifactVersion(id: string, v: Omit<ArtifactVersion, "id" | "uploadedAt" | "uploadedBy">, by: string) {
     this.mutate((db) => {

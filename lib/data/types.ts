@@ -301,6 +301,8 @@ export interface Artifact {
   versions?: ArtifactVersion[];
   /** Notify the team whenever a new version is uploaded. */
   watch?: boolean;
+  /** Archived documents are hidden from the main library but kept on record. */
+  archived?: boolean;
   // --- Architectural-drawing extras ---
   pins?: DrawingPin[];
   scribble?: string;        // data URL of a freehand annotation overlay
@@ -551,7 +553,9 @@ export function canRemoveUser(viewerRole: Role, viewer: User | undefined, target
 //  • non-trade users' contacts are visible to admins
 // Can this user view an artifact, given its audience + trade restrictions?
 export function canSeeArtifact(role: Role, user: User | undefined, a: Artifact): boolean {
-  if (role === "full_admin" || role === "owner" || role === "builder") return true;
+  // Full Admin always sees everything (and assigns who else can).
+  if (role === "full_admin") return true;
+  // Every other role honors the per-document audience set by the Full Admin.
   const audienceOk = !a.audience || a.audience.length === 0 || a.audience.includes(role);
   if (!audienceOk) return false;
   if (role === "trade" && a.tradeIds && a.tradeIds.length) {

@@ -573,8 +573,8 @@ const artifacts: Artifact[] = [
   af({ name: "Structural Engineering Drawings", kind: "drawing", source: "Metropolitan Structural Engineers", date: "2026-04", url: "" }),
   af({ name: "Land Survey", kind: "survey", source: "Fenn & Associates", date: "2026-04-17", url: "" }),
   af({ name: "Building Permit", kind: "permit", source: "Municipality", date: "2026-05", notes: "Permits billed at cost ($6,638.72).", url: "" }),
-  af({ name: "Electrical Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["builder", "trade"], tradeIds: ["electrical"], url: "" }),
-  af({ name: "Plumbing Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["builder", "trade"], tradeIds: ["plumbing"], url: "" }),
+  af({ name: "Electrical Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["electrical"], url: "" }),
+  af({ name: "Plumbing Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["plumbing"], url: "" }),
   af({ name: "Design Intent — Restoration", kind: "design", source: "The Johnson Family", date: "2026-03", notes: "Grand vision, guiding principles, room-by-room intent (1822 farmhouse).", url: "" }),
   af({ name: "Pinterest References", kind: "design", source: "Owner", url: "https://pinterest.com" }),
 ];
