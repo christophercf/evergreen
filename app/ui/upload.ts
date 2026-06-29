@@ -42,3 +42,19 @@ export function driveViewLink(url: string): string {
   const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
   return m ? `https://drive.google.com/uc?export=view&id=${m[1]}` : url;
 }
+
+// An embeddable Drive preview URL (renders inside an iframe), where possible.
+export function drivePreviewLink(url: string): string {
+  const m = url.match(/\/file\/d\/([^/]+)/) || url.match(/[?&]id=([^&]+)/);
+  return m ? `https://drive.google.com/file/d/${m[1]}/preview` : url;
+}
+
+// Classify what a stored file URL / filename is, for previewing.
+export function fileKindOf(opts: { fileUrl?: string; driveUrl?: string; fileName?: string }): "image" | "pdf" | "drive" | "other" | "none" {
+  const { fileUrl, driveUrl, fileName } = opts;
+  if (fileUrl?.startsWith("data:image") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(fileName ?? "")) return "image";
+  if (fileUrl?.startsWith("data:application/pdf") || /\.pdf$/i.test(fileName ?? "") || (!!fileUrl && /\.pdf/i.test(fileUrl))) return "pdf";
+  if (driveUrl) return "drive";
+  if (fileUrl) return "other";
+  return "none";
+}

@@ -572,9 +572,9 @@ const artifacts: Artifact[] = [
     ] }),
   af({ name: "Structural Engineering Drawings", kind: "drawing", source: "Metropolitan Structural Engineers", date: "2026-04", url: "" }),
   af({ name: "Land Survey", kind: "survey", source: "Fenn & Associates", date: "2026-04-17", url: "" }),
-  af({ name: "Building Permit", kind: "permit", source: "Municipality", date: "2026-05", notes: "Permits billed at cost ($6,638.72).", url: "" }),
-  af({ name: "Electrical Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["electrical"], url: "" }),
-  af({ name: "Plumbing Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["plumbing"], url: "" }),
+  af({ name: "General Construction Permit", kind: "permit", source: "Municipality", date: "2026-05", isGeneralPermit: true, permitStatus: "issued", notes: "Master permit for the project (billed at cost, $6,638.72). Covers the general construction scope — no per-trade one-offs required unless a trade pulls its own.", url: "" }),
+  af({ name: "Electrical Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["electrical"], permitStatus: "pending", gatesTradeIds: ["electrical"], notes: "Sub-permit under the General Construction Permit.", url: "" }),
+  af({ name: "Plumbing Permit", kind: "permit", source: "Municipality", date: "2026-05", audience: ["owner", "builder", "trade"], tradeIds: ["plumbing"], permitStatus: "issued", gatesTradeIds: ["plumbing"], notes: "Sub-permit under the General Construction Permit.", url: "" }),
   af({ name: "Design Intent — Restoration", kind: "design", source: "The Johnson Family", date: "2026-03", notes: "Grand vision, guiding principles, room-by-room intent (1822 farmhouse).", url: "" }),
   af({ name: "Pinterest References", kind: "design", source: "Owner", url: "https://pinterest.com" }),
 ];

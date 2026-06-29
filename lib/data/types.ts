@@ -303,6 +303,15 @@ export interface Artifact {
   watch?: boolean;
   /** Archived documents are hidden from the main library but kept on record. */
   archived?: boolean;
+  /** AI-generated plain-language summary of the document. */
+  summary?: string;
+  // --- Permit extras ---
+  /** Whether this permit has been issued or is still pending. */
+  permitStatus?: "pending" | "issued";
+  /** The general construction permit that covers the whole project (no one-offs). */
+  isGeneralPermit?: boolean;
+  /** Trades whose work this permit gates (can't start until issued). */
+  gatesTradeIds?: string[];
   // --- Architectural-drawing extras ---
   pins?: DrawingPin[];
   scribble?: string;        // data URL of a freehand annotation overlay

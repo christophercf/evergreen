@@ -769,6 +769,20 @@ class Store {
   setArtifactArchived(id: string, archived: boolean) {
     this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.archived = archived; });
   }
+  setArtifactSummary(id: string, summary: string) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.summary = summary; });
+  }
+  setPermitStatus(id: string, status: "pending" | "issued") {
+    this.mutate((db) => {
+      const a = db.artifacts.find((x) => x.id === id);
+      if (!a) return;
+      a.permitStatus = status;
+      if (status === "issued" && (a.gatesTradeIds?.length || a.isGeneralPermit)) {
+        const who = a.gatesTradeIds?.length ? a.gatesTradeIds.map((t) => this.db.trades.find((x) => x.id === t)?.name).filter(Boolean).join(", ") : "all trades";
+        this.notify(db, { toRole: "builder", kind: "info", message: `✅ "${a.name}" issued — work cleared to start for ${who}.` });
+      }
+    });
+  }
   /** Add a new version; if the artifact is watched, notify the team + its trades. */
   addArtifactVersion(id: string, v: Omit<ArtifactVersion, "id" | "uploadedAt" | "uploadedBy">, by: string) {
     this.mutate((db) => {

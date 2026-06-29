@@ -9,22 +9,18 @@ import { tradeName } from "@/lib/data/money";
 import { fileToDataURL, driveViewLink } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
+import { FilePreview, FileViewerModal, currentVersion } from "./file-view";
 
 const KIND_ORDER: ArtifactKind[] = ["survey", "drawing", "permit", "contract", "photo", "design", "other"];
 const KIND_HINT: Partial<Record<ArtifactKind, string>> = {
   survey: "Property survey & site documents.",
   drawing: "Architectural & structural drawings — open the interactive view to mark up and shade scope.",
-  permit: "Building & trade permits (upload a photo).",
+  permit: "Building & trade permits — upload or take a photo (they're posted on the door).",
   contract: "Signed contracts — visible only to the parties they're between.",
   photo: "Project photos, including ones tagged to budget line items.",
   design: "Design intent & references.",
 };
 
-function currentVersion(a: Artifact): ArtifactVersion | undefined {
-  if (a.versions?.length) return a.versions[a.versions.length - 1];
-  if (a.url || a.version) return { id: "legacy", label: a.version ?? "v1", uploadedAt: a.date ?? "", uploadedBy: a.source ?? "", fileUrl: a.url?.startsWith("data:") ? a.url : undefined, driveUrl: a.url && !a.url.startsWith("data:") ? a.url : undefined };
-  return undefined;
-}
 function versionHref(v: ArtifactVersion | undefined): string | undefined {
   if (!v) return undefined;
   if (v.fileUrl) return v.fileUrl;
@@ -39,7 +35,9 @@ export default function ArtifactsPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "artifacts");
   const [viewer, setViewer] = useState<{ id: string; trade?: string } | null>(null);
+  const [fileView, setFileView] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [layout, setLayout] = useState<"cards" | "list">("cards");
 
   // deep-link: ?artifact=…&view=scope&trade=…
   useEffect(() => {
@@ -73,7 +71,14 @@ export default function ArtifactsPage() {
         <StatCard label="Photos" value={`${byKind("photo").length}`} sub="incl. line-item photos" />
       </div>
 
-      {!ro && <AddArtifact />}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
+        {!ro && <AddArtifact />}
+        <div style={{ marginLeft: "auto", display: "inline-flex", gap: 4, background: "var(--cream-2)", padding: 3, borderRadius: 8 }}>
+          {([["cards", "⊞ Cards"], ["list", "☰ List"]] as const).map(([v, lbl]) => (
+            <button key={v} onClick={() => setLayout(v)} className="btn btn-sm" style={layout === v ? { background: "var(--walnut)", color: "#fff" } : { background: "transparent", border: "none" }}>{lbl}</button>
+          ))}
+        </div>
+      </div>
 
       {KIND_ORDER.map((k) => {
         const items = byKind(k);
@@ -82,9 +87,14 @@ export default function ArtifactsPage() {
           <section key={k} style={{ marginTop: 18 }}>
             <SectionTitle>{ARTIFACT_KIND_LABEL[k]}</SectionTitle>
             {KIND_HINT[k] && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6, marginBottom: 8 }}>{KIND_HINT[k]}</div>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px,1fr))", gap: 12 }}>
-              {items.map((a) => <ArtifactCard key={a.id} a={a} ro={ro} isAdmin={isAdmin} onOpen={() => setViewer({ id: a.id })} />)}
-            </div>
+            {k === "permit" && <GeneralPermitNote items={items} />}
+            {layout === "cards" ? (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px,1fr))", gap: 12 }}>
+                {items.map((a) => <ArtifactCard key={a.id} a={a} ro={ro} isAdmin={isAdmin} onOpen={() => setViewer({ id: a.id })} onView={() => setFileView(a.id)} />)}
+              </div>
+            ) : (
+              <ArtifactTable items={items} ro={ro} isAdmin={isAdmin} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} />
+            )}
           </section>
         );
       })}
@@ -94,20 +104,17 @@ export default function ArtifactsPage() {
           <button onClick={() => setShowArchived((v) => !v)} className="btn btn-sm" style={{ display: "inline-flex", gap: 6 }}>
             {showArchived ? "▾" : "▸"} 🗄 Archived ({archived.length})
           </button>
-          {showArchived && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px,1fr))", gap: 12, marginTop: 10 }}>
-              {archived.map((a) => <ArtifactCard key={a.id} a={a} ro={ro} isAdmin={isAdmin} onOpen={() => setViewer({ id: a.id })} />)}
-            </div>
-          )}
+          {showArchived && <div style={{ marginTop: 10 }}><ArtifactTable items={archived} ro={ro} isAdmin={isAdmin} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} /></div>}
         </section>
       )}
 
       {viewer && <DrawingViewer artifactId={viewer.id} initialTrade={viewer.trade} onClose={() => setViewer(null)} />}
+      {fileView && db.artifacts.find((a) => a.id === fileView) && <FileViewerModal a={db.artifacts.find((a) => a.id === fileView)!} onClose={() => setFileView(null)} />}
     </>
   );
 }
 
-function ArtifactCard({ a, ro, isAdmin, onOpen }: { a: Artifact; ro: boolean; isAdmin: boolean; onOpen: () => void }) {
+function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boolean; isAdmin: boolean; onOpen: () => void; onView: () => void }) {
   const store = useStore();
   const db = store.db;
   const by = store.session.displayName;
@@ -115,9 +122,7 @@ function ArtifactCard({ a, ro, isAdmin, onOpen }: { a: Artifact; ro: boolean; is
   const [showAccess, setShowAccess] = useState(false);
   const cur = currentVersion(a);
   const href = versionHref(cur);
-  const isImg = !!cur?.fileUrl?.startsWith("data:image");
-  const hasFile = !!cur?.fileUrl;
-  const isDrive = !!cur?.driveUrl && !cur?.fileUrl;
+  const hasAnyFile = !!(cur?.fileUrl || cur?.driveUrl);
 
   const nextLabel = () => `v${(a.versions?.length ?? (a.url || a.version ? 1 : 0)) + 1}`;
   const { over, dropProps } = useFileDrop(async (files) => {
@@ -145,21 +150,20 @@ function ArtifactCard({ a, ro, isAdmin, onOpen }: { a: Artifact; ro: boolean; is
         </div>
       </div>
 
-      {/* uploaded-file preview — make it obvious what's attached */}
-      {isImg ? (
-        <img src={cur!.fileUrl} alt={a.name} style={{ width: "100%", maxHeight: 150, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)" }} />
-      ) : hasFile ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>📎 <strong style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cur?.fileName ?? "Uploaded file"}</strong><span style={{ color: "var(--muted)" }}>uploaded</span></div>
-      ) : isDrive ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>🔗 <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Google Drive link</span></div>
-      ) : (
-        <div style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", padding: "4px 0" }}>No file attached yet — {ro ? "awaiting upload." : "drop a file here or use ⬆ below."}</div>
-      )}
+      {/* visual representation of the attached file */}
+      <button onClick={hasAnyFile ? onView : undefined} style={{ border: "none", background: "transparent", padding: 0, cursor: hasAnyFile ? "zoom-in" : "default", display: "block" }} title={hasAnyFile ? "View in app" : undefined}>
+        <FilePreview a={a} height={150} />
+      </button>
+
+      {a.kind === "permit" && <PermitBar a={a} ro={ro} />}
 
       {a.notes && <div style={{ fontSize: 12, color: "var(--ink)" }}>{a.notes}</div>}
 
+      <SummaryBlock a={a} ro={ro} />
+
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {a.kind === "drawing" && <button className="btn btn-sm btn-primary" onClick={onOpen}>✍️ Interactive view</button>}
+        {hasAnyFile && <button className="btn btn-sm btn-primary" onClick={onView}>👁 View</button>}
         {href ? (cur?.fileUrl ? <a className="btn btn-sm" href={href} download={cur.fileName ?? a.name}>⬇ Download</a> : <a className="btn btn-sm" href={driveViewLink(href)} target="_blank" rel="noreferrer">↗ Open</a>) : null}
         <button className="btn btn-sm" onClick={() => setHist((v) => !v)}>🕑 {(a.versions?.length ?? (a.url || a.version ? 1 : 0))} ver.</button>
         {!ro && <button className="btn btn-sm" title="Notify the team on new versions" onClick={() => store.toggleArtifactWatch(a.id)} style={{ color: a.watch ? "var(--brass-2)" : "var(--muted)" }}>{a.watch ? "🔔 Watching" : "🔕 Watch"}</button>}
@@ -184,6 +188,126 @@ function ArtifactCard({ a, ro, isAdmin, onOpen }: { a: Artifact; ro: boolean; is
           {!ro && <NewVersion artifactId={a.id} />}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Permit dependency control — issued/pending status + which trades it gates.
+function PermitBar({ a, ro }: { a: Artifact; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const [edit, setEdit] = useState(false);
+  const issued = a.permitStatus === "issued";
+  const pending = a.permitStatus === "pending";
+  const gated = a.gatesTradeIds ?? [];
+  const trades = Array.from(new Set(db.scope.filter((c) => c.status === "in").map((c) => c.tradeId)));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, background: pending ? "#fbeee6" : issued ? "var(--sage-tint)" : "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        {a.isGeneralPermit && <Pill color="#fff" bg="var(--walnut)">General permit</Pill>}
+        {issued ? <Pill color="#fff" bg="var(--ok)">✓ Issued</Pill> : pending ? <Pill color="#fff" bg="var(--rust)">⏳ Pending — work blocked</Pill> : <Pill color="var(--muted)">no status</Pill>}
+        {gated.length > 0 && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>gates {gated.map((t) => tradeName(db, t)).join(", ")}</span>}
+        {!ro && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setEdit((v) => !v)}>{edit ? "Done" : "Edit dependency"}</button>}
+      </div>
+      {pending && gated.length > 0 && <div style={{ fontSize: 11.5, color: "var(--rust)" }}>⛔ {gated.map((t) => tradeName(db, t)).join(", ")} can&apos;t start until this permit is issued.</div>}
+      {edit && !ro && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Status:</span>
+            <button className="btn btn-sm" onClick={() => store.setPermitStatus(a.id, "pending")} style={pending ? { background: "var(--rust)", color: "#fff" } : undefined}>Pending</button>
+            <button className="btn btn-sm" onClick={() => store.setPermitStatus(a.id, "issued")} style={issued ? { background: "var(--ok)", color: "#fff" } : undefined}>Issued</button>
+            <label style={{ fontSize: 11.5, color: "var(--muted)", marginLeft: 8, display: "inline-flex", gap: 4, alignItems: "center" }}>
+              <input type="checkbox" checked={!!a.isGeneralPermit} onChange={(e) => store.updateArtifact(a.id, { isGeneralPermit: e.target.checked })} /> General construction permit
+            </label>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Gates which trades&apos; work:</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", marginTop: 3 }}>
+              {trades.map((t) => (
+                <label key={t} style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: 12 }}>
+                  <input type="checkbox" checked={gated.includes(t)} onChange={(e) => { const cur = new Set(gated); if (e.target.checked) cur.add(t); else cur.delete(t); store.updateArtifact(a.id, { gatesTradeIds: cur.size ? [...cur] : undefined }); }} />
+                  {tradeName(db, t)}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// AI document summary (stub — labeled; a real OCR/vision model is the next step).
+function SummaryBlock({ a, ro }: { a: Artifact; ro: boolean }) {
+  const store = useStore();
+  const [busy, setBusy] = useState(false);
+  const cur = currentVersion(a);
+  const hasFile = !!(cur?.fileUrl || cur?.driveUrl);
+  const generate = () => {
+    setBusy(true);
+    const kindWord = a.kind === "permit" ? "permit" : a.kind === "survey" ? "survey" : a.kind === "contract" ? "contract" : a.kind === "drawing" ? "drawing set" : "document";
+    const text = `AI summary (placeholder): This ${kindWord} — "${a.name}"${a.source ? ` from ${a.source}` : ""} — would be read and summarized here: key parties, dates, scope, and any conditions or expirations. Connect a vision/OCR model to generate a real summary from the uploaded file.`;
+    // tiny delay so the action reads as "working"; no real model wired yet.
+    setTimeout(() => { store.setArtifactSummary(a.id, text); setBusy(false); }, 250);
+  };
+  if (!a.summary && (ro || !hasFile)) return null;
+  return (
+    <div style={{ background: "#f0e6cd", borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brass-2)", letterSpacing: ".05em", textTransform: "uppercase" }}>✨ AI summary</span>
+        {!ro && hasFile && <button className="btn btn-sm" style={{ marginLeft: "auto" }} disabled={busy} onClick={generate}>{busy ? "Reading…" : a.summary ? "Regenerate" : "Summarize document"}</button>}
+      </div>
+      {a.summary && <p style={{ fontSize: 12, color: "var(--ink)", margin: "6px 0 0", lineHeight: 1.45 }}>{a.summary}</p>}
+    </div>
+  );
+}
+
+// Banner explaining the single general construction permit covers the project.
+function GeneralPermitNote({ items }: { items: Artifact[] }) {
+  const general = items.find((a) => a.isGeneralPermit);
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", background: "var(--sage-tint)", borderRadius: 8, padding: "8px 12px", marginBottom: 10, fontSize: 12.5 }}>
+      <span style={{ fontSize: 16 }}>🏗️</span>
+      <span>{general ? <><strong>{general.name}</strong> is the master permit for the project{general.permitStatus === "issued" ? " (issued)" : ""}. It covers the general construction scope — <strong>no per-trade one-offs are required</strong> unless a trade must pull its own. Sub-permits below roll up under it.</> : "Tip: add your General Construction Permit and mark it as the master — it covers the project, so per-trade one-offs usually aren't needed."}</span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Linear matrix (table) view — used for List layout and archived docs.
+function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: boolean; isAdmin: boolean; onOpen: (id: string) => void; onView: (id: string) => void }) {
+  const store = useStore();
+  const th: React.CSSProperties = { textAlign: "left", padding: "6px 8px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--muted)", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" };
+  const tdS: React.CSSProperties = { padding: "6px 8px", fontSize: 12.5, borderBottom: "1px solid var(--line)", verticalAlign: "middle" };
+  return (
+    <div className="card" style={{ padding: 0, overflow: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr><th style={th}></th><th style={th}>Document</th><th style={th}>Type</th><th style={th}>Source</th><th style={th}>Version</th><th style={th}>Access</th><th style={{ ...th, textAlign: "right" }}>Actions</th></tr></thead>
+        <tbody>
+          {items.map((a) => {
+            const cur = currentVersion(a);
+            const hasFile = !!(cur?.fileUrl || cur?.driveUrl);
+            return (
+              <tr key={a.id} style={{ opacity: a.archived ? 0.7 : 1 }}>
+                <td style={{ ...tdS, width: 64 }}><div style={{ width: 52, height: 40 }}><FilePreview a={a} height={40} /></div></td>
+                <td style={tdS}><strong>{a.name}</strong>{a.kind === "permit" && a.permitStatus && <span style={{ marginLeft: 6, fontSize: 11, color: a.permitStatus === "issued" ? "var(--ok)" : "var(--rust)" }}>{a.permitStatus === "issued" ? "✓ issued" : "⏳ pending"}</span>}{a.summary && <span title="Has AI summary" style={{ marginLeft: 6 }}>✨</span>}</td>
+                <td style={tdS}>{ARTIFACT_KIND_LABEL[a.kind]}</td>
+                <td style={tdS}>{a.source ?? "—"}</td>
+                <td style={tdS}>{cur?.label ?? "—"}</td>
+                <td style={tdS}><AccessSummary a={a} /></td>
+                <td style={{ ...tdS, textAlign: "right", whiteSpace: "nowrap" }}>
+                  {a.kind === "drawing" && <button className="btn btn-sm" title="Interactive view" onClick={() => onOpen(a.id)}>✍️</button>}
+                  {hasFile && <button className="btn btn-sm" title="View" onClick={() => onView(a.id)}>👁</button>}
+                  {cur?.fileUrl ? <a className="btn btn-sm" title="Download" href={cur.fileUrl} download={cur.fileName ?? a.name}>⬇</a> : cur?.driveUrl ? <a className="btn btn-sm" title="Open" href={driveViewLink(cur.driveUrl)} target="_blank" rel="noreferrer">↗</a> : null}
+                  {!ro && <button className="btn btn-sm" title={a.archived ? "Unarchive" : "Archive"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "♻" : "🗄"}</button>}
+                  {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete" onClick={() => { if (confirm(`Permanently remove "${a.name}"?`)) store.removeArtifact(a.id); }}>🗑</button>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -247,6 +371,7 @@ function NewVersion({ artifactId }: { artifactId: string }) {
   const store = useStore();
   const by = store.session.displayName;
   const fileRef = useRef<HTMLInputElement>(null);
+  const camRef = useRef<HTMLInputElement>(null);
   const [label, setLabel] = useState("");
   const [drive, setDrive] = useState("");
   const add = (patch: Partial<ArtifactVersion>) => { store.addArtifactVersion(artifactId, { label: label.trim() || `v${Date.now().toString().slice(-4)}`, ...patch }, by); setLabel(""); setDrive(""); };
@@ -254,14 +379,14 @@ function NewVersion({ artifactId }: { artifactId: string }) {
     <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", background: "var(--paper)", padding: 6, borderRadius: 6 }}>
       <input placeholder="New version label" value={label} onChange={(e) => setLabel(e.target.value)} style={{ width: 130, fontSize: 11.5 }} />
       <input ref={fileRef} type="file" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add({ fileUrl: await fileToDataURL(f), fileName: f.name }); }} />
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add({ fileUrl: await fileToDataURL(f), fileName: f.name }); }} />
       <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆ File</button>
+      <button className="btn btn-sm" title="Take a photo" onClick={() => camRef.current?.click()}>📷</button>
       <input placeholder="…or Google Drive link" value={drive} onChange={(e) => setDrive(e.target.value)} style={{ flex: 1, minWidth: 120, fontSize: 11.5 }} />
       <button className="btn btn-sm btn-primary" disabled={!drive.trim()} onClick={() => add({ driveUrl: drive.trim() })}>Add</button>
     </div>
   );
 }
-
-const ROLE_OPTS: Role[] = ["owner", "builder", "trade", "viewer"];
 
 function AddArtifact() {
   const store = useStore();
@@ -275,6 +400,7 @@ function AddArtifact() {
   const [fileData, setFileData] = useState<{ url: string; name: string } | null>(null);
   const [trade, setTrade] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const camRef = useRef<HTMLInputElement>(null);
   const trades = Array.from(new Set(db.scope.filter((c) => c.status === "in").map((c) => c.tradeId)));
 
   const loadFile = async (f: File) => { setFileData({ url: await fileToDataURL(f), name: f.name }); setName((n) => n || f.name.replace(/\.[^.]+$/, "")); setOpen(true); };
@@ -312,7 +438,9 @@ function AddArtifact() {
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input ref={fileRef} type="file" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) setFileData({ url: await fileToDataURL(f), name: f.name }); }} />
-        <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆ Upload file / photo</button>
+        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) setFileData({ url: await fileToDataURL(f), name: f.name }); }} />
+        <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆ Upload file</button>
+        <button className="btn btn-sm" title="Take a photo with your phone camera" onClick={() => camRef.current?.click()}>📷 Take photo</button>
         {fileData && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--sage-tint)", borderRadius: 8, padding: "3px 8px 3px 3px", fontSize: 12 }}>
             {fileData.url.startsWith("data:image") ? <img src={fileData.url} alt="" style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 5 }} /> : <span style={{ fontSize: 16, padding: "0 4px" }}>📎</span>}
@@ -328,6 +456,7 @@ function AddArtifact() {
         </select>
       </div>
       {kind === "contract" && <div style={{ fontSize: 11.5, color: "var(--rust)" }}>Signed contracts are visible only to the builder, owner and the selected party trade.</div>}
+      {kind === "permit" && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>📷 Permits are posted on the door — use “Take photo” to snap it. The General Construction Permit usually covers the project, so per-trade one-offs aren’t needed.</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <button className="btn btn-primary btn-sm" disabled={!name.trim()} onClick={save}>Add document</button>
         <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
