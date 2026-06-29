@@ -22,7 +22,7 @@ const NAV: NavItem[] = [
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon },
   { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon },
-  { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon, phase2: true },
+  { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon },
 ];
 
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];

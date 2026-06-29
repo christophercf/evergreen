@@ -6,9 +6,9 @@
 // ----------------------------------------------------------------------------
 
 import type {
-  AccessLevel, AppNotification, Artifact, ChangeOrder, Contact, Contract, CostLine, DB, Draw, FundingSource,
-  LinePhase, Material, ModuleKey, PricePoint, Role, Room, ScheduleItem, ScheduleStatus, ScopeStatus,
-  Session, User,
+  AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, Contract, CostLine, DB, Draw,
+  DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, Role, Room, RoomZone, ScheduleItem,
+  ScheduleStatus, ScopeStatus, Session, User,
 } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
@@ -749,6 +749,80 @@ class Store {
   setTradeTermsNote(tradeId: string, note: string) {
     if (!this.canEditTerms) return;
     this.mutate((db) => { const ov = (db.terms.perTrade[tradeId] ??= {}); ov.note = note; });
+  }
+
+  // ---- Artifacts (document library + drawing markup) ----
+  addArtifact(a: Omit<Artifact, "id">): string {
+    const id = newId("art");
+    this.mutate((db) => { db.artifacts.unshift({ id, ...a }); });
+    return id;
+  }
+  removeArtifact(id: string) {
+    this.mutate((db) => { db.artifacts = db.artifacts.filter((x) => x.id !== id); });
+  }
+  updateArtifact(id: string, patch: Partial<Artifact>) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) Object.assign(a, patch); });
+  }
+  toggleArtifactWatch(id: string) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.watch = !a.watch; });
+  }
+  /** Add a new version; if the artifact is watched, notify the team + its trades. */
+  addArtifactVersion(id: string, v: Omit<ArtifactVersion, "id" | "uploadedAt" | "uploadedBy">, by: string) {
+    this.mutate((db) => {
+      const a = db.artifacts.find((x) => x.id === id);
+      if (!a) return;
+      a.versions = [...(a.versions ?? []), { id: newId("ver"), uploadedAt: new Date().toISOString(), uploadedBy: by, ...v }];
+      if (a.watch) {
+        const msg = `📄 "${a.name}" updated to ${v.label} by ${by}. Review in Artifacts.`;
+        this.notify(db, { toRole: "owner", kind: "info", message: msg });
+        if (db.users.some((u) => u.role === "builder")) this.notify(db, { toRole: "builder", kind: "info", message: msg });
+        for (const tid of a.tradeIds ?? []) {
+          const u = db.users.find((x) => x.tradeIds?.includes(tid));
+          if (u) this.notify(db, { toUserId: u.id, kind: "info", message: msg });
+        }
+      }
+    });
+  }
+  addDrawingPin(id: string, pin: Omit<DrawingPin, "id" | "at">) {
+    this.mutate((db) => {
+      const a = db.artifacts.find((x) => x.id === id);
+      if (!a) return;
+      a.pins = [...(a.pins ?? []), { id: newId("pin"), at: new Date().toISOString(), ...pin }];
+      if (pin.kind === "change") this.notify(db, { toRole: "builder", kind: "info", message: `📌 Change request pinned on "${a.name}" by ${pin.by}.` });
+    });
+  }
+  updateDrawingPin(artId: string, pinId: string, patch: Partial<DrawingPin>) {
+    this.mutate((db) => { const p = db.artifacts.find((x) => x.id === artId)?.pins?.find((y) => y.id === pinId); if (p) Object.assign(p, patch); });
+  }
+  removeDrawingPin(artId: string, pinId: string) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === artId); if (a?.pins) a.pins = a.pins.filter((p) => p.id !== pinId); });
+  }
+  setDrawingScribble(id: string, dataUrl: string | undefined) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a) a.scribble = dataUrl; });
+  }
+  setRoomZone(id: string, zone: RoomZone) {
+    this.mutate((db) => {
+      const a = db.artifacts.find((x) => x.id === id);
+      if (!a) return;
+      a.zones = [...(a.zones ?? []).filter((z) => z.roomId !== zone.roomId), zone];
+    });
+  }
+  removeRoomZone(id: string, roomId: string) {
+    this.mutate((db) => { const a = db.artifacts.find((x) => x.id === id); if (a?.zones) a.zones = a.zones.filter((z) => z.roomId !== roomId); });
+  }
+  setScopeDrawing(tradeId: string, artifactId: string | undefined) {
+    this.mutate((db) => { const ag = this.ensureAgreement(db, tradeId); ag.scopeDrawingId = artifactId; });
+  }
+  /** Attach a photo to a cost line as a project photo artifact. */
+  addLinePhoto(opts: { lineId: string; roomId?: string; dataUrl: string; name: string; linkedDrawingId?: string; by: string }) {
+    this.mutate((db) => {
+      const line = db.costLines.find((l) => l.id === opts.lineId);
+      db.artifacts.unshift({
+        id: newId("art"), name: opts.name, kind: "photo", source: opts.by, date: new Date().toISOString().slice(0, 10),
+        lineId: opts.lineId, roomId: opts.roomId, linkedDrawingId: opts.linkedDrawingId, tradeIds: line?.tradeId ? [line.tradeId] : undefined,
+        versions: [{ id: newId("ver"), label: "v1", uploadedAt: new Date().toISOString(), uploadedBy: opts.by, fileUrl: opts.dataUrl, fileName: opts.name }],
+      });
+    });
   }
 
   // ---- Budget ----

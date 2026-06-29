@@ -217,6 +217,8 @@ export interface VendorAgreement {
   finishDate?: string;
   round1: VendorSig[];
   round2: VendorSig[];
+  /** A scope-drawing artifact appended visually to this trade's contract. */
+  scopeDrawingId?: string;
 }
 
 // A client payment (draw) that allocates a portion of one or more budget lines.
@@ -248,19 +250,65 @@ export const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = {
   drawing: "Architectural Drawings", survey: "Survey", permit: "Permits", design: "Design", photo: "Photos", contract: "Contracts", other: "Other",
 };
 
+// One stored revision of an artifact. The file may be an inline data URL (small
+// compressed image), a direct URL, or a Google Drive link.
+export interface ArtifactVersion {
+  id: string;
+  label: string;        // "v1", "v2 — after plan review"
+  uploadedAt: string;
+  uploadedBy: string;
+  fileUrl?: string;     // data URL or direct file/image URL
+  driveUrl?: string;    // Google Drive (or other cloud) link
+  fileName?: string;
+  note?: string;
+}
+
+// A markup pin placed on an architectural drawing (percent coordinates).
+export type PinKind = "comment" | "photo" | "change";
+export interface DrawingPin {
+  id: string;
+  x: number;            // 0..100 (% of image width)
+  y: number;            // 0..100 (% of image height)
+  kind: PinKind;
+  text?: string;
+  photo?: string;       // data URL of an appended photo detail
+  by: string;
+  at: string;
+  tradeId?: string;
+  resolved?: boolean;
+}
+
+// A room region mapped onto a drawing, so a vendor's scope can be shaded.
+export interface RoomZone {
+  roomId: string;
+  x: number; y: number; w: number; h: number; // percent rect
+}
+
 export interface Artifact {
   id: string;
   name: string;
   kind: ArtifactKind;
-  url?: string; // view/download link (real file upload via Supabase Storage is the next step)
+  url?: string; // legacy single link (kept for back-compat; new uploads use versions)
   source?: string; // who produced it
   date?: string;
-  version?: string;
+  version?: string; // legacy single version label
   notes?: string;
   /** Roles allowed to view. Empty/undefined = whole team. */
   audience?: Role[];
   /** Restrict to specific trades (in addition to roles). Empty = all trades. */
   tradeIds?: string[];
+  /** Full revision history; the last entry is current. */
+  versions?: ArtifactVersion[];
+  /** Notify the team whenever a new version is uploaded. */
+  watch?: boolean;
+  // --- Architectural-drawing extras ---
+  pins?: DrawingPin[];
+  scribble?: string;        // data URL of a freehand annotation overlay
+  zones?: RoomZone[];       // room regions mapped onto the drawing
+  // --- Photo extras ---
+  lineId?: string;          // cost line this photo documents
+  roomId?: string;          // room this photo documents
+  linkedDrawingId?: string; // drawing this photo is tagged to
 }
 
 // ---- Materials --------------------------------------------------------------

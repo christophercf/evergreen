@@ -565,7 +565,11 @@ const steam = matBy("SteamSpa Kit"); if (steam) steam.designerApproved = true;
 let aid = 0;
 const af = (o: Omit<Artifact, "id">): Artifact => ({ id: `art-${++aid}`, ...o });
 const artifacts: Artifact[] = [
-  af({ name: "Architectural Plans — Schematic Set", kind: "drawing", source: "Joseph Mosey Architecture", date: "2026-05", version: "v2 (after plan review)", notes: "Floor plans, elevations, sections.", url: "" }),
+  af({ name: "Architectural Plans — Schematic Set", kind: "drawing", source: "Joseph Mosey Architecture", date: "2026-05", notes: "Floor plans, elevations, sections. Open the interactive view to pin comments, photo details, or change requests — and to shade each trade's scope.", watch: true,
+    versions: [
+      { id: "v-arch-1", label: "v1 — schematic", uploadedAt: "2026-04-02T15:00:00.000Z", uploadedBy: "Joseph Mosey Architecture", driveUrl: "https://drive.google.com/drive/architectural" },
+      { id: "v-arch-2", label: "v2 — after plan review", uploadedAt: "2026-05-09T15:00:00.000Z", uploadedBy: "Joseph Mosey Architecture", driveUrl: "https://drive.google.com/drive/architectural" },
+    ] }),
   af({ name: "Structural Engineering Drawings", kind: "drawing", source: "Metropolitan Structural Engineers", date: "2026-04", url: "" }),
   af({ name: "Land Survey", kind: "survey", source: "Fenn & Associates", date: "2026-04-17", url: "" }),
   af({ name: "Building Permit", kind: "permit", source: "Municipality", date: "2026-05", notes: "Permits billed at cost ($6,638.72).", url: "" }),

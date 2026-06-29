@@ -53,6 +53,12 @@ function downloadTradePdf(db: DB, tradeId: string) {
     if (m.specLink) text(m.specLink, { size: 8, color: [74, 122, 140], indent: 16 });
   });
 
+  const ag0 = db.vendorAgreements.find((a) => a.tradeId === tradeId);
+  if (ag0?.scopeDrawingId) {
+    const sd = db.artifacts.find((a) => a.id === ag0.scopeDrawingId);
+    if (sd) { heading("Scope Drawing"); text(`Appended scope drawing: ${sd.name}${sd.source ? ` (${sd.source})` : ""}. Shaded rooms and scope are viewable in the Evergreen app.`, { size: 9, color: [80, 72, 60] }); }
+  }
+
   heading("Terms & Conditions");
   text(renderTerms(db, tradeId), { size: 9, color: [80, 72, 60], gap: 3 });
 
@@ -154,6 +160,9 @@ function VendorCard({ tradeId }: { tradeId: string }) {
           {rooms.length ? <><strong>Rooms:</strong> {rooms.join(", ")}</> : <span style={{ color: "var(--muted)" }}>No rooms marked in-scope yet.</span>}
         </div>
         {items.length > 0 && <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 }}>{items.map((it) => <Pill key={it} bg="var(--sage-tint)">{it}</Pill>)}</div>}
+        {agreement.scopeDrawingId && db.artifacts.some((a) => a.id === agreement.scopeDrawingId) && (
+          <div style={{ fontSize: 12, marginTop: 6 }}>📐 Scope drawing appended: <Link href={`/artifacts?artifact=${agreement.scopeDrawingId}&view=scope&trade=${tradeId}`} style={{ color: "var(--sage-2)", fontWeight: 600 }}>{db.artifacts.find((a) => a.id === agreement.scopeDrawingId)?.name} — open ↗</Link></div>
+        )}
       </div>
 
       {/* Materials for this trade */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
@@ -11,6 +11,7 @@ import {
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
 } from "@/lib/data/money";
+import { fileToDataURL } from "../ui/upload";
 
 type GroupBy = "category" | "trade" | "owner";
 
@@ -337,6 +338,56 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
               return <button key={r.id} disabled={ro} onClick={() => store.toggleRoomOnLine(line.id, r.id)} className="btn btn-sm" style={{ background: on ? "var(--sage)" : "var(--paper)", color: on ? "#fff" : "var(--muted)", borderColor: on ? "var(--sage)" : "var(--line)" }}>{on ? "✓ " : ""}{r.name}</button>;
             })}
           </div>
+
+          <LinePhotos line={line} ro={ro} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Capture photos while defining scope — each becomes a project photo artifact
+// tagged to this line (and optionally to an architectural drawing).
+function LinePhotos({ line, ro }: { line: CostLine; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const by = store.session.displayName;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [room, setRoom] = useState<string>(line.roomIds[0] ?? "");
+  const [draw, setDraw] = useState<string>("");
+  const photos = db.artifacts.filter((a) => a.kind === "photo" && a.lineId === line.id);
+  const drawings = db.artifacts.filter((a) => a.kind === "drawing");
+
+  const upload = async (f: File) => {
+    const url = await fileToDataURL(f);
+    store.addLinePhoto({ lineId: line.id, roomId: room || undefined, dataUrl: url, name: `${line.name} — ${new Date().toLocaleDateString()}`, linkedDrawingId: draw || undefined, by });
+  };
+
+  return (
+    <div style={{ marginTop: 14 }}>
+      <Label>Scope photos</Label>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+        {photos.map((p) => {
+          const src = p.versions?.[0]?.fileUrl;
+          return src ? <img key={p.id} src={src} alt={p.name} title={p.name} style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)" }} /> : null;
+        })}
+        {!photos.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No photos yet.</span>}
+      </div>
+      {!ro && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f); }} />
+          <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()}>📷 Take / upload photo</button>
+          <select value={room} onChange={(e) => setRoom(e.target.value)} style={{ fontSize: 12 }}>
+            <option value="">no room</option>
+            {(line.roomIds.length ? db.rooms.filter((r) => line.roomIds.includes(r.id)) : db.rooms).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
+          {drawings.length > 0 && (
+            <select value={draw} onChange={(e) => setDraw(e.target.value)} title="Tag this photo to a drawing" style={{ fontSize: 12 }}>
+              <option value="">no drawing tag</option>
+              {drawings.map((d) => <option key={d.id} value={d.id}>tag → {d.name}</option>)}
+            </select>
+          )}
+          <Link href="/artifacts" className="btn btn-sm">View in Artifacts →</Link>
         </div>
       )}
     </div>
