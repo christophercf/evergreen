@@ -6,6 +6,8 @@ import { PageHeader, NoAccess, StatCard, Pill } from "../ui/bits";
 import { accessFor, MATERIAL_STATUS_LABEL, type Material, type MaterialStatus, type Purchaser } from "@/lib/data/types";
 import { tradeName, MACRO_ORDER } from "@/lib/data/money";
 import { CATALOG_CATEGORIES, optionsForCategory, tradeForCategory } from "@/lib/data/materialCatalog";
+import { fileToDataURL } from "../ui/upload";
+import { useFileDrop } from "../ui/use-drop";
 import DesignStudio from "./studio";
 
 const STATUS_BG: Record<MaterialStatus, string> = { needed: "var(--sc-unset)", ordered: "var(--brass)", purchased: "var(--sage)", delivered: "var(--ok)" };
@@ -177,12 +179,16 @@ function MaterialDetail({ mt, ro }: { mt: Material; ro: boolean }) {
   const name = store.session.displayName;
   const canApprove = role === "viewer" || role === "full_admin" || role === "owner"; // designer/admin
   const linked = db.schedule.find((s) => s.id === mt.linkedScheduleId);
+  const { over, dropProps } = useFileDrop(async (files) => { store.updateMaterial(mt.id, { imageUrl: await fileToDataURL(files[0]) }); }, { accept: (f) => f.type.startsWith("image/"), disabled: ro });
   return (
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, padding: 16 }} className="ever-two">
       {/* image / preview */}
       <div>
-        {mt.imageUrl ? <img src={mt.imageUrl} alt={mt.item} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)" }} />
-          : <div style={{ width: "100%", height: 130, borderRadius: 8, border: "1px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 8 }}>No image yet — add a spec URL and fetch.</div>}
+        <div {...dropProps} style={{ position: "relative", borderRadius: 8, outline: over ? "2px dashed var(--sage)" : "none" }}>
+          {over && <div style={{ position: "absolute", inset: 0, zIndex: 2, background: "var(--sage-tint)", opacity: 0.9, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--walnut)", pointerEvents: "none" }}>⬆ Drop image</div>}
+          {mt.imageUrl ? <img src={mt.imageUrl} alt={mt.item} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", display: "block" }} />
+            : <div style={{ width: "100%", height: 130, borderRadius: 8, border: "1px dashed var(--line)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: 12, textAlign: "center", padding: 8 }}>{ro ? "No image yet." : "No image — drop one here, or add a spec URL and fetch."}</div>}
+        </div>
         {!ro && mt.specLink && <button className="btn btn-sm" style={{ marginTop: 6, width: "100%" }} onClick={() => store.fetchMaterialFromUrl(mt.id)}>✨ Fetch image &amp; specs</button>}
       </div>
       {/* details */}

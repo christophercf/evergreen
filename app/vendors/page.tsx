@@ -65,8 +65,8 @@ function downloadTradePdf(db: DB, tradeId: string) {
   heading("Signatures");
   const ag = db.vendorAgreements.find((a) => a.tradeId === tradeId);
   const fmtDt = (s: string) => new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  (["builder", "trade"] as const).forEach((party) => {
-    const label = party === "builder" ? "Builder / GC" : "Trade / Vendor";
+  (["builder", "trade", "owner"] as const).forEach((party) => {
+    const label = party === "builder" ? "Builder / GC" : party === "trade" ? "Trade / Vendor" : "Owner / Client";
     const sig = ag?.round1.find((s) => s.party === party);
     ensure(54);
     if (sig?.signatureImg) { try { doc.addImage(sig.signatureImg, "PNG", M, y, 120, 36); } catch { /* skip bad image */ } y += 40; }
@@ -120,6 +120,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const isAssignedTrade = role === "trade" && !!vendorUser && vendorUser.id === me?.id;
   const canBuilderSign = role === "builder" || role === "full_admin";
   const canTradeSign = isAssignedTrade || role === "full_admin";
+  const canOwnerSign = role === "owner" || role === "full_admin";
   const canEditRequest = !ro || isAssignedTrade;
 
   const cost = tradeCost(db, tradeId);
@@ -210,7 +211,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         </p>
         <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Full terms &amp; conditions</summary><pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{terms}</pre></details>
         <BindingBlock canEdit={canBuilderSign && !ro} />
-        <SignRow round={1} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
+        <SignRow round={1} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} canOwner={canOwnerSign && !ro} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
       </div>
 
       {/* Round 2 — draw schedule & timeline */}
@@ -237,7 +238,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
               </div>
             )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment &amp; Draw Management).</span>}
           </div>
-          <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 2, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
+          <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} canOwner={canOwnerSign && !ro} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 2, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
         </>}
       </div>
     </div>
@@ -264,19 +265,21 @@ function BindingBlock({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-function SignRow({ round, agreement, canBuilder, canTrade, signerSig, onSign, onAdopt }: { round: 1 | 2; agreement: VendorAgreement; canBuilder: boolean; canTrade: boolean; signerSig?: string; onSign: (party: "builder" | "trade", img?: string) => void; onAdopt: (img: string) => void }) {
-  const [pad, setPad] = useState<null | "builder" | "trade">(null);
+const PARTY_LABEL: Record<"builder" | "trade" | "owner", string> = { builder: "Builder / GC", trade: "Trade / Vendor", owner: "Owner / Client" };
+
+function SignRow({ round, agreement, canBuilder, canTrade, canOwner, signerSig, onSign, onAdopt }: { round: 1 | 2; agreement: VendorAgreement; canBuilder: boolean; canTrade: boolean; canOwner: boolean; signerSig?: string; onSign: (party: "builder" | "trade" | "owner", img?: string) => void; onAdopt: (img: string) => void }) {
+  const [pad, setPad] = useState<null | "builder" | "trade" | "owner">(null);
   const sigs = round === 1 ? agreement.round1 : agreement.round2;
-  const sig = (party: "builder" | "trade") => sigs.find((s) => s.party === party);
+  const sig = (party: "builder" | "trade" | "owner") => sigs.find((s) => s.party === party);
   const fmtTs = (s?: string) => (s ? new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-      {(["builder", "trade"] as const).map((party) => {
+      {(["builder", "trade", "owner"] as const).map((party) => {
         const s = sig(party);
-        const can = party === "builder" ? canBuilder : canTrade;
+        const can = party === "builder" ? canBuilder : party === "trade" ? canTrade : canOwner;
         return (
-          <div key={party} style={{ flex: 1, minWidth: 210, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
-            <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 700 }}>{party === "builder" ? "Builder / GC" : "Trade / Vendor"}</div>
+          <div key={party} style={{ flex: 1, minWidth: 200, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
+            <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 700 }}>{PARTY_LABEL[party]}</div>
             {s ? (
               <div style={{ marginTop: 4 }}>
                 <SignatureMark img={s.signatureImg} name={s.name} />
