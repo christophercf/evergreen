@@ -12,6 +12,7 @@ import {
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
 } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
+import { useFileDrop } from "../ui/use-drop";
 
 type GroupBy = "category" | "trade" | "owner";
 
@@ -362,16 +363,18 @@ function LinePhotos({ line, ro }: { line: CostLine; ro: boolean }) {
     const url = await fileToDataURL(f);
     store.addLinePhoto({ lineId: line.id, roomId: room || undefined, dataUrl: url, name: `${line.name} — ${new Date().toLocaleDateString()}`, linkedDrawingId: draw || undefined, by });
   };
+  const { over, dropProps } = useFileDrop((files) => files.forEach((f) => void upload(f)), { accept: (f) => f.type.startsWith("image/"), disabled: ro });
 
   return (
     <div style={{ marginTop: 14 }}>
       <Label>Scope photos</Label>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+      <div {...dropProps} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6, padding: ro ? 0 : 8, borderRadius: 8, border: ro ? "none" : `1.5px dashed ${over ? "var(--sage)" : "var(--line)"}`, background: over ? "var(--sage-tint)" : "transparent", minHeight: ro ? 0 : 40, alignItems: "center" }}>
+        {!ro && !over && photos.length === 0 && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Drag &amp; drop photos here, or use the button below.</span>}
         {photos.map((p) => {
           const src = p.versions?.[0]?.fileUrl;
           return src ? <img key={p.id} src={src} alt={p.name} title={p.name} style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 8, border: "1px solid var(--line)" }} /> : null;
         })}
-        {!photos.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No photos yet.</span>}
+        {ro && !photos.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No photos yet.</span>}
       </div>
       {!ro && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>

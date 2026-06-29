@@ -7,6 +7,7 @@ import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import { accessFor, canSeeArtifact, ARTIFACT_KIND_LABEL, type Artifact, type ArtifactKind, type ArtifactVersion, type Role } from "@/lib/data/types";
 import { tradeName } from "@/lib/data/money";
 import { fileToDataURL, driveViewLink } from "../ui/upload";
+import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
 
 const KIND_ORDER: ArtifactKind[] = ["survey", "drawing", "permit", "contract", "photo", "design", "other"];
@@ -92,14 +93,22 @@ export default function ArtifactsPage() {
 function ArtifactCard({ a, ro, onOpen }: { a: Artifact; ro: boolean; onOpen: () => void }) {
   const store = useStore();
   const db = store.db;
+  const by = store.session.displayName;
   const [hist, setHist] = useState(false);
   const cur = currentVersion(a);
   const href = versionHref(cur);
-  const isImg = !!cur?.fileUrl?.startsWith("data:image") || (!!a.scribble);
   const thumb = cur?.fileUrl?.startsWith("data:image") ? cur.fileUrl : undefined;
 
+  const nextLabel = () => `v${(a.versions?.length ?? (a.url || a.version ? 1 : 0)) + 1}`;
+  const { over, dropProps } = useFileDrop(async (files) => {
+    const f = files[0];
+    store.addArtifactVersion(a.id, { label: nextLabel(), fileUrl: await fileToDataURL(f), fileName: f.name }, by);
+    setHist(true);
+  }, { disabled: ro });
+
   return (
-    <div className="card" style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+    <div className="card" {...dropProps} style={{ padding: 12, display: "flex", flexDirection: "column", gap: 6, position: "relative", outline: over ? "2px dashed var(--sage)" : "none", outlineOffset: 2 }}>
+      {over && <div style={{ position: "absolute", inset: 0, background: "var(--sage-tint)", opacity: 0.92, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "var(--walnut)", zIndex: 2, pointerEvents: "none" }}>⬆ Drop to add {nextLabel()}</div>}
       <div style={{ display: "flex", gap: 8 }}>
         <div style={{ width: 54, height: 54, borderRadius: 8, background: "var(--cream-2)", flexShrink: 0, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>
           {thumb ? <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : (a.kind === "drawing" ? "📐" : a.kind === "photo" ? "🖼️" : a.kind === "permit" ? "📋" : a.kind === "contract" ? "✍️" : a.kind === "survey" ? "🗺️" : "📄")}
@@ -175,7 +184,16 @@ function AddArtifact() {
   const fileRef = useRef<HTMLInputElement>(null);
   const trades = Array.from(new Set(db.scope.filter((c) => c.status === "in").map((c) => c.tradeId)));
 
-  if (!open) return <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setOpen(true)}>＋ Add document</button>;
+  const loadFile = async (f: File) => { setFileData({ url: await fileToDataURL(f), name: f.name }); setName((n) => n || f.name.replace(/\.[^.]+$/, "")); setOpen(true); };
+  const { over, dropProps } = useFileDrop((files) => void loadFile(files[0]));
+
+  if (!open) return (
+    <div {...dropProps} onClick={() => setOpen(true)}
+      style={{ marginTop: 14, padding: "16px 18px", borderRadius: 12, border: `2px dashed ${over ? "var(--sage)" : "var(--line)"}`, background: over ? "var(--sage-tint)" : "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: over ? "var(--walnut)" : "var(--muted)" }}>
+      <span style={{ fontSize: 20 }}>⬆</span>
+      <span style={{ fontSize: 13 }}><strong style={{ color: "var(--ink)" }}>＋ Add document</strong> — drag &amp; drop a file or photo here, or click to browse.</span>
+    </div>
+  );
 
   const save = () => {
     if (!name.trim()) return;
@@ -191,7 +209,7 @@ function AddArtifact() {
   };
 
   return (
-    <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+    <div className="card" {...dropProps} style={{ padding: 14, marginTop: 14, display: "flex", flexDirection: "column", gap: 8, outline: over ? "2px dashed var(--sage)" : "none" }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input placeholder="Document name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
         <select value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind)}>

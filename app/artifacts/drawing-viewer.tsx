@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { Pill } from "../ui/bits";
 import { fileToDataURL, driveViewLink } from "../ui/upload";
+import { useFileDrop } from "../ui/use-drop";
 import { tradeName } from "@/lib/data/money";
 import type { Artifact, DrawingPin, PinKind } from "@/lib/data/types";
 
@@ -47,6 +48,13 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
 
   const img = a ? latestImage(a) : undefined;
   const tradesInScope = useMemo(() => Array.from(new Set(db.scope.filter((c) => c.status === "in").map((c) => c.tradeId))), [db.scope]);
+
+  const { over: dropOver, dropProps } = useFileDrop(async (files) => {
+    if (!a || !canEdit) return;
+    const f = files[0];
+    store.addArtifactVersion(a.id, { label: `v${(a.versions?.length ?? 0) + 1}`, fileUrl: await fileToDataURL(f), fileName: f.name }, by);
+    setBroken(false);
+  }, { accept: (f) => f.type.startsWith("image/"), disabled: !canEdit });
 
   if (!a) return null;
 
@@ -154,8 +162,9 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
 
         {/* the drawing surface */}
         <div style={{ display: "grid", gridTemplateColumns: mode === "scope" && scopeTrade ? "1fr 280px" : "1fr", gap: 14, marginTop: 12, alignItems: "start" }}>
-          <div ref={wrapRef} onClick={onImgClick} onPointerDown={mode === "zones" ? zoneDown : undefined} onPointerMove={mode === "zones" ? zoneMove : undefined} onPointerUp={mode === "zones" ? zoneUp : undefined}
-            style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 10, overflow: "hidden", border: "1px solid var(--line)", background: "#f4f1e8", cursor: pendingKind ? "crosshair" : mode === "zones" && zoneRoom ? "crosshair" : "default", touchAction: "none" }}>
+          <div ref={wrapRef} {...dropProps} onClick={onImgClick} onPointerDown={mode === "zones" ? zoneDown : undefined} onPointerMove={mode === "zones" ? zoneMove : undefined} onPointerUp={mode === "zones" ? zoneUp : undefined}
+            style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 10, overflow: "hidden", border: `1px solid ${dropOver ? "var(--sage)" : "var(--line)"}`, outline: dropOver ? "2px dashed var(--sage)" : "none", background: "#f4f1e8", cursor: pendingKind ? "crosshair" : mode === "zones" && zoneRoom ? "crosshair" : "default", touchAction: "none" }}>
+            {dropOver && <div style={{ position: "absolute", inset: 0, zIndex: 5, background: "var(--sage-tint)", opacity: 0.9, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "var(--walnut)", pointerEvents: "none" }}>⬆ Drop an image to set the drawing</div>}
             {img && !broken
               ? <img src={img} alt={a.name} onError={() => setBroken(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
               : <Placeholder />}
