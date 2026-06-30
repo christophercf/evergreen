@@ -33,6 +33,11 @@ export default function BudgetPage() {
   const available = db.funding.reduce((a, f) => a + f.amount, 0);
   const drawn = db.funding.reduce((a, f) => a + f.drawn, 0);
   const gap = allIn - available;
+  // Cash vs debt: debt must be repaid, so the true surplus excludes it.
+  const totalDebt = db.funding.filter((f) => f.fundType === "debt").reduce((a, f) => a + f.amount, 0);
+  const totalCash = available - totalDebt;
+  const surplus = available - allIn;            // negative ⇒ funding gap
+  const surplusLessDebt = surplus - totalDebt;  // = cash − need: your position net of money you must repay
 
   // Advisory: draw cheapest-first to cover the all-in need.
   const ranked = [...db.funding].sort((a, b) => marginalRate(a) - marginalRate(b) || a.liquidityRank - b.liquidityRank);
@@ -70,8 +75,9 @@ export default function BudgetPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="All-in Need" value={<Money value={allIn} />} sub={`costs ${fmt(t.grand)} + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
-        <StatCard label="Funding Available" value={<Money value={available} />} sub={`${fmt(drawn)} drawn so far`} />
+        <StatCard label="Funding Available" value={<Money value={available} />} sub={`${fmt(totalCash)} cash · ${fmt(totalDebt)} debt`} />
         <StatCard label={gap > 0 ? "Funding Gap" : "Surplus"} value={<Money value={Math.abs(gap)} />} accent={gap > 0 ? "var(--rust)" : "var(--ok)"} sub={gap > 0 ? "need more sources" : "covered"} />
+        <StatCard label="Surplus less Debt" value={<Money value={surplusLessDebt} />} accent={surplusLessDebt >= 0 ? "var(--ok)" : "var(--rust)"} sub={surplusLessDebt >= 0 ? "cash covers it, net of repayment" : "relying on debt you must repay"} />
         <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
       </div>
 
@@ -108,6 +114,7 @@ export default function BudgetPage() {
             <tr>
               <th style={thC}>#</th>
               <th style={th}>Source</th>
+              <th style={thC}>Type</th>
               <th style={thR}>Available</th>
               <th style={thR}>Drawn</th>
               <th style={thR}>Rate</th>
@@ -130,6 +137,10 @@ export default function BudgetPage() {
                     <input value={f.name} disabled={ro} onChange={(e) => store.updateFunding(f.id, { name: e.target.value })} style={cellInput(150)} />
                     <input value={f.note ?? ""} disabled={ro} placeholder="note…" onChange={(e) => store.updateFunding(f.id, { note: e.target.value })} style={{ ...cellInput(180), fontSize: 11, fontWeight: 400, color: "var(--muted)", display: "block" }} />
                   </td>
+                  <td style={tdC}>
+                    {ro ? <Pill bg={f.fundType === "debt" ? "#f3d9cf" : "var(--sage-tint)"} color={f.fundType === "debt" ? "var(--rust)" : "var(--sage-2)"}>{f.fundType === "debt" ? "Debt" : "Cash"}</Pill>
+                      : <select value={f.fundType ?? "cash"} onChange={(e) => store.updateFunding(f.id, { fundType: e.target.value as "cash" | "debt" })} style={{ fontSize: 11.5, color: f.fundType === "debt" ? "var(--rust)" : "var(--sage-2)", fontWeight: 700 }}><option value="cash">Cash</option><option value="debt">Debt</option></select>}
+                  </td>
                   <td style={tdR}><NumCell value={f.amount} ro={ro} onChange={(v) => store.updateFunding(f.id, { amount: v })} money /></td>
                   <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
                   <td style={tdR}><NumCell value={f.rate * 100} ro={ro} onChange={(v) => store.updateFunding(f.id, { rate: v / 100 })} suffix="%" width={50} /></td>
@@ -145,6 +156,7 @@ export default function BudgetPage() {
             <tr style={{ background: "var(--cream)" }}>
               <td style={tdC}></td>
               <td style={{ ...td, fontWeight: 700 }}>Total</td>
+              <td style={{ ...tdC, fontSize: 10.5, color: "var(--muted)", lineHeight: 1.4 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)} cash</div><div style={{ color: "var(--rust)" }}>{fmt(totalDebt)} debt</div></td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(available)}</td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(drawn)}</td>
               <td colSpan={4}></td>
@@ -177,15 +189,17 @@ function AddSource() {
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [rate, setRate] = useState("");
+  const [fundType, setFundType] = useState<"cash" | "debt">("cash");
   return (
     <div className="card" style={{ padding: 12, marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
       <input placeholder="Source name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+      <select value={fundType} onChange={(e) => setFundType(e.target.value as "cash" | "debt")}><option value="cash">Cash</option><option value="debt">Debt</option></select>
       <input placeholder="Amount $" type="number" value={amount} onChange={(e) => setAmount(e.target.value)} style={{ width: 120 }} />
       <input placeholder="Rate %" type="number" value={rate} onChange={(e) => setRate(e.target.value)} style={{ width: 90 }} />
       <button className="btn btn-primary" onClick={() => {
         if (!name.trim()) return;
-        store.addFunding({ name: name.trim(), amount: Number(amount) || 0, drawn: 0, rate: (Number(rate) || 0) / 100, liquidityRank: 99 });
-        setName(""); setAmount(""); setRate("");
+        store.addFunding({ name: name.trim(), amount: Number(amount) || 0, drawn: 0, rate: (Number(rate) || 0) / 100, liquidityRank: 99, fundType });
+        setName(""); setAmount(""); setRate(""); setFundType("cash");
       }}>+ Add source</button>
     </div>
   );

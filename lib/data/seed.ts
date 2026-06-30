@@ -355,14 +355,14 @@ const termsConfig: TermsConfig = {
 
 // ---- Funding sources (owner budget) ----------------------------------------
 const funding: FundingSource[] = [
-  { id: "f-bank", name: "Current Bank Cash", amount: 16677, drawn: 0, rate: 0, liquidityRank: 1, timeframe: "Now", note: "On-hand operating cash." },
-  { id: "f-401k", name: "CJ — 401k", amount: 50000, drawn: 50000, rate: 0, liquidityRank: 2, timeframe: "Dec", note: "Already drawn." },
-  { id: "f-estate", name: "Estate Sale", amount: 28323, drawn: 0, rate: 0, liquidityRank: 3, timeframe: "TBD" },
-  { id: "f-gold", name: "Gold (safe)", amount: 65400, drawn: 0, rate: 0, liquidityRank: 4, timeframe: "Now", note: "Liquidate as needed." },
-  { id: "f-bonus", name: "CJ — Bonus", amount: 129000, drawn: 0, rate: 0, liquidityRank: 5, timeframe: "March" },
-  { id: "f-wros", name: "CJ — Joint WROS", amount: 265000, drawn: 175000, rate: 0.02, costToAccess: 14000, liquidityRank: 6, timeframe: "Jan", note: "Investment account — opportunity cost of selling positions." },
-  { id: "f-dj-reno", name: "DJ — Renovation", amount: 100000, drawn: 0, rate: 0.055, costToAccess: 5500, liquidityRank: 7, timeframe: "Dec" },
-  { id: "f-heloc", name: "CJ — HELOC", amount: 222000, drawn: 0, rate: 0.07, costToAccess: 18000, liquidityRank: 8, timeframe: "June", note: "Highest cost of access — tap last." },
+  { id: "f-bank", name: "Current Bank Cash", amount: 16677, drawn: 0, rate: 0, liquidityRank: 1, fundType: "cash", timeframe: "Now", note: "On-hand operating cash." },
+  { id: "f-401k", name: "CJ — 401k", amount: 50000, drawn: 50000, rate: 0, liquidityRank: 2, fundType: "debt", timeframe: "Dec", note: "401k loan — already drawn, must be repaid." },
+  { id: "f-estate", name: "Estate Sale", amount: 28323, drawn: 0, rate: 0, liquidityRank: 3, fundType: "cash", timeframe: "TBD" },
+  { id: "f-gold", name: "Gold (safe)", amount: 65400, drawn: 0, rate: 0, liquidityRank: 4, fundType: "cash", timeframe: "Now", note: "Liquidate as needed." },
+  { id: "f-bonus", name: "CJ — Bonus", amount: 129000, drawn: 0, rate: 0, liquidityRank: 5, fundType: "cash", timeframe: "March" },
+  { id: "f-wros", name: "CJ — Joint WROS", amount: 265000, drawn: 175000, rate: 0.02, costToAccess: 14000, liquidityRank: 6, fundType: "cash", timeframe: "Jan", note: "Investment account — opportunity cost of selling positions." },
+  { id: "f-dj-reno", name: "DJ — Renovation", amount: 100000, drawn: 0, rate: 0.055, costToAccess: 5500, liquidityRank: 7, fundType: "debt", timeframe: "Dec", note: "Renovation loan — repaid." },
+  { id: "f-heloc", name: "CJ — HELOC", amount: 222000, drawn: 0, rate: 0.07, costToAccess: 18000, liquidityRank: 8, fundType: "debt", timeframe: "June", note: "Highest cost of access — tap last; must be repaid." },
 ];
 
 // ---- Schedule (Gantt) -------------------------------------------------------

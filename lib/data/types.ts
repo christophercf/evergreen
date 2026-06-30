@@ -525,6 +525,8 @@ export interface FundingSource {
   timeframe?: string;
   /** Lower = tap first (cash before HELOC). Drives the advisory ordering. */
   liquidityRank: number;
+  /** Whether this source is your own cash or borrowed money that must be repaid. */
+  fundType: "cash" | "debt";
   note?: string;
 }
 
