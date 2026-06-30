@@ -11,6 +11,7 @@ import {
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
   linePaid, linePaidByDraws, lineUnpaid, linePaidStatus,
+  lineHasRange, lineLow, lineHigh, budgetRange,
 } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
@@ -66,6 +67,13 @@ export default function CostsPage() {
         <StatCard label="Savings Found" value={<Money value={db.costLines.reduce((a, l) => a + approvedSavings(l), 0)} />} accent="var(--ok)" sub="approved credits" />
         <StatCard label={`+${db.project.bufferPct}% Buffer`} value={<Money value={t.grand + buffer} />} sub={`buffer ${fmt(buffer)}`} />
       </div>
+
+      {(() => { const br = budgetRange(db.costLines); return br.low !== br.high ? (
+        <div className="card" style={{ padding: "10px 14px", marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13, borderLeft: "3px solid var(--sage)" }}>
+          <span>📊 <strong>Budget range</strong> (allowances not yet pinned): <strong style={{ color: "var(--ink)" }}>{fmt(br.low)} – {fmt(br.high)}</strong></span>
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>The Current Total above uses the high end. Ranged lines show their low–high; agreed lines are fixed.</span>
+        </div>
+      ) : null; })()}
 
       {anyUnlocked && !ro && (
         <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderLeft: "3px solid var(--brass)" }}>
@@ -380,8 +388,17 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
         </div>
         {net !== 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: net > 0 ? "var(--rust)" : "var(--ok)" }}>{net > 0 ? "▲" : "▼"} {fmt(Math.abs(net))}</span>}
         <div style={{ textAlign: "right", minWidth: 96 }}>
-          <div style={{ fontWeight: 700, fontSize: 14.5 }}><Money value={lineCurrent(line)} /></div>
-          {net !== 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>base {fmt(lineBaseline(line))}</div>}
+          {lineHasRange(line) ? (
+            <>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{fmt(lineLow(line))}–{fmt(lineHigh(line))}</div>
+              <div style={{ fontSize: 10.5, color: "var(--brass-2)" }}>allowance range</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontWeight: 700, fontSize: 14.5 }}><Money value={lineCurrent(line)} /></div>
+              {net !== 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>base {fmt(lineBaseline(line))}</div>}
+            </>
+          )}
         </div>
       </div>
 
@@ -419,6 +436,12 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
                 ))}
                 {!line.history.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>Allowance {fmt(line.allowanceLow ?? 0)}–{fmt(line.allowanceHigh ?? 0)}</span>}
               </div>
+              {lineHasRange(line) && (
+                <div style={{ fontSize: 12, marginTop: 8, padding: "6px 8px", background: "var(--paper)", borderRadius: 6, color: "var(--ink)" }}>
+                  Working ROM allowance <span style={{ color: "var(--muted)" }}>(Oasis cost)</span>: <strong>{fmt(line.allowanceLow!)}–{fmt(line.allowanceHigh!)}</strong>
+                  {line.markupModel === "passthrough" && <> · +{line.markupPct}% → <strong>{fmt(lineLow(line))}–{fmt(lineHigh(line))}</strong></>}
+                </div>
+              )}
               {lineDelta(line) !== 0 && <div style={{ fontSize: 12, marginTop: 6, color: "var(--muted)" }}>Pre-lock movement: {fmt(lineStart(line))} → {fmt(lineBase(line))}</div>}
             </div>
             <div>

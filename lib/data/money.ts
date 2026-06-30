@@ -64,6 +64,26 @@ export function approvedSavings(line: CostLine): number {
 export function lineCurrent(line: CostLine): number {
   return lineBaseline(line) + approvedNetChange(line);
 }
+// ---- Allowance ranges (low–high, from the Working ROM Budget) ----------------
+export function lineMarkupFactor(line: CostLine): number {
+  return line.markupModel === "passthrough" ? 1 + line.markupPct / 100 : 1;
+}
+/** True when the line carries a real low≠high allowance range. */
+export function lineHasRange(line: CostLine): boolean {
+  return line.allowanceLow != null && line.allowanceHigh != null && line.allowanceLow !== line.allowanceHigh;
+}
+/** Marked-up low end of a ranged line (else just its current total). */
+export function lineLow(line: CostLine): number {
+  return lineHasRange(line) ? line.allowanceLow! * lineMarkupFactor(line) : lineCurrent(line);
+}
+/** Marked-up high end of a ranged line (else its current total). */
+export function lineHigh(line: CostLine): number {
+  return lineHasRange(line) ? line.allowanceHigh! * lineMarkupFactor(line) : lineCurrent(line);
+}
+/** Whole-budget low–high range (marked up); contracted lines contribute a fixed figure. */
+export function budgetRange(lines: CostLine[]): { low: number; high: number } {
+  return { low: lines.reduce((a, l) => a + lineLow(l), 0), high: lines.reduce((a, l) => a + lineHigh(l), 0) };
+}
 
 // ---- Phases + draws --------------------------------------------------------
 export function phaseAmount(line: CostLine, phase: LinePhase): number {
