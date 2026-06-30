@@ -612,21 +612,30 @@ function RemoveDialog({ target, onClose }: { target: { id: string; name: string;
 }
 
 function RefreshInvite({ email }: { email: string }) {
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [state, setState] = useState<"idle" | "busy">("idle");
   const [msg, setMsg] = useState("");
+  const [review, setReview] = useState<string>("");
   const run = async () => {
-    setState("busy"); setMsg("");
+    setState("busy"); setMsg(""); setReview("");
     const r = await sendInviteEmail(email);
-    setState("done");
+    setState("idle");
+    // Account review (was the Supabase auth role set up?)
+    if (r.review) {
+      const v = r.review;
+      setReview(!v.userExists ? "🔍 No Supabase account yet — this invite creates one."
+        : v.confirmed ? `✅ Supabase account active${v.lastSignInAt ? ` · last sign-in ${new Date(v.lastSignInAt).toLocaleDateString()}` : " · not signed in yet"}`
+        : "⚠️ Supabase account created but email not confirmed — re-invite resent.");
+    }
+    // Email re-send result
     if (!r.ok) setMsg(r.error ?? "Failed.");
-    else if (r.emailed) setMsg("✓ Invite re-emailed.");
-    else if (r.link) { if (navigator.clipboard) navigator.clipboard.writeText(r.link); setMsg("✓ Fresh link copied (email re-send needs SMTP)."); }
+    else if (r.emailed) setMsg("✓ Invitation email re-sent.");
+    else if (r.link) { if (navigator.clipboard) navigator.clipboard.writeText(r.link); setMsg("✓ Fresh invite link copied (email re-send needs custom SMTP)."); }
     else setMsg("✓ Done.");
-    setTimeout(() => setState("idle"), 200);
   };
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <button className="btn btn-sm" disabled={state === "busy"} onClick={run} title="Re-send a fresh invite (current link)">{state === "busy" ? "…" : "↻ Refresh invite"}</button>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <button className="btn btn-sm" disabled={state === "busy"} onClick={run} title="Re-push the invitation: review the Supabase account & re-send the email">{state === "busy" ? "…" : "↻ Re-push invite"}</button>
+      {review && <span style={{ fontSize: 11, color: review.startsWith("✅") ? "var(--sage-2)" : review.startsWith("⚠️") ? "var(--rust)" : "var(--muted)" }}>{review}</span>}
       {msg && <span style={{ fontSize: 11, color: msg.startsWith("✓") ? "var(--sage-2)" : "var(--rust)" }}>{msg}</span>}
     </span>
   );

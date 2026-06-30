@@ -80,9 +80,9 @@ export default function BudgetPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="All-in Need" value={<Money value={allIn} />} sub={`costs ${fmt(t.grand)} + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
-        <StatCard label="Funding Available" value={<Money value={available} />} sub={`${fmt(totalCash)} cash · ${fmt(totalDebt)} debt`} />
-        <StatCard label={gap > 0 ? "Funding Gap" : "Surplus"} value={<Money value={Math.abs(gap)} />} accent={gap > 0 ? "var(--rust)" : "var(--ok)"} sub={gap > 0 ? "need more sources" : "covered"} />
-        <StatCard label="Surplus less Debt" value={<Money value={surplusLessDebt} />} accent={surplusLessDebt >= 0 ? "var(--ok)" : "var(--rust)"} sub={surplusLessDebt >= 0 ? "cash covers it, net of repayment" : "relying on debt you must repay"} />
+        <StatCard label="Cash Available" value={<Money value={totalCash} />} accent="var(--ok)" sub="your funds — no repayment" />
+        <StatCard label="Debt (to repay)" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
+        <StatCard label="Surplus less Debt" value={<Money value={surplusLessDebt} />} accent={surplusLessDebt >= 0 ? "var(--ok)" : "var(--rust)"} sub={surplusLessDebt >= 0 ? "cash covers the need" : "short — must finance with debt"} />
         <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
       </div>
 
@@ -97,14 +97,17 @@ export default function BudgetPage() {
         <div style={{ minWidth: 110, textAlign: "right" }}><Money value={buffer} /></div>
       </div>
 
-      {/* Coverage bar */}
-      <div className="card" style={{ padding: 16, marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 8 }}>
-          <span style={{ color: "var(--muted)" }}>Funding available vs all-in need</span>
-          <span style={{ fontWeight: 700, color: gap > 0 ? "var(--rust)" : "var(--ok)" }}>{Math.round((available / (allIn || 1)) * 100)}% covered</span>
+      {/* Coverage bar — cash vs need; debt finances any shortfall */}
+      {(() => { const cashGap = allIn - totalCash; return (
+        <div className="card" style={{ padding: 16, marginTop: 14 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 8 }}>
+            <span style={{ color: "var(--muted)" }}>Cash vs all-in need{cashGap > 0 ? <> · <span style={{ color: "var(--rust)" }}>{fmt(Math.min(cashGap, totalDebt))} financed by debt</span></> : null}</span>
+            <span style={{ fontWeight: 700, color: cashGap > 0 ? "var(--rust)" : "var(--ok)" }}>cash covers {Math.round((totalCash / (allIn || 1)) * 100)}%</span>
+          </div>
+          <StackBar height={16} segments={[{ value: Math.min(totalCash, allIn), color: "var(--sage)" }, { value: Math.max(0, Math.min(cashGap, totalDebt)), color: "var(--brass)" }, { value: Math.max(0, cashGap - totalDebt), color: "#f3ddd6" }, { value: Math.max(0, -cashGap), color: "var(--sage-2)" }]} />
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}><span style={{ color: "var(--sage)" }}>■</span> cash &nbsp; <span style={{ color: "var(--brass)" }}>■</span> debt-financed &nbsp; <span style={{ color: "#d9a99a" }}>■</span> still uncovered</div>
         </div>
-        <StackBar height={16} segments={[{ value: Math.min(available, allIn), color: "var(--sage)" }, { value: Math.max(0, gap), color: "#f3ddd6" }, { value: Math.max(0, -gap), color: "var(--brass)" }]} />
-      </div>
+      ); })()}
 
       {/* Merged: Funding sources + draw order, one editable grid */}
       <SectionTitle right={!ro && orderSavings > 100 ? <button className="btn btn-sm btn-primary" onClick={() => store.setFundingRanks(recommendedIds)}>✨ Apply recommended order (save {fmt(orderSavings)})</button> : undefined}>
@@ -161,8 +164,8 @@ export default function BudgetPage() {
             <tr style={{ background: "var(--cream)" }}>
               <td style={tdC}></td>
               <td style={{ ...td, fontWeight: 700 }}>Total</td>
-              <td style={{ ...tdC, fontSize: 10.5, color: "var(--muted)", lineHeight: 1.4 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)} cash</div><div style={{ color: "var(--rust)" }}>{fmt(totalDebt)} debt</div></td>
-              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(available)}</td>
+              <td style={{ ...tdC, fontSize: 10.5, color: "var(--muted)", lineHeight: 1.4 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)} cash</div><div style={{ color: "var(--rust)" }}>−{fmt(totalDebt)} debt</div></td>
+              <td style={{ ...tdR, fontWeight: 700 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)}</div><div style={{ color: "var(--rust)", fontSize: 11 }}>−{fmt(totalDebt)}</div><div style={{ borderTop: "1px solid var(--line)", marginTop: 1 }}>{fmt(totalCash - totalDebt)} net</div></td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(drawn)}</td>
               <td colSpan={4}></td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(allIn - Math.max(0, gap))}</td>
