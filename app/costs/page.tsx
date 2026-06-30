@@ -35,7 +35,9 @@ export default function CostsPage() {
   const buffer = (t.grand * db.project.bufferPct) / 100;
   const netChange = t.grand - t.baseline;
   const paidToDate = db.costLines.reduce((a, l) => a + linePaid(db, l), 0);
-  const outstanding = Math.max(0, t.grand - paidToDate);
+  const br = budgetRange(db.costLines);
+  const remLow = Math.max(0, br.low - paidToDate);
+  const remHigh = Math.max(0, br.high - paidToDate);
   const anyUnlocked = db.costLines.some((l) => !l.locked);
   const shownLines = payFilter === "all" ? db.costLines : db.costLines.filter((l) => linePaidStatus(db, l) === payFilter);
   const groups = groupLines(shownLines, group, db);
@@ -59,21 +61,19 @@ export default function CostsPage() {
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
-        <StatCard label="Baseline Budget" value={<Money value={t.baseline} />} sub="locked original" />
-        <StatCard label="Current Total" value={<Money value={t.grand} />} accent="var(--brass-2)" sub={netChange ? `${netChange > 0 ? "▲" : "▼"} ${fmt(Math.abs(netChange))} vs baseline` : "on budget"} />
-        <StatCard label="Paid to Date" value={<Money value={paidToDate} />} accent="var(--ok)" sub={`${Math.round((paidToDate / (t.grand || 1)) * 100)}% of current`} />
-        <StatCard label="Outstanding" value={<Money value={outstanding} />} sub="not yet paid" />
+        <StatCard label="Current Cost Range" value={br.low === br.high ? <Money value={br.high} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(br.low)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(br.high)}</span>} accent="var(--brass-2)" sub="low – high" />
+        <StatCard label="Paid" value={<Money value={paidToDate} />} accent="var(--ok)" sub={`${Math.round((paidToDate / (br.high || 1)) * 100)}% of high`} />
+        <StatCard label="Remaining" value={remLow === remHigh ? <Money value={remHigh} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(remLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(remHigh)}</span>} sub="cost − paid" />
         <StatCard label="Change Orders" value={<Money value={db.costLines.reduce((a, l) => a + approvedChanges(l), 0)} />} accent="var(--rust)" sub="approved adds" />
         <StatCard label="Savings Found" value={<Money value={db.costLines.reduce((a, l) => a + approvedSavings(l), 0)} />} accent="var(--ok)" sub="approved credits" />
-        <StatCard label={`+${db.project.bufferPct}% Buffer`} value={<Money value={t.grand + buffer} />} sub={`buffer ${fmt(buffer)}`} />
+        <StatCard label="Baseline" value={<Money value={t.baseline} />} sub={netChange ? `${netChange > 0 ? "▲" : "▼"} ${fmt(Math.abs(netChange))} vs current` : "on budget"} />
       </div>
 
-      {(() => { const br = budgetRange(db.costLines); return br.low !== br.high ? (
-        <div className="card" style={{ padding: "10px 14px", marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13, borderLeft: "3px solid var(--sage)" }}>
-          <span>📊 <strong>Budget range (low – high):</strong> <strong style={{ color: "var(--ink)" }}>{fmt(br.low)} – {fmt(br.high)}</strong></span>
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>🔒 Locked lines are fixed (counted in both ends); unlocked estimates contribute their low–high. The Current Total stat uses the high end.</span>
+      {br.low !== br.high && (
+        <div className="card" style={{ padding: "9px 14px", marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12, color: "var(--muted)", borderLeft: "3px solid var(--sage)" }}>
+          🔒 Locked lines are fixed (counted in both ends of the range); unlocked estimates contribute their low–high spread. Lock a line to pin it.
         </div>
-      ) : null; })()}
+      )}
 
       {anyUnlocked && !ro && (
         <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderLeft: "3px solid var(--brass)" }}>
@@ -191,17 +191,22 @@ function AddCostLine() {
   };
   const valid = name.trim() && trade && (mode === "agreed" ? Number(price) > 0 : Number(low) > 0 && Number(high) >= Number(low));
 
+  const factor = markupModel === "passthrough" ? 1 + markupPct / 100 : 1;
   const submit = () => {
     if (!valid || !trade) return;
     const today = new Date().toISOString().slice(0, 10);
-    store.addCostLine({
+    store.addCostLine(mode === "agreed" ? {
+      // Agreed with the vendor → created already locked (changes via change order).
       name: name.trim(), tradeId, category: trade.category, owner, roomIds: [],
-      markupModel, markupPct,
-      status: mode === "agreed" ? "contracted" : "allowance",
-      history: mode === "agreed"
-        ? [{ label: "Agreed price", date: today, amount: Number(price) }]
-        : [{ label: "Working budget", date: today, amount: Number(high) }],
-      ...(mode === "range" ? { allowanceLow: Number(low), allowanceHigh: Number(high) } : {}),
+      markupModel, markupPct, status: "contracted",
+      locked: true, lockedCost: Number(price), baseline: Number(price) * factor, lockedAt: today, lockedBy: store.session.displayName,
+      history: [{ label: "Agreed (locked)", date: today, amount: Number(price) }],
+    } : {
+      // Estimate range → unlocked allowance; lock it once a price is agreed.
+      name: name.trim(), tradeId, category: trade.category, owner, roomIds: [],
+      markupModel, markupPct, status: "allowance",
+      allowanceLow: Number(low), allowanceHigh: Number(high),
+      history: [{ label: "Working budget", date: today, amount: Number(high) }],
     });
     setName(""); setPrice(""); setLow(""); setHigh(""); setOpen(false);
   };
@@ -213,11 +218,11 @@ function AddCostLine() {
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <strong style={{ fontSize: 14, color: "var(--walnut)" }}>Add a cost line item</strong>
         <div style={{ display: "inline-flex", gap: 4, background: "var(--cream-2)", padding: 3, borderRadius: 8 }}>
-          {([["agreed", "Agreed price"], ["range", "Range (low/high)"]] as const).map(([v, lbl]) => (
+          {([["agreed", "🔒 Locked (agreed)"], ["range", "Estimate (low/high)"]] as const).map(([v, lbl]) => (
             <button key={v} onClick={() => setMode(v)} className="btn btn-sm" style={mode === v ? { background: "var(--walnut)", color: "#fff" } : { background: "transparent", border: "none" }}>{lbl}</button>
           ))}
         </div>
-        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{mode === "agreed" ? "Price agreed with the vendor." : "A range we haven't pinned yet (allowance)."}</span>
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{mode === "agreed" ? "Price agreed with the vendor — created locked (draw-ready)." : "A low/high range we haven't pinned yet — lock it once agreed."}</span>
       </div>
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -360,8 +365,13 @@ function groupLines(lines: CostLine[], group: GroupBy, db: ReturnType<typeof use
 function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first: boolean; onAi: () => void }) {
   const store = useStore();
   const db = store.db;
+  const role = store.session.role;
   const [open, setOpen] = useState(false);
   const net = approvedNetChange(line);
+  const locked = isLocked(line);
+  const paid = linePaid(db, line);
+  const remaining = lineRemaining(db, line);
+  const canLock = !ro && (role === "builder" || role === "full_admin");
   const sched = db.schedule.filter((s) => s.tradeId === line.tradeId && s.kind !== "milestone");
   const schedWindow = sched.length ? (() => {
     const f = (d: string) => new Date(`${d}T00:00:00`).toLocaleString("en-US", { month: "short", day: "numeric" });
@@ -386,24 +396,22 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
             {schedWindow && <> · <span style={{ color: "var(--sage-2)" }}>🗓 {schedWindow}</span></>}
           </div>
         </div>
-        {net !== 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: net > 0 ? "var(--rust)" : "var(--ok)" }}>{net > 0 ? "▲" : "▼"} {fmt(Math.abs(net))}</span>}
-        <div style={{ textAlign: "right", minWidth: 104 }}>
-          {isLocked(line) ? (
-            <>
-              <div style={{ fontWeight: 700, fontSize: 14.5 }}><Money value={lineCurrent(line)} /></div>
-              <div style={{ fontSize: 10.5, color: "var(--ok)" }}>🔒 locked</div>
-            </>
-          ) : lineHasRange(line) ? (
-            <>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{fmt(lineLow(line))}–{fmt(lineHigh(line))}</div>
-              <div style={{ fontSize: 10.5, color: "var(--brass-2)" }}>estimate range</div>
-            </>
+        <div style={{ display: "flex", gap: 6, alignItems: "flex-end", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <Mini label="Low" value={locked ? "—" : fmt(lineLow(line))} dim={locked} />
+          <Mini label="High" value={locked ? "—" : fmt(lineHigh(line))} dim={locked} />
+          {locked ? (
+            <Mini label="Locked" value={fmt(lineCurrent(line))} accent="var(--ok)" prefix="🔒" />
+          ) : canLock ? (
+            <div style={{ minWidth: 64, textAlign: "right" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--muted)" }}>Locked</div>
+              <button className="btn btn-sm" style={{ padding: "1px 7px", marginTop: 1 }} onClick={(e) => { e.stopPropagation(); setOpen(true); }}>🔒 Lock</button>
+            </div>
           ) : (
-            <>
-              <div style={{ fontWeight: 700, fontSize: 14.5 }}><Money value={lineCurrent(line)} /></div>
-              {net !== 0 && <div style={{ fontSize: 11, color: "var(--muted)" }}>base {fmt(lineBaseline(line))}</div>}
-            </>
+            <Mini label="Locked" value="—" dim />
           )}
+          <span style={{ width: 1, height: 30, background: "var(--line)" }} />
+          <Mini label="Paid" value={fmt(paid)} accent={paid > 0 ? "var(--ok)" : undefined} dim={paid === 0} />
+          <Mini label="Remaining" value={fmt(remaining)} accent={remaining > 0 ? "var(--brass-2)" : "var(--ok)"} />
         </div>
       </div>
 
@@ -666,6 +674,16 @@ function PaidPill({ line }: { line: CostLine }) {
   if (st === "paid") return <Pill color="#fff" bg="var(--ok)">✓ Paid</Pill>;
   if (st === "partial") return <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Part-paid</Pill>;
   return null;
+}
+
+// Compact labeled field used in the structured cost row.
+function Mini({ label, value, accent, dim, prefix }: { label: string; value: string; accent?: string; dim?: boolean; prefix?: string }) {
+  return (
+    <div style={{ minWidth: 60, textAlign: "right" }}>
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".04em", textTransform: "uppercase", color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: dim ? "var(--sc-unset)" : (accent ?? "var(--ink)"), whiteSpace: "nowrap" }}>{prefix ? `${prefix} ` : ""}{value}</div>
+    </div>
+  );
 }
 
 function Cell({ label, children, accent }: { label: string; children: React.ReactNode; accent?: string }) {

@@ -600,6 +600,9 @@ class Store {
     this.mutate((db) => {
       const d = db.draws.find((x) => x.id === drawId);
       if (!d || d.status === "paid") return;
+      // Only locked cost lines can be drawn against — pricing must be agreed first.
+      const line = db.costLines.find((l) => l.id === lineId);
+      if (!line?.locked) return;
       if (!d.allocations.some((a) => a.lineId === lineId)) d.allocations.push({ lineId, mode, value });
     });
   }

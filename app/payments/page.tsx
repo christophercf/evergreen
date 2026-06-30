@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
-import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid } from "@/lib/data/money";
+import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid, isLocked } from "@/lib/data/money";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
@@ -61,7 +61,7 @@ export default function PaymentsPage() {
         <div>
           <SectionTitle>Budget</SectionTitle>
           <div className="card" style={{ padding: 10, maxHeight: "74vh", overflow: "auto" }}>
-            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "Drag a line into a draw → · click to see its scope"}</div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "Only 🔒 locked lines can be drawn. Drag a locked line into a draw → · click to see its scope."}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {lines.map((l) => <BudgetLine key={l.id} line={l} ro={ro} dragLine={dragLine} setDragLine={setDragLine} />)}
             </div>
@@ -94,18 +94,32 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
   const allocUnpaid = Math.max(0, drawn - paid); // allocated to a draw but not yet paid
   const unpaidLeft = lineUnpaid(db, line);
   const scope = lineScope(db, line);
+  const locked = isLocked(line);
+  const canDrag = locked && !ro;
+  const [hover, setHover] = useState(false);
 
   return (
     <div
-      draggable={!ro}
-      onDragStart={(e) => { e.dataTransfer.setData("text/plain", line.id); setDragLine(line.id); }}
+      draggable={canDrag}
+      onDragStart={(e) => { if (!canDrag) { e.preventDefault(); return; } e.dataTransfer.setData("text/plain", line.id); setDragLine(line.id); }}
       onDragEnd={() => setDragLine(null)}
+      onMouseEnter={() => !locked && setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={!locked && !ro ? "🔒 Lock in pricing with this vendor before assigning a draw (Building Costs → Lock cost)." : undefined}
       className="card"
-      style={{ padding: "8px 10px", cursor: ro ? "default" : "grab", opacity: dragLine === line.id ? 0.5 : 1, background: "var(--paper)" }}>
+      style={{ position: "relative", padding: "8px 10px", cursor: canDrag ? "grab" : (locked ? "default" : "not-allowed"), opacity: dragLine === line.id ? 0.5 : locked ? 1 : 0.62, background: "var(--paper)", borderLeft: locked ? "3px solid var(--ok)" : "3px solid var(--line)" }}>
+      {/* floating note for non-locked lines */}
+      {!locked && hover && !ro && (
+        <div style={{ position: "absolute", left: 8, right: 8, bottom: "100%", marginBottom: 4, zIndex: 5, background: "var(--walnut)", color: "#fff", fontSize: 11.5, padding: "6px 9px", borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
+          🔒 Lock in pricing with this vendor before assigning a draw.
+          <Link href="/costs" style={{ color: "#ffe6b8", marginLeft: 6, fontWeight: 600 }}>Lock it →</Link>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {!ro && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
+        {canDrag && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
         <button onClick={() => setOpen((v) => !v)} title="Show scope" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
         <span style={{ fontWeight: 600, fontSize: 12.5, flex: 1 }}>{line.name}</span>
+        {locked ? <Pill color="#fff" bg="var(--ok)">🔒 Locked</Pill> : <Pill color="var(--muted)">not locked</Pill>}
       </div>
       <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36, flexWrap: "wrap" }}>
         <span>Total <strong style={{ color: "var(--ink)" }}>{fmt(total)}</strong></span>
