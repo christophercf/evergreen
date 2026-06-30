@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { accessFor, type FundingSource } from "@/lib/data/types";
-import { totals, fmt } from "@/lib/data/money";
+import { totals, fmt, budgetRange } from "@/lib/data/money";
 
 // Marginal cost of fully tapping a source (as a rate) — used to rank cheapest-first.
 function marginalCost(f: FundingSource): number {
@@ -28,7 +28,13 @@ export default function BudgetPage() {
 
   const t = totals(db.costLines);
   const buffer = (t.grand * db.project.bufferPct) / 100;
-  const allIn = t.grand + buffer;
+  // All-in need is a RANGE, pulling the low–high cost range from Building Costs + buffer.
+  const costRange = budgetRange(db.costLines);
+  const bf = 1 + db.project.bufferPct / 100;
+  const allInLow = costRange.low * bf;
+  const allInHigh = costRange.high * bf;
+  const allIn = allInHigh; // conservative (high end) for coverage / draw-plan math
+  const hasRange = Math.round(allInLow) !== Math.round(allInHigh);
 
   const available = db.funding.reduce((a, f) => a + f.amount, 0);
   const drawn = db.funding.reduce((a, f) => a + f.drawn, 0);
@@ -83,7 +89,7 @@ export default function BudgetPage() {
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
-        <StatCard label="All-in Need" value={<Money value={allIn} />} sub={`costs ${fmt(t.grand)} + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
+        <StatCard label="All-in Need" value={hasRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(allInLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(allInHigh)}</span> : <Money value={allInHigh} />} sub={`cost range + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
         <StatCard label="Funding" value={<Money value={funding} />} accent="var(--ok)" sub="non-debt sources" />
         <StatCard label="Debt" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
         <StatCard label="Surplus" value={<Money value={surplus} />} accent={surplus >= 0 ? "var(--ok)" : "var(--rust)"} sub="funding less debt" />
@@ -102,13 +108,13 @@ export default function BudgetPage() {
       </div>
 
       {/* Coverage bar — funding (non-debt) vs all-in need */}
-      {(() => { const fundGap = allIn - funding; return (
+      {(() => { const fundGap = allInHigh - funding; const covHigh = Math.round((funding / (allInHigh || 1)) * 100); const covLow = Math.round((funding / (allInLow || 1)) * 100); return (
         <div className="card" style={{ padding: 16, marginTop: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 8 }}>
-            <span style={{ color: "var(--muted)" }}>Funding vs all-in need</span>
-            <span style={{ fontWeight: 700, color: fundGap > 0 ? "var(--rust)" : "var(--ok)" }}>funding covers {Math.round((funding / (allIn || 1)) * 100)}%</span>
+            <span style={{ color: "var(--muted)" }}>Funding vs all-in need {hasRange ? `(${fmt(allInLow)} – ${fmt(allInHigh)})` : ""}</span>
+            <span style={{ fontWeight: 700, color: fundGap > 0 ? "var(--rust)" : "var(--ok)" }}>funding covers {hasRange ? `${covHigh}–${covLow}%` : `${covHigh}%`}</span>
           </div>
-          <StackBar height={16} segments={[{ value: Math.min(funding, allIn), color: "var(--sage)" }, { value: Math.max(0, fundGap), color: "#f3ddd6" }, { value: Math.max(0, -fundGap), color: "var(--sage-2)" }]} />
+          <StackBar height={16} segments={[{ value: Math.min(funding, allInHigh), color: "var(--sage)" }, { value: Math.max(0, fundGap), color: "#f3ddd6" }, { value: Math.max(0, -fundGap), color: "var(--sage-2)" }]} />
         </div>
       ); })()}
 
