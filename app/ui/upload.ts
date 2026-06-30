@@ -2,6 +2,28 @@
 // data URL so they fit in the single-row mock/Supabase state without ballooning.
 // Non-image files fall back to a raw data URL (use Drive links for large files).
 
+import { IS_SUPABASE } from "@/lib/data/config";
+
+// Store a file for an artifact. In Supabase mode, uploads to Storage and returns
+// a public URL (so large PDFs/drawings work). Otherwise (mock, or if storage
+// isn't configured / fails), keeps it inline as a data URL (images compressed).
+export async function storeFile(file: File): Promise<{ fileUrl: string; fileName: string }> {
+  if (IS_SUPABASE) {
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.ok && j.url) return { fileUrl: j.url as string, fileName: file.name };
+      }
+    } catch {
+      /* fall through to inline */
+    }
+  }
+  return { fileUrl: await fileToDataURL(file), fileName: file.name };
+}
+
 export async function fileToDataURL(file: File, maxDim = 1500, quality = 0.72): Promise<string> {
   if (!file.type.startsWith("image/")) return rawDataURL(file);
   const raw = await rawDataURL(file);

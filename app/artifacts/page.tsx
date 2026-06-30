@@ -6,7 +6,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import { accessFor, canSeeArtifact, ARTIFACT_KIND_LABEL, type Artifact, type ArtifactKind, type ArtifactVersion, type Role } from "@/lib/data/types";
 import { tradeName } from "@/lib/data/money";
-import { fileToDataURL, driveViewLink } from "../ui/upload";
+import { fileToDataURL, storeFile, driveViewLink } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
 import { FilePreview, FileViewerModal, currentVersion } from "./file-view";
@@ -82,13 +82,16 @@ export default function ArtifactsPage() {
 
       {KIND_ORDER.map((k) => {
         const items = byKind(k);
-        if (!items.length) return null;
+        if (!items.length && ro) return null; // view-only: hide empty sections
         return (
           <section key={k} style={{ marginTop: 18 }}>
             <SectionTitle>{ARTIFACT_KIND_LABEL[k]}</SectionTitle>
             {KIND_HINT[k] && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: -6, marginBottom: 8 }}>{KIND_HINT[k]}</div>}
-            {k === "permit" && <GeneralPermitNote items={items} />}
-            {layout === "cards" ? (
+            {k === "permit" && items.length > 0 && <GeneralPermitNote items={items} />}
+            {!ro && <div style={{ marginBottom: 10 }}><SectionAdder kind={k} /></div>}
+            {items.length === 0 ? (
+              <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No {ARTIFACT_KIND_LABEL[k].toLowerCase()} yet — use “＋ Add” above to define one on the fly.</div>
+            ) : layout === "cards" ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px,1fr))", gap: 12 }}>
                 {items.map((a) => <ArtifactCard key={a.id} a={a} ro={ro} isAdmin={isAdmin} onOpen={() => setViewer({ id: a.id })} onView={() => setFileView(a.id)} />)}
               </div>
@@ -127,7 +130,8 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
   const nextLabel = () => `v${(a.versions?.length ?? (a.url || a.version ? 1 : 0)) + 1}`;
   const { over, dropProps } = useFileDrop(async (files) => {
     const f = files[0];
-    store.addArtifactVersion(a.id, { label: nextLabel(), fileUrl: await fileToDataURL(f), fileName: f.name }, by);
+    const { fileUrl, fileName } = await storeFile(f);
+    store.addArtifactVersion(a.id, { label: nextLabel(), fileUrl, fileName }, by);
     setHist(true);
   }, { disabled: ro });
 
@@ -378,8 +382,8 @@ function NewVersion({ artifactId }: { artifactId: string }) {
   return (
     <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", background: "var(--paper)", padding: 6, borderRadius: 6 }}>
       <input placeholder="New version label" value={label} onChange={(e) => setLabel(e.target.value)} style={{ width: 130, fontSize: 11.5 }} />
-      <input ref={fileRef} type="file" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add({ fileUrl: await fileToDataURL(f), fileName: f.name }); }} />
-      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add({ fileUrl: await fileToDataURL(f), fileName: f.name }); }} />
+      <input ref={fileRef} type="file" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add(await storeFile(f)); }} />
+      <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) add(await storeFile(f)); }} />
       <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆ File</button>
       <button className="btn btn-sm" title="Take a photo" onClick={() => camRef.current?.click()}>📷</button>
       <input placeholder="…or Google Drive link" value={drive} onChange={(e) => setDrive(e.target.value)} style={{ flex: 1, minWidth: 120, fontSize: 11.5 }} />
@@ -388,31 +392,50 @@ function NewVersion({ artifactId }: { artifactId: string }) {
   );
 }
 
-function AddArtifact() {
+// Compact per-section adder: a "＋ Add" button (and a camera for permits) that
+// opens an inline form scoped to the section's kind.
+function SectionAdder({ kind }: { kind: ArtifactKind }) {
+  return <AddArtifact presetKind={kind} />;
+}
+
+function AddArtifact({ presetKind }: { presetKind?: ArtifactKind }) {
   const store = useStore();
   const db = store.db;
   const by = store.session.displayName;
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<ArtifactKind>("drawing");
+  const [kind, setKind] = useState<ArtifactKind>(presetKind ?? "drawing");
   const [source, setSource] = useState("");
   const [drive, setDrive] = useState("");
   const [fileData, setFileData] = useState<{ url: string; name: string } | null>(null);
+  const [busy, setBusy] = useState(false);
   const [trade, setTrade] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const camRef = useRef<HTMLInputElement>(null);
   const trades = Array.from(new Set(db.scope.filter((c) => c.status === "in").map((c) => c.tradeId)));
+  const isImg = (n: string, u: string) => u.startsWith("data:image") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(n);
 
-  const loadFile = async (f: File) => { setFileData({ url: await fileToDataURL(f), name: f.name }); setName((n) => n || f.name.replace(/\.[^.]+$/, "")); setOpen(true); };
+  const loadFile = async (f: File) => { setBusy(true); setOpen(true); const s = await storeFile(f); setFileData({ url: s.fileUrl, name: s.fileName }); setName((n) => n || f.name.replace(/\.[^.]+$/, "")); setBusy(false); };
   const { over, dropProps } = useFileDrop((files) => void loadFile(files[0]));
 
-  if (!open) return (
-    <div {...dropProps} onClick={() => setOpen(true)}
-      style={{ marginTop: 14, padding: "16px 18px", borderRadius: 12, border: `2px dashed ${over ? "var(--sage)" : "var(--line)"}`, background: over ? "var(--sage-tint)" : "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: over ? "var(--walnut)" : "var(--muted)" }}>
-      <span style={{ fontSize: 20 }}>⬆</span>
-      <span style={{ fontSize: 13 }}><strong style={{ color: "var(--ink)" }}>＋ Add document</strong> — drag &amp; drop a file or photo here, or click to browse.</span>
-    </div>
-  );
+  if (!open) {
+    if (presetKind) {
+      return (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadFile(f); }} />
+          {presetKind === "permit" && <button className="btn btn-sm" title="Take a photo of a posted permit" onClick={() => camRef.current?.click()}>📷</button>}
+          <button className="btn btn-sm btn-primary" onClick={() => setOpen(true)}>＋ Add</button>
+        </span>
+      );
+    }
+    return (
+      <div {...dropProps} onClick={() => setOpen(true)}
+        style={{ marginTop: 14, padding: "16px 18px", borderRadius: 12, border: `2px dashed ${over ? "var(--sage)" : "var(--line)"}`, background: over ? "var(--sage-tint)" : "var(--paper)", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, color: over ? "var(--walnut)" : "var(--muted)" }}>
+        <span style={{ fontSize: 20 }}>⬆</span>
+        <span style={{ fontSize: 13 }}><strong style={{ color: "var(--ink)" }}>＋ Add document</strong> — drag &amp; drop a file or photo here, or click to browse. Pick any type &amp; name it on the fly.</span>
+      </div>
+    );
+  }
 
   const save = () => {
     if (!name.trim()) return;
@@ -428,38 +451,42 @@ function AddArtifact() {
   };
 
   return (
-    <div className="card" {...dropProps} style={{ padding: 14, marginTop: 14, display: "flex", flexDirection: "column", gap: 8, outline: over ? "2px dashed var(--sage)" : "none" }}>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input placeholder="Document name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
-        <select value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind)}>
-          {KIND_ORDER.map((k) => <option key={k} value={k}>{ARTIFACT_KIND_LABEL[k]}</option>)}
-        </select>
-        <input placeholder="Source (architect, surveyor…)" value={source} onChange={(e) => setSource(e.target.value)} style={{ width: 180 }} />
+    <div className="card" {...dropProps} style={{ padding: 14, marginTop: presetKind ? 0 : 14, display: "flex", flexDirection: "column", gap: 8, outline: over ? "2px dashed var(--sage)" : "none" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {presetKind && <strong style={{ fontSize: 13, color: "var(--walnut)" }}>＋ New {ARTIFACT_KIND_LABEL[presetKind]}</strong>}
+        <input placeholder="Document name" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        {!presetKind && (
+          <select value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind)}>
+            {KIND_ORDER.map((k) => <option key={k} value={k}>{ARTIFACT_KIND_LABEL[k]}</option>)}
+          </select>
+        )}
+        <input placeholder="Source (architect, surveyor…)" value={source} onChange={(e) => setSource(e.target.value)} style={{ width: 170 }} />
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) setFileData({ url: await fileToDataURL(f), name: f.name }); }} />
-        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={async (e) => { const f = e.target.files?.[0]; if (f) setFileData({ url: await fileToDataURL(f), name: f.name }); }} />
+        <input ref={fileRef} type="file" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadFile(f); }} />
+        <input ref={camRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) void loadFile(f); }} />
         <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆ Upload file</button>
         <button className="btn btn-sm" title="Take a photo with your phone camera" onClick={() => camRef.current?.click()}>📷 Take photo</button>
+        {busy && <span style={{ fontSize: 12, color: "var(--muted)" }}>Uploading…</span>}
         {fileData && (
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--sage-tint)", borderRadius: 8, padding: "3px 8px 3px 3px", fontSize: 12 }}>
-            {fileData.url.startsWith("data:image") ? <img src={fileData.url} alt="" style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 5 }} /> : <span style={{ fontSize: 16, padding: "0 4px" }}>📎</span>}
-            <strong style={{ maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileData.name}</strong>
+            {isImg(fileData.name, fileData.url) ? <img src={fileData.url} alt="" style={{ width: 30, height: 30, objectFit: "cover", borderRadius: 5 }} /> : <span style={{ fontSize: 16, padding: "0 4px" }}>📎</span>}
+            <strong style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileData.name}</strong>
             <button className="btn btn-sm" style={{ color: "var(--rust)", padding: "0 5px" }} onClick={() => setFileData(null)}>✕</button>
           </span>
         )}
         <span style={{ color: "var(--muted)", fontSize: 12 }}>or</span>
-        <input placeholder="Google Drive link" value={drive} onChange={(e) => setDrive(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+        <input placeholder="Google Drive link" value={drive} onChange={(e) => setDrive(e.target.value)} style={{ flex: 1, minWidth: 150 }} />
         <select value={trade} onChange={(e) => setTrade(e.target.value)} title="Restrict to a trade (required for signed contracts)">
           <option value="">{kind === "contract" ? "— party trade —" : "all trades"}</option>
           {trades.map((t) => <option key={t} value={t}>{tradeName(db, t)}</option>)}
         </select>
       </div>
       {kind === "contract" && <div style={{ fontSize: 11.5, color: "var(--rust)" }}>Signed contracts are visible only to the builder, owner and the selected party trade.</div>}
-      {kind === "permit" && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>📷 Permits are posted on the door — use “Take photo” to snap it. The General Construction Permit usually covers the project, so per-trade one-offs aren’t needed.</div>}
+      {kind === "permit" && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>📷 Permits are posted on the door — use “Take photo” to snap it. The General Construction Permit usually covers the project.</div>}
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="btn btn-primary btn-sm" disabled={!name.trim()} onClick={save}>Add document</button>
-        <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+        <button className="btn btn-primary btn-sm" disabled={!name.trim() || busy} onClick={save}>Add document</button>
+        <button className="btn btn-sm" onClick={() => { setOpen(false); setFileData(null); }}>Cancel</button>
       </div>
     </div>
   );

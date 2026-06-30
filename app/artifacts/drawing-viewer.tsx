@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { Pill } from "../ui/bits";
-import { fileToDataURL, driveViewLink } from "../ui/upload";
+import { fileToDataURL, storeFile, driveViewLink } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import { tradeName } from "@/lib/data/money";
 import type { Artifact, DrawingPin, PinKind } from "@/lib/data/types";
@@ -52,7 +52,7 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
   const { over: dropOver, dropProps } = useFileDrop(async (files) => {
     if (!a || !canEdit) return;
     const f = files[0];
-    store.addArtifactVersion(a.id, { label: `v${(a.versions?.length ?? 0) + 1}`, fileUrl: await fileToDataURL(f), fileName: f.name }, by);
+    { const s = await storeFile(f); store.addArtifactVersion(a.id, { label: `v${(a.versions?.length ?? 0) + 1}`, fileUrl: s.fileUrl, fileName: s.fileName }, by); }
     setBroken(false);
   }, { accept: (f) => f.type.startsWith("image/"), disabled: !canEdit });
 
