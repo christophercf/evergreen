@@ -25,6 +25,7 @@ export default function CostsPage() {
   const access = accessFor(user, role, "costs");
   const [group, setGroup] = useState<GroupBy>("category");
   const [aiFor, setAiFor] = useState<string | null>(null);
+  const [payFilter, setPayFilter] = useState<"all" | "paid" | "partial" | "unpaid">("all");
 
   if (access === "none") return <NoAccess module="Building Costs" />;
   const ro = access !== "edit";
@@ -32,8 +33,11 @@ export default function CostsPage() {
   const t = totals(db.costLines);
   const buffer = (t.grand * db.project.bufferPct) / 100;
   const netChange = t.grand - t.baseline;
+  const paidToDate = db.costLines.reduce((a, l) => a + linePaid(db, l), 0);
+  const outstanding = Math.max(0, t.grand - paidToDate);
   const anyUnlocked = db.costLines.some((l) => !l.locked);
-  const groups = groupLines(db.costLines, group, db);
+  const shownLines = payFilter === "all" ? db.costLines : db.costLines.filter((l) => linePaidStatus(db, l) === payFilter);
+  const groups = groupLines(shownLines, group, db);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const allCollapsed = groups.length > 0 && groups.every((g) => collapsed.has(g.key));
   const toggleGroup = (k: string) => setCollapsed((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
@@ -56,6 +60,8 @@ export default function CostsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Baseline Budget" value={<Money value={t.baseline} />} sub="locked original" />
         <StatCard label="Current Total" value={<Money value={t.grand} />} accent="var(--brass-2)" sub={netChange ? `${netChange > 0 ? "▲" : "▼"} ${fmt(Math.abs(netChange))} vs baseline` : "on budget"} />
+        <StatCard label="Paid to Date" value={<Money value={paidToDate} />} accent="var(--ok)" sub={`${Math.round((paidToDate / (t.grand || 1)) * 100)}% of current`} />
+        <StatCard label="Outstanding" value={<Money value={outstanding} />} sub="not yet paid" />
         <StatCard label="Change Orders" value={<Money value={db.costLines.reduce((a, l) => a + approvedChanges(l), 0)} />} accent="var(--rust)" sub="approved adds" />
         <StatCard label="Savings Found" value={<Money value={db.costLines.reduce((a, l) => a + approvedSavings(l), 0)} />} accent="var(--ok)" sub="approved credits" />
         <StatCard label={`+${db.project.bufferPct}% Buffer`} value={<Money value={t.grand + buffer} />} sub={`buffer ${fmt(buffer)}`} />
@@ -90,14 +96,18 @@ export default function CostsPage() {
       {!ro && <AddRoomCard />}
 
       <SectionTitle right={
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+          {([["all", "All"], ["paid", "✓ Paid"], ["partial", "◐ Part"], ["unpaid", "Unpaid"]] as const).map(([k, lbl]) => (
+            <button key={k} className="btn btn-sm" onClick={() => setPayFilter(k)} style={{ background: payFilter === k ? "var(--sage-tint)" : undefined, fontWeight: payFilter === k ? 700 : 400 }}>{lbl}</button>
+          ))}
+          <span style={{ width: 1, height: 16, background: "var(--line)" }} />
           <button className="btn btn-sm" onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</button>
           {(["category", "trade", "owner"] as GroupBy[]).map((g) => (
             <button key={g} className="btn btn-sm" onClick={() => setGroup(g)} style={{ background: group === g ? "var(--sage-tint)" : undefined, fontWeight: 700 }}>by {g}</button>
           ))}
         </div>
       }>
-        Cost Lines
+        Cost Lines{payFilter !== "all" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--muted)" }}> · {shownLines.length} {payFilter}</span>}
       </SectionTitle>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
