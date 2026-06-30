@@ -43,17 +43,22 @@ export default function BudgetPage() {
     const cost = f.amount ? (use / f.amount) * marginalCost(f) : 0;
     return { f, use, cost, rate: marginalRate(f) };
   });
-  const planCost = plan.reduce((a, p) => a + p.cost, 0);
+  const recommendedCost = plan.reduce((a, p) => a + p.cost, 0);
+  void plan;
 
-  // Worst-case: same need but most-expensive-first, for contrast.
-  const rankedWorst = [...db.funding].sort((a, b) => marginalRate(b) - marginalRate(a));
-  let need2 = allIn;
-  const worstCost = rankedWorst.reduce((a, f) => {
-    const use = Math.max(0, Math.min(f.amount, need2));
-    need2 -= use;
-    return a + (f.amount ? (use / f.amount) * marginalCost(f) : 0);
-  }, 0);
-  const savings = worstCost - planCost;
+  // The plan in the OWNER'S current draw order (by liquidityRank) — drives the grid.
+  const orderedManual = [...db.funding].sort((a, b) => a.liquidityRank - b.liquidityRank);
+  let needM = allIn;
+  const manualTapped = new Map<string, number>();
+  let manualCost = 0;
+  for (const f of orderedManual) {
+    const use = Math.max(0, Math.min(f.amount, needM));
+    needM -= use;
+    manualTapped.set(f.id, use);
+    manualCost += f.amount ? (use / f.amount) * marginalCost(f) : 0;
+  }
+  const orderSavings = manualCost - recommendedCost;
+  const recommendedIds = [...db.funding].sort((a, b) => marginalRate(a) - marginalRate(b) || a.liquidityRank - b.liquidityRank).map((f) => f.id);
 
   return (
     <>
@@ -67,7 +72,7 @@ export default function BudgetPage() {
         <StatCard label="All-in Need" value={<Money value={allIn} />} sub={`costs ${fmt(t.grand)} + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
         <StatCard label="Funding Available" value={<Money value={available} />} sub={`${fmt(drawn)} drawn so far`} />
         <StatCard label={gap > 0 ? "Funding Gap" : "Surplus"} value={<Money value={Math.abs(gap)} />} accent={gap > 0 ? "var(--rust)" : "var(--ok)"} sub={gap > 0 ? "need more sources" : "covered"} />
-        <StatCard label="Cost of Capital" value={<Money value={planCost} />} sub="on the recommended plan" />
+        <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
       </div>
 
       {/* Buffer control */}
@@ -90,77 +95,67 @@ export default function BudgetPage() {
         <StackBar height={16} segments={[{ value: Math.min(available, allIn), color: "var(--sage)" }, { value: Math.max(0, gap), color: "#f3ddd6" }, { value: Math.max(0, -gap), color: "var(--brass)" }]} />
       </div>
 
-      {/* Advisory */}
-      <SectionTitle>Recommended Draw Order</SectionTitle>
-      <div className="card" style={{ padding: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-          <span style={{ color: "var(--brass)" }}>✨</span>
-          <span style={{ fontSize: 13.5 }}>
-            Tapping cheapest-first costs <strong><Money value={planCost} /></strong> to access funds.
-            {savings > 100 && <> That’s <strong style={{ color: "var(--ok)" }}><Money value={savings} /></strong> less than funding worst-first.</>}
-          </span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {plan.filter((p) => p.use > 0).map((p, i) => (
-            <div key={p.f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 11px", borderRadius: 8, background: i % 2 ? "var(--cream)" : "transparent" }}>
-              <span style={{ width: 22, height: 22, borderRadius: 99, background: "var(--sage)", color: "#fff", fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{i + 1}</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{p.f.name}</div>
-                <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-                  {p.rate === 0 ? "free to access" : `${(p.rate * 100).toFixed(1)}% cost to access`}{p.f.timeframe ? ` · available ${p.f.timeframe}` : ""}
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 700 }}>{fmt(p.use)}</div>
-                {p.cost > 0 && <div style={{ fontSize: 11, color: "var(--rust)" }}>+{fmt(p.cost)} cost</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-        {gap > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--rust)" }}>⚠ Sources fall <Money value={gap} /> short of the all-in need. Add a source below or trim scope.</div>}
+      {/* Merged: Funding sources + draw order, one editable grid */}
+      <SectionTitle right={!ro && orderSavings > 100 ? <button className="btn btn-sm btn-primary" onClick={() => store.setFundingRanks(recommendedIds)}>✨ Apply recommended order (save {fmt(orderSavings)})</button> : undefined}>
+        Funding &amp; Draw Order
+      </SectionTitle>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 8 }}>
+        Sources are tapped top-down by the editable <strong>Order</strong> column. Your current order costs <strong style={{ color: "var(--ink)" }}>{fmt(manualCost)}</strong> to access{orderSavings > 100 ? <> — cheapest-first would cost <strong style={{ color: "var(--ok)" }}>{fmt(recommendedCost)}</strong>.</> : <> (cheapest-first, optimal).</>}
       </div>
-
-      {/* Funding sources editor */}
-      <SectionTitle>Funding Sources</SectionTitle>
       <div className="card" style={{ overflowX: "auto" }}>
         <table style={{ fontSize: 12.5 }}>
           <thead>
             <tr>
+              <th style={thC}>#</th>
               <th style={th}>Source</th>
               <th style={thR}>Available</th>
               <th style={thR}>Drawn</th>
               <th style={thR}>Rate</th>
               <th style={thR}>Cost to access</th>
               <th style={thR}>When</th>
-              <th style={thR}>Order</th>
+              <th style={thC}>Order</th>
+              <th style={thR}>Tapped</th>
+              <th style={thR}>Access cost</th>
               {!ro && <th style={th}></th>}
             </tr>
           </thead>
           <tbody>
-            {[...db.funding].sort((a, b) => a.liquidityRank - b.liquidityRank).map((f) => (
-              <tr key={f.id}>
-                <td style={td}>
-                  <input value={f.name} disabled={ro} onChange={(e) => store.updateFunding(f.id, { name: e.target.value })} style={cellInput(160)} />
-                  {f.note && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{f.note}</div>}
-                </td>
-                <td style={tdR}><NumCell value={f.amount} ro={ro} onChange={(v) => store.updateFunding(f.id, { amount: v })} money /></td>
-                <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
-                <td style={tdR}><NumCell value={f.rate * 100} ro={ro} onChange={(v) => store.updateFunding(f.id, { rate: v / 100 })} suffix="%" width={56} /></td>
-                <td style={tdR}><NumCell value={f.costToAccess ?? 0} ro={ro} onChange={(v) => store.updateFunding(f.id, { costToAccess: v })} money /></td>
-                <td style={tdR}><input value={f.timeframe ?? ""} disabled={ro} onChange={(e) => store.updateFunding(f.id, { timeframe: e.target.value })} style={cellInput(60)} /></td>
-                <td style={tdR}><NumCell value={f.liquidityRank} ro={ro} onChange={(v) => store.updateFunding(f.id, { liquidityRank: v })} width={42} /></td>
-                {!ro && <td style={td}><button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeFunding(f.id)}>✕</button></td>}
-              </tr>
-            ))}
+            {orderedManual.map((f, i) => {
+              const use = manualTapped.get(f.id) ?? 0;
+              const cost = f.amount ? (use / f.amount) * marginalCost(f) : 0;
+              return (
+                <tr key={f.id}>
+                  <td style={tdC}><span style={{ width: 20, height: 20, borderRadius: 99, background: use > 0 ? "var(--sage)" : "var(--cream-2)", color: use > 0 ? "#fff" : "var(--muted)", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span></td>
+                  <td style={td}>
+                    <input value={f.name} disabled={ro} onChange={(e) => store.updateFunding(f.id, { name: e.target.value })} style={cellInput(150)} />
+                    <input value={f.note ?? ""} disabled={ro} placeholder="note…" onChange={(e) => store.updateFunding(f.id, { note: e.target.value })} style={{ ...cellInput(180), fontSize: 11, fontWeight: 400, color: "var(--muted)", display: "block" }} />
+                  </td>
+                  <td style={tdR}><NumCell value={f.amount} ro={ro} onChange={(v) => store.updateFunding(f.id, { amount: v })} money /></td>
+                  <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
+                  <td style={tdR}><NumCell value={f.rate * 100} ro={ro} onChange={(v) => store.updateFunding(f.id, { rate: v / 100 })} suffix="%" width={50} /></td>
+                  <td style={tdR}><NumCell value={f.costToAccess ?? 0} ro={ro} onChange={(v) => store.updateFunding(f.id, { costToAccess: v })} money /></td>
+                  <td style={tdR}><input value={f.timeframe ?? ""} disabled={ro} onChange={(e) => store.updateFunding(f.id, { timeframe: e.target.value })} style={cellInput(56)} /></td>
+                  <td style={tdC}><NumCell value={f.liquidityRank} ro={ro} onChange={(v) => store.updateFunding(f.id, { liquidityRank: v })} width={40} /></td>
+                  <td style={tdR}><strong style={{ color: use > 0 ? "var(--ink)" : "var(--muted)" }}>{use > 0 ? fmt(use) : "—"}</strong></td>
+                  <td style={tdR}>{cost > 0 ? <span style={{ color: "var(--rust)" }}>+{fmt(cost)}</span> : <span style={{ color: "var(--muted)" }}>free</span>}</td>
+                  {!ro && <td style={td}><button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeFunding(f.id)}>✕</button></td>}
+                </tr>
+              );
+            })}
             <tr style={{ background: "var(--cream)" }}>
+              <td style={tdC}></td>
               <td style={{ ...td, fontWeight: 700 }}>Total</td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(available)}</td>
               <td style={{ ...tdR, fontWeight: 700 }}>{fmt(drawn)}</td>
-              <td colSpan={4 + (ro ? 0 : 1)}></td>
+              <td colSpan={4}></td>
+              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(allIn - Math.max(0, gap))}</td>
+              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(manualCost)}</td>
+              {!ro && <td></td>}
             </tr>
           </tbody>
         </table>
       </div>
+      {gap > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--rust)" }}>⚠ Sources fall <Money value={gap} /> short of the all-in need. Add a source below or trim scope.</div>}
       {!ro && <AddSource />}
     </>
   );
@@ -198,6 +193,8 @@ function AddSource() {
 
 const th: React.CSSProperties = { textAlign: "left", padding: "9px 10px", borderBottom: "2px solid var(--line)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" };
 const thR: React.CSSProperties = { ...th, textAlign: "right" };
+const thC: React.CSSProperties = { ...th, textAlign: "center" };
 const td: React.CSSProperties = { padding: "6px 10px", borderBottom: "1px solid var(--line)" };
 const tdR: React.CSSProperties = { ...td, textAlign: "right" };
+const tdC: React.CSSProperties = { ...td, textAlign: "center" };
 const cellInput = (w: number): React.CSSProperties => ({ width: w, border: "none", background: "transparent", padding: "2px 0", fontWeight: 600 });

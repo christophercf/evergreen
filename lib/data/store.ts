@@ -969,6 +969,12 @@ class Store {
       db.project.bufferPct = pct;
     });
   }
+  /** Set the draw order: liquidityRank = position in the given id list. */
+  setFundingRanks(orderedIds: string[]) {
+    this.mutate((db) => {
+      orderedIds.forEach((id, i) => { const f = db.funding.find((x) => x.id === id); if (f) f.liquidityRank = i + 1; });
+    });
+  }
 
   // ---- Schedule (Gantt) ----
   setScheduleStatus(id: string, status: ScheduleStatus) {
