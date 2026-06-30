@@ -36,8 +36,9 @@ export default function BudgetPage() {
   // Cash vs debt: debt must be repaid, so the true surplus excludes it.
   const totalDebt = db.funding.filter((f) => f.fundType === "debt").reduce((a, f) => a + f.amount, 0);
   const totalCash = available - totalDebt;
-  const surplus = available - allIn;            // negative ⇒ funding gap
-  const surplusLessDebt = surplus - totalDebt;  // = cash − need: your position net of money you must repay
+  // Funding = non-debt only; debt is always a negative; Surplus = Funding − Debt.
+  const funding = totalCash;
+  const surplus = funding - totalDebt;
   // Debt obligations: what's been drawn (borrowed) vs repaid.
   const debtItems = db.funding.filter((f) => f.fundType === "debt");
   const debtDrawn = debtItems.reduce((a, f) => a + f.drawn, 0);
@@ -75,14 +76,17 @@ export default function BudgetPage() {
       <PageHeader
         title="Budget & Financing"
         subtitle="Owner-only. Pulls the all-in cost from Building Costs, then helps you fund it for the least carrying cost — spend free cash before high-interest debt."
-        right={<Pill color="#fff" bg="var(--brass)">Owner only</Pill>}
+        right={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {!ro && <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo the last budget change">↶ Undo</button>}
+          <Pill color="#fff" bg="var(--brass)">Owner only</Pill>
+        </div>}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="All-in Need" value={<Money value={allIn} />} sub={`costs ${fmt(t.grand)} + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
-        <StatCard label="Cash Available" value={<Money value={totalCash} />} accent="var(--ok)" sub="your funds — no repayment" />
-        <StatCard label="Debt (to repay)" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
-        <StatCard label="Surplus less Debt" value={<Money value={surplusLessDebt} />} accent={surplusLessDebt >= 0 ? "var(--ok)" : "var(--rust)"} sub={surplusLessDebt >= 0 ? "cash covers the need" : "short — must finance with debt"} />
+        <StatCard label="Funding" value={<Money value={funding} />} accent="var(--ok)" sub="non-debt sources" />
+        <StatCard label="Debt" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
+        <StatCard label="Surplus" value={<Money value={surplus} />} accent={surplus >= 0 ? "var(--ok)" : "var(--rust)"} sub="funding less debt" />
         <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
       </div>
 
@@ -97,15 +101,14 @@ export default function BudgetPage() {
         <div style={{ minWidth: 110, textAlign: "right" }}><Money value={buffer} /></div>
       </div>
 
-      {/* Coverage bar — cash vs need; debt finances any shortfall */}
-      {(() => { const cashGap = allIn - totalCash; return (
+      {/* Coverage bar — funding (non-debt) vs all-in need */}
+      {(() => { const fundGap = allIn - funding; return (
         <div className="card" style={{ padding: 16, marginTop: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, marginBottom: 8 }}>
-            <span style={{ color: "var(--muted)" }}>Cash vs all-in need{cashGap > 0 ? <> · <span style={{ color: "var(--rust)" }}>{fmt(Math.min(cashGap, totalDebt))} financed by debt</span></> : null}</span>
-            <span style={{ fontWeight: 700, color: cashGap > 0 ? "var(--rust)" : "var(--ok)" }}>cash covers {Math.round((totalCash / (allIn || 1)) * 100)}%</span>
+            <span style={{ color: "var(--muted)" }}>Funding vs all-in need</span>
+            <span style={{ fontWeight: 700, color: fundGap > 0 ? "var(--rust)" : "var(--ok)" }}>funding covers {Math.round((funding / (allIn || 1)) * 100)}%</span>
           </div>
-          <StackBar height={16} segments={[{ value: Math.min(totalCash, allIn), color: "var(--sage)" }, { value: Math.max(0, Math.min(cashGap, totalDebt)), color: "var(--brass)" }, { value: Math.max(0, cashGap - totalDebt), color: "#f3ddd6" }, { value: Math.max(0, -cashGap), color: "var(--sage-2)" }]} />
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}><span style={{ color: "var(--sage)" }}>■</span> cash &nbsp; <span style={{ color: "var(--brass)" }}>■</span> debt-financed &nbsp; <span style={{ color: "#d9a99a" }}>■</span> still uncovered</div>
+          <StackBar height={16} segments={[{ value: Math.min(funding, allIn), color: "var(--sage)" }, { value: Math.max(0, fundGap), color: "#f3ddd6" }, { value: Math.max(0, -fundGap), color: "var(--sage-2)" }]} />
         </div>
       ); })()}
 
