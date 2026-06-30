@@ -25,7 +25,6 @@ export default function CostsPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "costs");
   const [group, setGroup] = useState<GroupBy>("category");
-  const [aiFor, setAiFor] = useState<string | null>(null);
   const [payFilter, setPayFilter] = useState<"all" | "paid" | "partial" | "unpaid">("all");
 
   if (access === "none") return <NoAccess module="Building Costs" />;
@@ -75,16 +74,6 @@ export default function CostsPage() {
         </div>
       )}
 
-      {anyUnlocked && !ro && (
-        <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", borderLeft: "3px solid var(--brass)" }}>
-          <div style={{ flex: 1, minWidth: 220 }}>
-            <strong style={{ fontSize: 13.5 }}>Lock the baseline</strong>
-            <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Freeze today's totals as the original budget. After locking, costs only move through change orders.</div>
-          </div>
-          <button className="btn btn-primary" onClick={() => store.lockBaseline()}>🔒 Lock current costs as baseline</button>
-        </div>
-      )}
-
       {/* Cumulative cost-over-time, building to the budget; change orders show their impact */}
       <SectionTitle>Cost Over Time</SectionTitle>
       <CostChart />
@@ -101,7 +90,7 @@ export default function CostsPage() {
         </div>
       </div>
 
-      {!ro && <AddRoomCard />}
+      {!ro && <BuilderMarkupControl />}
       {!ro && <AddCostLine />}
 
       <SectionTitle right={
@@ -133,7 +122,7 @@ export default function CostsPage() {
               </div>
               {!isCollapsed && (
                 <div className="card" style={{ overflow: "hidden" }}>
-                  {grp.lines.map((l, i) => (<CostRow key={l.id} line={l} ro={ro} first={i === 0} onAi={() => setAiFor(l.id)} />))}
+                  {grp.lines.map((l, i) => (<CostRow key={l.id} line={l} ro={ro} first={i === 0} />))}
                 </div>
               )}
             </div>
@@ -141,7 +130,6 @@ export default function CostsPage() {
         })}
       </div>
 
-      {aiFor && <AiModal line={db.costLines.find((l) => l.id === aiFor)!} onClose={() => setAiFor(null)} />}
     </>
   );
 }
@@ -176,7 +164,7 @@ function AddCostLine() {
   const [tradeId, setTradeId] = useState<string>(db.trades[0]?.id ?? "");
   const [owner, setOwner] = useState<CostOwner>("builder");
   const [markupModel, setMarkupModel] = useState<MarkupModel>("passthrough");
-  const [markupPct, setMarkupPct] = useState(20);
+  const [markupPct, setMarkupPct] = useState(db.project.builderMarkupPct ?? 20);
   const [mode, setMode] = useState<"agreed" | "range">("agreed");
   const [price, setPrice] = useState("");
   const [low, setLow] = useState("");
@@ -187,7 +175,7 @@ function AddCostLine() {
   const pickTrade = (id: string) => {
     setTradeId(id);
     const t = db.trades.find((x) => x.id === id);
-    if (t) { const o = t.defaultOwner; setOwner(o); setMarkupModel(o === "owner" ? "blackbox" : "passthrough"); setMarkupPct(o === "owner" ? 0 : 20); }
+    if (t) { const o = t.defaultOwner; setOwner(o); setMarkupModel(o === "owner" ? "blackbox" : "passthrough"); setMarkupPct(o === "owner" ? 0 : (db.project.builderMarkupPct ?? 20)); }
   };
   const valid = name.trim() && trade && (mode === "agreed" ? Number(price) > 0 : Number(low) > 0 && Number(high) >= Number(low));
 
@@ -362,7 +350,7 @@ function groupLines(lines: CostLine[], group: GroupBy, db: ReturnType<typeof use
 }
 
 // ---------------------------------------------------------------------------
-function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first: boolean; onAi: () => void }) {
+function CostRow({ line, ro, first }: { line: CostLine; ro: boolean; first: boolean }) {
   const store = useStore();
   const db = store.db;
   const role = store.session.role;
@@ -380,10 +368,11 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
 
   return (
     <div style={{ borderTop: first ? undefined : "1px solid var(--line)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", cursor: "pointer" }} onClick={() => setOpen((v) => !v)}>
+      <div title={open ? "Collapse" : "Expand"} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer", background: open ? "var(--sage-tint)" : undefined, borderLeft: open ? "4px solid var(--sage)" : "4px solid transparent" }} onClick={() => setOpen((v) => !v)}>
+        <span style={{ fontSize: 13, color: open ? "var(--sage-2)" : "var(--muted)", width: 12, flexShrink: 0 }}>{open ? "▾" : "▸"}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: open ? "var(--walnut)" : undefined }}>{line.name}</span>
             {isOwnerManaged(db.trades.find((t) => t.id === line.tradeId)) && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
             <Pill color="#fff" bg={line.owner === "owner" ? "var(--brass)" : "var(--sage)"}>{line.owner}</Pill>
             <PaidPill line={line} />
@@ -416,7 +405,7 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
       </div>
 
       {open && (
-        <div style={{ padding: "4px 14px 16px", background: "var(--cream)", borderTop: "1px dashed var(--line)" }}>
+        <div style={{ padding: "12px 16px 18px", background: "var(--paper)", borderTop: "2px solid var(--sage)", boxShadow: "inset 0 6px 12px -8px rgba(44,36,28,.25)" }}>
           {/* Cost lifecycle: Estimate → Lock → Paid / Remaining */}
           <CostPanel line={line} ro={ro} />
 
@@ -460,10 +449,13 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
                   <option value="passthrough">Pass-through + markup</option>
                   <option value="blackbox">Black-box (fee included)</option>
                 </select>
-                {line.markupModel === "passthrough" && <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><input type="number" value={line.markupPct} disabled={ro || line.locked} onChange={(e) => store.updateCostLine(line.id, { markupPct: Number(e.target.value) })} style={{ width: 56 }} />%</span>}
+                {line.markupModel === "passthrough" && (
+                  line.owner === "builder"
+                    ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}><strong>{line.markupPct}%</strong> <span style={{ color: "var(--muted)", fontSize: 11.5 }}>· builder markup, managed globally above</span></span>
+                    : <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><input type="number" value={line.markupPct} disabled={ro || line.locked} onChange={(e) => store.updateCostLine(line.id, { markupPct: Number(e.target.value) })} style={{ width: 56 }} />%</span>
+                )}
               </div>
-              {line.locked && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Baseline locked — adjust via change orders above.</div>}
-              <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={onAi}>✨ AI: find this cheapest</button>
+              {line.locked && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Locked — adjust via change orders above.</div>}
             </div>
           </div>
 
@@ -541,7 +533,7 @@ function ContractDoc({ line, ro }: { line: CostLine; ro: boolean }) {
   return (
     <div className="card" style={{ padding: 12, marginTop: 10, background: "var(--paper)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <Label>Line contract</Label>
+        <Label>Scope Details</Label>
         <select value={line.contractMode ?? "appendix"} disabled={ro} onChange={(e) => store.setLineContract(line.id, { contractMode: e.target.value as "direct" | "appendix" })} style={{ fontSize: 12 }}>
           <option value="direct">Direct contract with trade</option>
           <option value="appendix">Appendix to builder&apos;s paper</option>
@@ -787,26 +779,22 @@ function Label({ children, style }: { children: React.ReactNode; style?: React.C
   return <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", ...style }}>{children}</div>;
 }
 
-// ---------------------------------------------------------------------------
-function AiModal({ line, onClose }: { line: CostLine; onClose: () => void }) {
+// Builder markup — one rate across all builder-managed pass-through lines.
+function BuilderMarkupControl() {
+  const store = useStore();
+  const db = store.db;
+  const pct = db.project.builderMarkupPct ?? 20;
+  const count = db.costLines.filter((l) => l.owner === "builder" && l.markupModel === "passthrough").length;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 520, width: "100%", padding: 22 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: "var(--brass)" }}>✨</span>
-          <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>AI sourcing — {line.name}</h3>
-        </div>
-        <div style={{ marginTop: 8, padding: "8px 10px", background: "#f0e6cd", borderRadius: 8, fontSize: 12, color: "var(--brass-2)" }}>Placeholder result — wired but not yet connected to a live model.</div>
-        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
-          {[{ v: "Build.com", p: "$1,180", note: "free ship, in stock" }, { v: "Ferguson", p: "$1,240", note: "matches spec link" }, { v: "Wayfair", p: "$1,295", note: "−10% w/ code" }].map((r) => (
-            <div key={r.v} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, fontSize: 13 }}>
-              <span><strong>{r.v}</strong> <span style={{ color: "var(--muted)" }}>· {r.note}</span></span><strong>{r.p}</strong>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 12 }}>Will also surface local &amp; federal rebates / tax incentives for qualifying products.</div>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}><button className="btn btn-primary" onClick={onClose}>Close</button></div>
+    <div className="card" style={{ padding: 12, marginTop: 14, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", borderLeft: "3px solid var(--sage)" }}>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <strong style={{ fontSize: 13.5 }}>Builder markup</strong>
+        <div style={{ fontSize: 12.5, color: "var(--muted)" }}>One markup applied across all {count} builder-managed pass-through lines. Set it once — it’s the same for every vendor you manage.</div>
       </div>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+        <input type="number" value={pct} onChange={(e) => store.setBuilderMarkup(Number(e.target.value))} style={{ width: 70, fontSize: 18, fontWeight: 700, textAlign: "right", color: "var(--brass-2)" }} />
+        <span style={{ fontWeight: 700, color: "var(--brass-2)", fontSize: 16 }}>%</span>
+      </span>
     </div>
   );
 }

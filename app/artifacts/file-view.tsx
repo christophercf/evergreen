@@ -2,6 +2,7 @@
 
 import type { Artifact, ArtifactVersion } from "@/lib/data/types";
 import { driveViewLink, drivePreviewLink, fileKindOf } from "../ui/upload";
+import { PdfThumb } from "./pdf-thumb";
 
 export function currentVersion(a: Artifact): ArtifactVersion | undefined {
   if (a.versions?.length) return a.versions[a.versions.length - 1];
@@ -20,11 +21,7 @@ export function FilePreview({ a, height = 150 }: { a: Artifact; height?: number 
     <div style={{ width: "100%", height, borderRadius: 8, border: "1px solid var(--line)", overflow: "hidden", background: "var(--paper)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", ...extra }}>{children}</div>;
 
   if (kind === "image") return box(<img src={v!.fileUrl} alt={a.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />);
-  if (kind === "pdf" && v?.fileUrl) return box(
-    <>
-      <iframe title={a.name} src={`${v.fileUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`} style={{ width: "100%", height: "260%", border: "none", transform: "scale(1)", transformOrigin: "top left", pointerEvents: "none" }} />
-      <span style={{ position: "absolute", bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: "#fff", background: "rgba(44,36,28,.7)", borderRadius: 4, padding: "1px 5px" }}>PDF</span>
-    </>);
+  if (kind === "pdf" && v?.fileUrl) return <div style={{ borderRadius: 8, overflow: "hidden", border: "1px solid var(--line)" }}><PdfThumb src={v.fileUrl} height={height} /></div>;
   if (kind === "drive" && v?.driveUrl) return box(
     <iframe title={a.name} src={drivePreviewLink(v.driveUrl)} style={{ width: "100%", height: "100%", border: "none", pointerEvents: "none" }} />);
   // other / none

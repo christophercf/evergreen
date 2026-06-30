@@ -535,6 +535,8 @@ export interface Project {
   address: string;
   built?: string;
   bufferPct: number; // contingency buffer applied over building costs
+  /** Builder's markup %, applied across all builder-managed pass-through lines. */
+  builderMarkupPct: number;
 }
 
 export interface DB {

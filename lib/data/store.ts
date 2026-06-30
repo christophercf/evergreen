@@ -969,6 +969,13 @@ class Store {
       db.project.bufferPct = pct;
     });
   }
+  /** Set the builder's markup once — applied to every builder-managed pass-through line. */
+  setBuilderMarkup(pct: number) {
+    this.mutate((db) => {
+      db.project.builderMarkupPct = pct;
+      db.costLines.forEach((l) => { if (l.owner === "builder" && l.markupModel === "passthrough") l.markupPct = pct; });
+    });
+  }
   /** Set the draw order: liquidityRank = position in the given id list. */
   setFundingRanks(orderedIds: string[]) {
     this.mutate((db) => {
