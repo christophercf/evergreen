@@ -94,6 +94,7 @@ export default function CostsPage() {
       </div>
 
       {!ro && <AddRoomCard />}
+      {!ro && <AddCostLine />}
 
       <SectionTitle right={
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -153,6 +154,96 @@ function AddRoomCard() {
       <select value={floor} onChange={(e) => setFloor(e.target.value as RoomFloor)}>{FLOORS.map((f) => <option key={f}>{f}</option>)}</select>
       <button className="btn btn-primary" onClick={() => { const ok = store.addRoom(name, floor); if (ok) setName(""); else setWarn(true); }}>+ Add room</button>
       {warn && <span style={{ fontSize: 12, color: "var(--rust)" }}>That room already exists.</span>}
+    </div>
+  );
+}
+
+// Add a cost line item (builder or owner). "Agreed price" = single contracted price;
+// "Range" = a low/high allowance not yet pinned (per the budget convention).
+function AddCostLine() {
+  const store = useStore();
+  const db = store.db;
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [tradeId, setTradeId] = useState<string>(db.trades[0]?.id ?? "");
+  const [owner, setOwner] = useState<CostOwner>("builder");
+  const [markupModel, setMarkupModel] = useState<MarkupModel>("passthrough");
+  const [markupPct, setMarkupPct] = useState(20);
+  const [mode, setMode] = useState<"agreed" | "range">("agreed");
+  const [price, setPrice] = useState("");
+  const [low, setLow] = useState("");
+  const [high, setHigh] = useState("");
+
+  const trade = db.trades.find((t) => t.id === tradeId);
+  // default markup/owner from the trade
+  const pickTrade = (id: string) => {
+    setTradeId(id);
+    const t = db.trades.find((x) => x.id === id);
+    if (t) { const o = t.defaultOwner; setOwner(o); setMarkupModel(o === "owner" ? "blackbox" : "passthrough"); setMarkupPct(o === "owner" ? 0 : 20); }
+  };
+  const valid = name.trim() && trade && (mode === "agreed" ? Number(price) > 0 : Number(low) > 0 && Number(high) >= Number(low));
+
+  const submit = () => {
+    if (!valid || !trade) return;
+    const today = new Date().toISOString().slice(0, 10);
+    store.addCostLine({
+      name: name.trim(), tradeId, category: trade.category, owner, roomIds: [],
+      markupModel, markupPct,
+      status: mode === "agreed" ? "contracted" : "allowance",
+      history: mode === "agreed"
+        ? [{ label: "Agreed price", date: today, amount: Number(price) }]
+        : [{ label: "Working budget", date: today, amount: Number(high) }],
+      ...(mode === "range" ? { allowanceLow: Number(low), allowanceHigh: Number(high) } : {}),
+    });
+    setName(""); setPrice(""); setLow(""); setHigh(""); setOpen(false);
+  };
+
+  if (!open) return <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setOpen(true)}>＋ Add cost line item</button>;
+
+  return (
+    <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <strong style={{ fontSize: 14, color: "var(--walnut)" }}>Add a cost line item</strong>
+        <div style={{ display: "inline-flex", gap: 4, background: "var(--cream-2)", padding: 3, borderRadius: 8 }}>
+          {([["agreed", "Agreed price"], ["range", "Range (low/high)"]] as const).map(([v, lbl]) => (
+            <button key={v} onClick={() => setMode(v)} className="btn btn-sm" style={mode === v ? { background: "var(--walnut)", color: "#fff" } : { background: "transparent", border: "none" }}>{lbl}</button>
+          ))}
+        </div>
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{mode === "agreed" ? "Price agreed with the vendor." : "A range we haven't pinned yet (allowance)."}</span>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <input placeholder="Line item name…" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
+        <select value={tradeId} onChange={(e) => pickTrade(e.target.value)} style={{ fontSize: 12.5 }}>
+          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+        </select>
+        <select value={owner} onChange={(e) => setOwner(e.target.value as CostOwner)} style={{ fontSize: 12.5 }}>
+          <option value="builder">Builder-carried</option>
+          <option value="owner">Owner-carried</option>
+        </select>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        {mode === "agreed" ? (
+          <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>Price $<input type="number" value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: 120 }} /></label>
+        ) : (
+          <>
+            <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>Low $<input type="number" value={low} onChange={(e) => setLow(e.target.value)} style={{ width: 110 }} /></label>
+            <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>High $<input type="number" value={high} onChange={(e) => setHigh(e.target.value)} style={{ width: 110 }} /></label>
+          </>
+        )}
+        <span style={{ width: 1, height: 18, background: "var(--line)" }} />
+        <select value={markupModel} onChange={(e) => setMarkupModel(e.target.value as MarkupModel)} style={{ fontSize: 12 }}>
+          <option value="passthrough">+ markup</option>
+          <option value="blackbox">fee included</option>
+        </select>
+        {markupModel === "passthrough" && <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 4 }}><input type="number" value={markupPct} onChange={(e) => setMarkupPct(Number(e.target.value))} style={{ width: 56 }} />%</label>}
+      </div>
+
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn btn-primary" disabled={!valid} onClick={submit}>Add line item</button>
+        <button className="btn" onClick={() => setOpen(false)}>Cancel</button>
+      </div>
     </div>
   );
 }
