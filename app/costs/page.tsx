@@ -11,7 +11,7 @@ import {
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
   linePaid, linePaidByDraws, lineUnpaid, linePaidStatus,
-  lineHasRange, lineLow, lineHigh, budgetRange,
+  lineHasRange, lineLow, lineHigh, budgetRange, isLocked, lineLockedCost, lineRemaining,
 } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
@@ -70,8 +70,8 @@ export default function CostsPage() {
 
       {(() => { const br = budgetRange(db.costLines); return br.low !== br.high ? (
         <div className="card" style={{ padding: "10px 14px", marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", fontSize: 13, borderLeft: "3px solid var(--sage)" }}>
-          <span>📊 <strong>Budget range</strong> (allowances not yet pinned): <strong style={{ color: "var(--ink)" }}>{fmt(br.low)} – {fmt(br.high)}</strong></span>
-          <span style={{ color: "var(--muted)", fontSize: 12 }}>The Current Total above uses the high end. Ranged lines show their low–high; agreed lines are fixed.</span>
+          <span>📊 <strong>Budget range (low – high):</strong> <strong style={{ color: "var(--ink)" }}>{fmt(br.low)} – {fmt(br.high)}</strong></span>
+          <span style={{ color: "var(--muted)", fontSize: 12 }}>🔒 Locked lines are fixed (counted in both ends); unlocked estimates contribute their low–high. The Current Total stat uses the high end.</span>
         </div>
       ) : null; })()}
 
@@ -377,7 +377,7 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
             {isOwnerManaged(db.trades.find((t) => t.id === line.tradeId)) && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
             <Pill color="#fff" bg={line.owner === "owner" ? "var(--brass)" : "var(--sage)"}>{line.owner}</Pill>
             <PaidPill line={line} />
-            {line.locked ? <Pill color="var(--walnut)" bg="var(--cream-2)">🔒 baseline</Pill> : <StatusPill status={line.status} />}
+            {isLocked(line) ? <Pill color="#fff" bg="var(--ok)">🔒 Locked</Pill> : lineHasRange(line) ? <Pill color="var(--brass-2)" bg="#f0e6cd">Estimate</Pill> : <StatusPill status={line.status} />}
             {line.changeOrders.length > 0 && <Pill color="var(--brass-2)" bg="#f0e6cd">{line.changeOrders.length} exhibit{line.changeOrders.length === 1 ? "" : "s"}</Pill>}
           </div>
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
@@ -387,11 +387,16 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
           </div>
         </div>
         {net !== 0 && <span style={{ fontSize: 11.5, fontWeight: 700, color: net > 0 ? "var(--rust)" : "var(--ok)" }}>{net > 0 ? "▲" : "▼"} {fmt(Math.abs(net))}</span>}
-        <div style={{ textAlign: "right", minWidth: 96 }}>
-          {lineHasRange(line) ? (
+        <div style={{ textAlign: "right", minWidth: 104 }}>
+          {isLocked(line) ? (
+            <>
+              <div style={{ fontWeight: 700, fontSize: 14.5 }}><Money value={lineCurrent(line)} /></div>
+              <div style={{ fontSize: 10.5, color: "var(--ok)" }}>🔒 locked</div>
+            </>
+          ) : lineHasRange(line) ? (
             <>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{fmt(lineLow(line))}–{fmt(lineHigh(line))}</div>
-              <div style={{ fontSize: 10.5, color: "var(--brass-2)" }}>allowance range</div>
+              <div style={{ fontSize: 10.5, color: "var(--brass-2)" }}>estimate range</div>
             </>
           ) : (
             <>
@@ -404,16 +409,8 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
 
       {open && (
         <div style={{ padding: "4px 14px 16px", background: "var(--cream)", borderTop: "1px dashed var(--line)" }}>
-          {/* Budget tracking */}
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", margin: "12px 0", fontSize: 13 }}>
-            <span>Baseline <strong>{fmt(lineBaseline(line))}</strong></span>
-            {approvedChanges(line) > 0 && <span style={{ color: "var(--rust)" }}>+ changes {fmt(approvedChanges(line))}</span>}
-            {approvedSavings(line) > 0 && <span style={{ color: "var(--ok)" }}>− savings {fmt(approvedSavings(line))}</span>}
-            <span>= current <strong style={{ color: "var(--brass-2)" }}>{fmt(lineCurrent(line))}</strong></span>
-          </div>
-
-          {/* Payment status */}
-          <PaymentBlock line={line} ro={ro} />
+          {/* Cost lifecycle: Estimate → Lock → Paid / Remaining */}
+          <CostPanel line={line} ro={ro} />
 
           {/* Contract document */}
           <ContractDoc line={line} ro={ro} />
@@ -671,43 +668,99 @@ function PaidPill({ line }: { line: CostLine }) {
   return null;
 }
 
-// Payment status for a line: paid via draws + direct (outside-draw) payment.
-function PaymentBlock({ line, ro }: { line: CostLine; ro: boolean }) {
+function Cell({ label, children, accent }: { label: string; children: React.ReactNode; accent?: string }) {
+  return (
+    <div style={{ flex: 1, minWidth: 110, border: "1px solid var(--line)", borderRadius: 8, padding: "7px 10px", background: "#fff" }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: accent ?? "var(--ink)", marginTop: 2 }}>{children}</div>
+    </div>
+  );
+}
+
+// Cost lifecycle for a line: Estimate (Low/High) → Lock → Paid / Remaining.
+// Builder/full-admin can lock the cost (pushes to the vendor contract); after that,
+// changes flow through change orders only.
+function CostPanel({ line, ro }: { line: CostLine; ro: boolean }) {
   const store = useStore();
   const db = store.db;
-  const cur = lineCurrent(line);
+  const role = store.session.role;
+  const canLock = !ro && (role === "builder" || role === "full_admin");
+  const locked = isLocked(line);
+  const ranged = lineHasRange(line);
+  const paid = linePaid(db, line);
+  const remaining = lineRemaining(db, line);
   const viaDraws = linePaidByDraws(db, line.id);
   const direct = line.directPaid ?? 0;
-  const paid = linePaid(db, line);
-  const remaining = lineUnpaid(db, line);
   const st = linePaidStatus(db, line);
-  const remainingAfterDraws = Math.max(0, cur - viaDraws);
+  const factor = line.markupModel === "passthrough" ? 1 + line.markupPct / 100 : 1;
+  const remainingAfterDraws = Math.max(0, lineHigh(line) - viaDraws);
+
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockAmt, setLockAmt] = useState<string>("");
 
   return (
-    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, margin: "10px 0", background: st === "paid" ? "var(--sage-tint)" : "var(--paper)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <Label style={{ margin: 0 }}>Payment</Label>
-        {st === "paid" ? <Pill color="#fff" bg="var(--ok)">✓ Paid in full</Pill> : st === "partial" ? <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Partially paid</Pill> : <Pill color="var(--muted)">Unpaid</Pill>}
-        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
-          Paid <strong style={{ color: "var(--ok)" }}>{fmt(paid)}</strong> of {fmt(cur)} · Remaining <strong style={{ color: remaining > 0 ? "var(--ink)" : "var(--ok)" }}>{fmt(remaining)}</strong>
-        </span>
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 12, margin: "12px 0", background: "var(--paper)", display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* cost figures */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {locked ? (
+          <Cell label="Locked Cost" accent="var(--ok)">🔒 {fmt(lineCurrent(line))}</Cell>
+        ) : ranged ? (
+          <>
+            <Cell label="Estimated Low">{fmt(lineLow(line))}</Cell>
+            <Cell label="Estimated High">{fmt(lineHigh(line))}</Cell>
+          </>
+        ) : (
+          <Cell label="Cost">{fmt(lineCurrent(line))}</Cell>
+        )}
+        <Cell label="Paid" accent="var(--ok)">{fmt(paid)}</Cell>
+        <Cell label="Remaining" accent={remaining > 0 ? "var(--brass-2)" : "var(--ok)"}>{fmt(remaining)}</Cell>
       </div>
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6, fontSize: 12 }}>
-        <span>Via draws: <strong>{fmt(viaDraws)}</strong> <Link href="/payments" style={{ color: "var(--sage-2)" }}>(draws ↗)</Link></span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          Paid directly:
-          <input type="number" disabled={ro} value={direct || ""} placeholder="0" onChange={(e) => store.setLineDirectPaid(line.id, Number(e.target.value || 0), line.directPaidNote)} style={{ width: 100, fontSize: 12 }} />
-          {line.directPaidDate && <span style={{ color: "var(--muted)" }}>· {line.directPaidDate}</span>}
-        </span>
-      </div>
-      {!ro && (
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
-          {st !== "paid" && <button className="btn btn-sm btn-primary" onClick={() => store.setLineDirectPaid(line.id, remainingAfterDraws, line.directPaidNote)}>💵 Mark paid directly</button>}
-          {direct > 0 && <button className="btn btn-sm" onClick={() => store.setLineDirectPaid(line.id, 0)}>Clear direct payment</button>}
-          <input disabled={ro} value={line.directPaidNote ?? ""} placeholder="Note (e.g. paid by owner, check #…)" onChange={(e) => store.setLineDirectPaid(line.id, direct, e.target.value)} style={{ flex: 1, minWidth: 160, fontSize: 12 }} />
-        </div>
+
+      {/* change-order impact (after lock) */}
+      {(approvedChanges(line) > 0 || approvedSavings(line) > 0) && (
+        <div style={{ fontSize: 12, color: "var(--muted)" }}>Baseline {fmt(lineBaseline(line))}{approvedChanges(line) > 0 && <span style={{ color: "var(--rust)" }}> + COs {fmt(approvedChanges(line))}</span>}{approvedSavings(line) > 0 && <span style={{ color: "var(--ok)" }}> − savings {fmt(approvedSavings(line))}</span>} = current <strong>{fmt(lineCurrent(line))}</strong></div>
       )}
-      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Use this for items you pay for directly — no draw needed. Draw payments are recorded in <Link href="/payments" style={{ color: "var(--sage-2)" }}>Payment &amp; Draw Management</Link>.</div>
+
+      {/* lock / locked state */}
+      {locked ? (
+        <div style={{ fontSize: 12, color: "var(--ok)", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          🔒 Locked{line.lockedAt ? ` ${line.lockedAt}` : ""}{line.lockedBy ? ` by ${line.lockedBy}` : ""} — in the vendor contract. To change, add a change order below.
+          {role === "full_admin" && !ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.unlockLineCost(line.id)}>Unlock</button>}
+        </div>
+      ) : canLock ? (
+        lockOpen ? (
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", background: "var(--cream)", padding: 8, borderRadius: 8 }}>
+            <span style={{ fontSize: 12 }}>Lock at (Oasis cost, pre-markup) $</span>
+            <input type="number" autoFocus value={lockAmt} onChange={(e) => setLockAmt(e.target.value)} placeholder={String(line.allowanceHigh ?? Math.round(lineBase(line)))} style={{ width: 120 }} />
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{line.markupModel === "passthrough" ? `→ ${fmt((Number(lockAmt || line.allowanceHigh || lineBase(line))) * factor)} incl. ${line.markupPct}% markup` : "fee included"}</span>
+            <button className="btn btn-sm btn-primary" onClick={() => { const amt = Number(lockAmt || line.allowanceHigh || lineBase(line)); store.lockLineCost(line.id, amt); setLockOpen(false); setLockAmt(""); }}>🔒 Lock &amp; push to contract</button>
+            <button className="btn btn-sm" onClick={() => setLockOpen(false)}>Cancel</button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button className="btn btn-sm btn-primary" onClick={() => { setLockAmt(String(line.allowanceHigh ?? Math.round(lineBase(line)))); setLockOpen(true); }}>🔒 Lock cost</button>
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Locks the agreed price &amp; pushes it to the vendor contract. Changes after that need a change order.</span>
+          </div>
+        )
+      ) : (
+        <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{ranged ? "Estimate not yet locked — a builder/admin locks the agreed cost." : "Only a builder or full admin can lock this cost."}</div>
+      )}
+
+      {/* payment */}
+      <div style={{ borderTop: "1px dashed var(--line)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", gap: 12, fontSize: 12, flexWrap: "wrap", alignItems: "center" }}>
+          {st === "paid" ? <Pill color="#fff" bg="var(--ok)">✓ Paid in full</Pill> : st === "partial" ? <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Partially paid</Pill> : <Pill color="var(--muted)">Unpaid</Pill>}
+          <span>Via draws <strong>{fmt(viaDraws)}</strong> <Link href="/payments" style={{ color: "var(--sage-2)" }}>↗</Link></span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Paid directly $<input type="number" disabled={ro} value={direct || ""} placeholder="0" onChange={(e) => store.setLineDirectPaid(line.id, Number(e.target.value || 0), line.directPaidNote)} style={{ width: 96, fontSize: 12 }} />{line.directPaidDate && <span style={{ color: "var(--muted)" }}>· {line.directPaidDate}</span>}</span>
+        </div>
+        {!ro && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            {st !== "paid" && <button className="btn btn-sm" onClick={() => store.setLineDirectPaid(line.id, remainingAfterDraws, line.directPaidNote)}>💵 Mark paid directly</button>}
+            {direct > 0 && <button className="btn btn-sm" onClick={() => store.setLineDirectPaid(line.id, 0)}>Clear direct</button>}
+            <input disabled={ro} value={line.directPaidNote ?? ""} placeholder="Payment note (paid by owner, check #…)" onChange={(e) => store.setLineDirectPaid(line.id, direct, e.target.value)} style={{ flex: 1, minWidth: 160, fontSize: 12 }} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

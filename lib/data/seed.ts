@@ -260,6 +260,17 @@ const costLines: CostLine[] = [
   cl({ name: "Kitchen Appliances", tradeId: "appliances", category: "Owner Items", owner: "owner", roomIds: ["kitchen"], markupModel: "blackbox", markupPct: 0, status: "allowance", desc: "Fridge, range, microwave, range vent, food-warmer lamp (owner-purchased).", allowanceLow: 12000, allowanceHigh: 18000, history: hist(null, 15000, null) }),
 ];
 
+// Agreed (contracted/complete) lines are already locked — their cost is the contract
+// price and changes flow through change orders. Allowances stay unlocked (ranges).
+costLines.forEach((l) => {
+  if ((l.status === "contracted" || l.status === "complete") && l.lockedCost == null) {
+    l.lockedCost = l.history.length ? l.history[l.history.length - 1].amount : (l.allowanceHigh ?? 0);
+    l.locked = true;
+    l.lockedAt = "2026-05-03";
+    l.lockedBy = "Aaron — Oasis";
+  }
+});
+
 // ---- Contracts (master terms templates, appended to each line's contract) ---
 export const MASTER_TERMS = "No lien shall be filed against the property for any reason. Change orders require written owner approval before work proceeds; each is attached as a numbered Exhibit to this contract. The parties agree to good-faith negotiation on any disputed scope or pricing. Work performed in a neat, workmanlike manner and to current local code.";
 const contracts: Contract[] = [

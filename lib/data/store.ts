@@ -434,6 +434,36 @@ class Store {
       if (l) l.history.push(point);
     });
   }
+  /** Lock a line's cost (builder / full admin only). Sets the agreed cost, marks it
+   *  contracted, and pushes it to the trade's vendor contract. After this, changes
+   *  must flow through change orders. `baseCost` is the pre-markup (Oasis) cost. */
+  lockLineCost(id: string, baseCost: number) {
+    if (!["builder", "full_admin"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === id);
+      if (!l || baseCost <= 0) return;
+      const factor = l.markupModel === "passthrough" ? 1 + l.markupPct / 100 : 1;
+      l.lockedCost = baseCost;
+      l.baseline = baseCost * factor;
+      l.locked = true;
+      l.lockedAt = new Date().toISOString().slice(0, 10);
+      l.lockedBy = this.session.displayName;
+      if (l.status === "estimate" || l.status === "allowance") l.status = "contracted";
+      l.contractSummary = `Locked at ${new Date().toISOString().slice(0, 10)} — $${Math.round(baseCost * factor).toLocaleString()} (incl. markup). Pushed to ${l.tradeId ? (db.trades.find((t) => t.id === l.tradeId)?.name ?? "trade") : "vendor"} contract. Changes via change order.`;
+      const tradeUser = l.tradeId ? db.users.find((u) => u.tradeIds?.includes(l.tradeId!)) : undefined;
+      this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "builder", kind: "info", message: `🔒 "${l.name}" cost locked & added to the vendor contract.` });
+    });
+  }
+  /** Reopen a locked line (full admin only) — for corrections before a CO is needed. */
+  unlockLineCost(id: string) {
+    if (this.session.role !== "full_admin") return;
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === id);
+      if (!l) return;
+      l.locked = false; l.lockedCost = undefined; l.lockedAt = undefined; l.lockedBy = undefined; l.baseline = undefined;
+      if (l.status === "contracted" && (l.allowanceLow != null)) l.status = "allowance";
+    });
+  }
   /** Record a direct (outside-draw) payment on a line. */
   setLineDirectPaid(id: string, amount: number, note?: string) {
     this.mutate((db) => {

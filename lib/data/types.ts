@@ -228,6 +228,11 @@ export interface CostLine {
   /** Locked baseline (original budget). Set when the baseline is locked. */
   baseline?: number;
   locked?: boolean;
+  /** The agreed locked cost (pre-markup, Oasis cost). Set when a line is locked;
+   *  from then on changes flow through change orders only. */
+  lockedCost?: number;
+  lockedAt?: string;
+  lockedBy?: string;
   /** Post-baseline adjustments, tracked as contract exhibits. */
   changeOrders: ChangeOrder[];
   /** The line's own contract document. */

@@ -68,19 +68,35 @@ export function lineCurrent(line: CostLine): number {
 export function lineMarkupFactor(line: CostLine): number {
   return line.markupModel === "passthrough" ? 1 + line.markupPct / 100 : 1;
 }
-/** True when the line carries a real low≠high allowance range. */
+/** A line is locked once its cost is agreed; changes then flow through change orders. */
+export function isLocked(line: CostLine): boolean {
+  return !!line.locked;
+}
+/** The locked cost (marked up) + approved change orders, or null if not locked. */
+export function lineLockedCost(line: CostLine): number | null {
+  if (!isLocked(line)) return null;
+  const base = line.lockedCost != null ? line.lockedCost * lineMarkupFactor(line) : lineBaseline(line);
+  return base + approvedNetChange(line);
+}
+/** True when the line still carries an unpinned low≠high estimate (and isn't locked). */
 export function lineHasRange(line: CostLine): boolean {
-  return line.allowanceLow != null && line.allowanceHigh != null && line.allowanceLow !== line.allowanceHigh;
+  return !isLocked(line) && line.allowanceLow != null && line.allowanceHigh != null && line.allowanceLow !== line.allowanceHigh;
 }
-/** Marked-up low end of a ranged line (else just its current total). */
+/** Marked-up low end. Locked lines are fixed (low === high === locked cost). */
 export function lineLow(line: CostLine): number {
-  return lineHasRange(line) ? line.allowanceLow! * lineMarkupFactor(line) : lineCurrent(line);
+  if (isLocked(line)) return lineLockedCost(line)!;
+  return lineHasRange(line) ? line.allowanceLow! * lineMarkupFactor(line) + approvedNetChange(line) : lineCurrent(line);
 }
-/** Marked-up high end of a ranged line (else its current total). */
+/** Marked-up high end. Locked lines are fixed; ranged lines use the high estimate. */
 export function lineHigh(line: CostLine): number {
-  return lineHasRange(line) ? line.allowanceHigh! * lineMarkupFactor(line) : lineCurrent(line);
+  if (isLocked(line)) return lineLockedCost(line)!;
+  return lineHasRange(line) ? line.allowanceHigh! * lineMarkupFactor(line) + approvedNetChange(line) : lineCurrent(line);
 }
-/** Whole-budget low–high range (marked up); contracted lines contribute a fixed figure. */
+/** Outstanding on a line = its high-end cost minus what's been paid. */
+export function lineRemaining(db: DB, line: CostLine): number {
+  return Math.max(0, lineHigh(line) - linePaid(db, line));
+}
+/** Whole-budget low–high range (marked up); locked lines contribute a fixed figure to both ends. */
 export function budgetRange(lines: CostLine[]): { low: number; high: number } {
   return { low: lines.reduce((a, l) => a + lineLow(l), 0), high: lines.reduce((a, l) => a + lineHigh(l), 0) };
 }
