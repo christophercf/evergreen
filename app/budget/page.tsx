@@ -42,9 +42,12 @@ export default function BudgetPage() {
   // Cash vs debt: debt must be repaid, so the true surplus excludes it.
   const totalDebt = db.funding.filter((f) => f.fundType === "debt").reduce((a, f) => a + f.amount, 0);
   const totalCash = available - totalDebt;
-  // Funding = non-debt only; debt is always a negative; Surplus = Funding − Debt.
+  // Funding = non-debt only; debt is always a negative.
   const funding = totalCash;
-  const surplus = funding - totalDebt;
+  // Surplus = Funding − Debt − All-in Need (a range: worst case uses the high cost, best case the low).
+  const surplusLow = funding - totalDebt - allInHigh;
+  const surplusHigh = funding - totalDebt - allInLow;
+  const surplusIsRange = Math.round(surplusLow) !== Math.round(surplusHigh);
   // Debt obligations: what's been drawn (borrowed) vs repaid.
   const debtItems = db.funding.filter((f) => f.fundType === "debt");
   const debtDrawn = debtItems.reduce((a, f) => a + f.drawn, 0);
@@ -92,7 +95,7 @@ export default function BudgetPage() {
         <StatCard label="All-in Need" value={hasRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(allInLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(allInHigh)}</span> : <Money value={allInHigh} />} sub={`cost range + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
         <StatCard label="Funding" value={<Money value={funding} />} accent="var(--ok)" sub="non-debt sources" />
         <StatCard label="Debt" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
-        <StatCard label="Surplus" value={<Money value={surplus} />} accent={surplus >= 0 ? "var(--ok)" : "var(--rust)"} sub="funding less debt" />
+        <StatCard label="Surplus" value={surplusIsRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(surplusLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(surplusHigh)}</span> : <Money value={surplusHigh} />} accent={surplusLow >= 0 ? "var(--ok)" : surplusHigh >= 0 ? "var(--brass-2)" : "var(--rust)"} sub="funding − debt − all-in need" />
         <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
       </div>
 
