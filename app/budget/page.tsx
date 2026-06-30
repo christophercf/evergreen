@@ -38,6 +38,11 @@ export default function BudgetPage() {
   const totalCash = available - totalDebt;
   const surplus = available - allIn;            // negative ⇒ funding gap
   const surplusLessDebt = surplus - totalDebt;  // = cash − need: your position net of money you must repay
+  // Debt obligations: what's been drawn (borrowed) vs repaid.
+  const debtItems = db.funding.filter((f) => f.fundType === "debt");
+  const debtDrawn = debtItems.reduce((a, f) => a + f.drawn, 0);
+  const debtRepaid = debtItems.reduce((a, f) => a + (f.repaid ?? 0), 0);
+  const debtOutstanding = debtDrawn - debtRepaid;
 
   // Advisory: draw cheapest-first to cover the all-in need.
   const ranked = [...db.funding].sort((a, b) => marginalRate(a) - marginalRate(b) || a.liquidityRank - b.liquidityRank);
@@ -169,6 +174,61 @@ export default function BudgetPage() {
       </div>
       {gap > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--rust)" }}>⚠ Sources fall <Money value={gap} /> short of the all-in need. Add a source below or trim scope.</div>}
       {!ro && <AddSource />}
+
+      {/* Debt to repay — drawn vs repaid, outstanding balance */}
+      <SectionTitle right={<span style={{ fontSize: 13, fontWeight: 700, color: debtOutstanding > 0 ? "var(--rust)" : "var(--ok)" }}>Outstanding: <Money value={debtOutstanding} /></span>}>
+        Debt to Repay
+      </SectionTitle>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 8 }}>
+        Borrowed money already drawn that must be paid back. Mark any source <strong>Debt</strong> in the grid above and it appears here; log repayments to track the balance owed.
+      </div>
+      {debtItems.length === 0 ? (
+        <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No debt sources yet — set a funding source’s Type to <strong>Debt</strong> above to track it here.</div>
+      ) : (
+        <div className="card" style={{ overflowX: "auto" }}>
+          <table style={{ fontSize: 12.5 }}>
+            <thead>
+              <tr>
+                <th style={th}>Debt source</th>
+                <th style={thR}>Drawn (owed)</th>
+                <th style={thR}>Repaid</th>
+                <th style={thR}>Balance owed</th>
+                <th style={thR}>Rate</th>
+                <th style={thR}>By</th>
+                {!ro && <th style={th}></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {debtItems.map((f) => {
+                const repaid = f.repaid ?? 0;
+                const owed = Math.max(0, f.drawn - repaid);
+                const pctRepaid = f.drawn > 0 ? Math.round((repaid / f.drawn) * 100) : 0;
+                return (
+                  <tr key={f.id}>
+                    <td style={td}>
+                      <div style={{ fontWeight: 600 }}>{f.name}</div>
+                      <div style={{ marginTop: 3 }}><StackBar height={5} segments={[{ value: repaid, color: "var(--ok)" }, { value: owed, color: "var(--rust)" }]} /></div>
+                    </td>
+                    <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
+                    <td style={tdR}><NumCell value={repaid} ro={ro} onChange={(v) => store.updateFunding(f.id, { repaid: v })} money /></td>
+                    <td style={tdR}><strong style={{ color: owed > 0 ? "var(--rust)" : "var(--ok)" }}>{fmt(owed)}</strong>{owed === 0 ? " ✓" : <span style={{ color: "var(--muted)", fontSize: 11 }}> · {pctRepaid}% paid</span>}</td>
+                    <td style={tdR}>{f.rate ? `${(f.rate * 100).toFixed(1)}%` : "—"}</td>
+                    <td style={tdR}>{f.timeframe ?? "—"}</td>
+                    {!ro && <td style={td}>{repaid < f.drawn && <button className="btn btn-sm" title="Mark fully repaid" onClick={() => store.updateFunding(f.id, { repaid: f.drawn })}>Paid off</button>}</td>}
+                  </tr>
+                );
+              })}
+              <tr style={{ background: "var(--cream)" }}>
+                <td style={{ ...td, fontWeight: 700 }}>Total debt</td>
+                <td style={{ ...tdR, fontWeight: 700 }}>{fmt(debtDrawn)}</td>
+                <td style={{ ...tdR, fontWeight: 700, color: "var(--ok)" }}>{fmt(debtRepaid)}</td>
+                <td style={{ ...tdR, fontWeight: 700, color: debtOutstanding > 0 ? "var(--rust)" : "var(--ok)" }}>{fmt(debtOutstanding)}</td>
+                <td colSpan={ro ? 2 : 3}></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

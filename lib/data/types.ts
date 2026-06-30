@@ -527,6 +527,8 @@ export interface FundingSource {
   liquidityRank: number;
   /** Whether this source is your own cash or borrowed money that must be repaid. */
   fundType: "cash" | "debt";
+  /** For debt: amount already paid back (balance owed = drawn − repaid). */
+  repaid?: number;
   note?: string;
 }
 
