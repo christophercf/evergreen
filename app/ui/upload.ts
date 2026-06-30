@@ -10,12 +10,15 @@ import { IS_SUPABASE } from "@/lib/data/config";
 export async function storeFile(file: File): Promise<{ fileUrl: string; fileName: string }> {
   if (IS_SUPABASE) {
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      // 1) get a signed upload URL (server, service role)
+      const r = await fetch("/api/upload", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: file.name }) });
       if (r.ok) {
         const j = await r.json();
-        if (j?.ok && j.url) return { fileUrl: j.url as string, fileName: file.name };
+        if (j?.ok && j.signedUrl && j.publicUrl) {
+          // 2) PUT the file straight to Storage (no serverless body limit)
+          const put = await fetch(j.signedUrl, { method: "PUT", headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "true" }, body: file });
+          if (put.ok) return { fileUrl: j.publicUrl as string, fileName: file.name };
+        }
       }
     } catch {
       /* fall through to inline */

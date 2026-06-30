@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Uploads a file to Supabase Storage (public "artifacts" bucket) using the
-// service_role key, and returns a public URL. This is how large documents
-// (PDFs, drawing sets) are stored — inline base64 in the project_state row
-// can't hold them. Falls back gracefully when the key isn't configured (the
-// client then keeps the file inline for small files / mock mode).
+// Issues a Supabase Storage *signed upload URL* so the client can PUT the file
+// straight to Storage — bypassing the serverless request-body limit (~4.5 MB),
+// which is why large drawing sets previously fell back to inline base64.
+// Returns { signedUrl, publicUrl }. The client uploads to signedUrl, then stores
+// publicUrl on the artifact version.
 
 const BUCKET = "artifacts";
 
@@ -16,31 +16,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "Storage not configured (SUPABASE_SERVICE_ROLE_KEY missing)." });
   }
 
-  let file: File | null = null;
-  try {
-    const form = await req.formData();
-    const f = form.get("file");
-    if (f instanceof File) file = f;
-  } catch {
-    /* ignore */
-  }
-  if (!file) return NextResponse.json({ ok: false, error: "No file." }, { status: 400 });
+  let name = "file";
+  try { const b = await req.json(); if (b?.name) name = String(b.name); } catch { /* ignore */ }
+  const safe = name.replace(/[^a-z0-9.\-_]+/gi, "_").slice(-80) || "file";
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
 
   const admin = createClient(url, svc, { auth: { persistSession: false, autoRefreshToken: false } });
-
-  // Ensure the public bucket exists (ignore "already exists").
   await admin.storage.createBucket(BUCKET, { public: true }).catch(() => {});
 
-  const safe = file.name.replace(/[^a-z0-9.\-_]+/gi, "_").slice(-80) || "file";
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`;
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(path);
+  if (error || !data) return NextResponse.json({ ok: false, error: error?.message ?? "Could not create upload URL." });
 
-  const { error } = await admin.storage.from(BUCKET).upload(path, bytes, {
-    contentType: file.type || "application/octet-stream",
-    upsert: false,
-  });
-  if (error) return NextResponse.json({ ok: false, error: error.message });
-
-  const { data } = admin.storage.from(BUCKET).getPublicUrl(path);
-  return NextResponse.json({ ok: true, url: data.publicUrl, name: file.name });
+  const publicUrl = admin.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+  return NextResponse.json({ ok: true, signedUrl: data.signedUrl, path, publicUrl });
 }
