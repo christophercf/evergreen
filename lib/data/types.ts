@@ -236,6 +236,11 @@ export interface CostLine {
   termsAppended?: boolean;
   /** Funding phases for this line (grouped into draws on the Payments tab). */
   phases: LinePhase[];
+  /** Dollars paid directly for this line, outside the draw schedule (e.g. owner-paid
+   *  items). Counts toward "paid" without creating a draw. */
+  directPaid?: number;
+  directPaidDate?: string;
+  directPaidNote?: string;
 }
 
 // ---- Vendor management ------------------------------------------------------

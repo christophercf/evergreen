@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
 import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
-import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName } from "@/lib/data/money";
+import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid } from "@/lib/data/money";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
@@ -31,7 +31,9 @@ export default function PaymentsPage() {
 
   const t = totals(db.costLines);
   const allocated = db.draws.reduce((a, d) => a + drawAmount(db, d), 0);
-  const paid = db.draws.filter((d) => d.status === "paid").reduce((a, d) => a + drawAmount(db, d), 0);
+  // Paid = paid draws + direct (outside-draw) line payments.
+  const paid = db.costLines.reduce((a, l) => a + linePaid(db, l), 0);
+  const directTotal = db.costLines.reduce((a, l) => a + Math.min(l.directPaid ?? 0, lineUnpaid(db, l) + (l.directPaid ?? 0)), 0);
   const unallocated = Math.max(0, t.grand - allocated);
 
   const lines = [...db.costLines].filter((l) => lineCurrent(l) > 0).sort((a, b) => a.category.localeCompare(b.category) || lineCurrent(b) - lineCurrent(a));
@@ -50,7 +52,7 @@ export default function PaymentsPage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Contract Value" value={<Money value={t.grand} />} sub="current, all lines" />
         <StatCard label="Allocated to Draws" value={<Money value={allocated} />} accent="var(--brass-2)" sub={`${Math.round((allocated / (t.grand || 1)) * 100)}% of budget`} />
-        <StatCard label="Paid" value={<Money value={paid} />} accent="var(--ok)" sub={`${db.draws.filter((d) => d.status === "paid").length} draw(s)`} />
+        <StatCard label="Paid" value={<Money value={paid} />} accent="var(--ok)" sub={directTotal > 0 ? `incl. ${fmt(directTotal)} paid directly` : `${db.draws.filter((d) => d.status === "paid").length} paid draw(s)`} />
         <StatCard label="Unallocated" value={<Money value={unallocated} />} sub="not yet in a draw" />
       </div>
 
@@ -88,6 +90,9 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
   const total = lineCurrent(line);
   const drawn = lineDrawn(db, line.id);
   const rem = total - drawn;
+  const paid = linePaid(db, line);
+  const allocUnpaid = Math.max(0, drawn - paid); // allocated to a draw but not yet paid
+  const unpaidLeft = lineUnpaid(db, line);
   const scope = lineScope(db, line);
 
   return (
@@ -102,12 +107,13 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
         <button onClick={() => setOpen((v) => !v)} title="Show scope" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
         <span style={{ fontWeight: 600, fontSize: 12.5, flex: 1 }}>{line.name}</span>
       </div>
-      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36 }}>
+      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36, flexWrap: "wrap" }}>
         <span>Total <strong style={{ color: "var(--ink)" }}>{fmt(total)}</strong></span>
+        <span>Paid <strong style={{ color: "var(--ok)" }}>{fmt(paid)}</strong></span>
         <span>Drawn <strong style={{ color: "var(--brass-2)" }}>{fmt(drawn)}</strong></span>
-        <span>Left <strong style={{ color: rem > 0 ? "var(--ink)" : "var(--ok)" }}>{fmt(rem)}</strong></span>
+        <span>Left <strong style={{ color: unpaidLeft > 0 ? "var(--ink)" : "var(--ok)" }}>{fmt(unpaidLeft)}</strong></span>
       </div>
-      <div style={{ marginTop: 4, paddingLeft: ro ? 17 : 36 }}><StackBar height={5} segments={[{ value: drawn, color: "var(--brass)" }, { value: Math.max(0, rem), color: "var(--cream-2)" }]} /></div>
+      <div style={{ marginTop: 4, paddingLeft: ro ? 17 : 36 }} title={`Paid ${fmt(paid)} · Allocated-unpaid ${fmt(allocUnpaid)} · Remaining ${fmt(Math.max(0, total - paid - allocUnpaid))}`}><StackBar height={5} segments={[{ value: paid, color: "var(--ok)" }, { value: allocUnpaid, color: "var(--brass)" }, { value: Math.max(0, total - paid - allocUnpaid), color: "var(--cream-2)" }]} /></div>
       {open && (
         <div style={{ marginTop: 6, paddingLeft: ro ? 17 : 36 }}>
           <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Scope in this line</div>

@@ -434,6 +434,16 @@ class Store {
       if (l) l.history.push(point);
     });
   }
+  /** Record a direct (outside-draw) payment on a line. */
+  setLineDirectPaid(id: string, amount: number, note?: string) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === id);
+      if (!l) return;
+      l.directPaid = Math.max(0, amount);
+      l.directPaidDate = amount > 0 ? new Date().toISOString().slice(0, 10) : undefined;
+      if (note !== undefined) l.directPaidNote = note || undefined;
+    });
+  }
   toggleRoomOnLine(id: string, roomId: string) {
     this.mutate((db) => {
       const l = db.costLines.find((x) => x.id === id);

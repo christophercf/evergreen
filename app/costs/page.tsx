@@ -10,6 +10,7 @@ import {
   lineBase, lineStart, lineDelta, totals, byCategory, byTrade,
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
+  linePaid, linePaidByDraws, lineUnpaid, linePaidStatus,
 } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
@@ -266,6 +267,7 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
             <span style={{ fontWeight: 600, fontSize: 14 }}>{line.name}</span>
             {isOwnerManaged(db.trades.find((t) => t.id === line.tradeId)) && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
             <Pill color="#fff" bg={line.owner === "owner" ? "var(--brass)" : "var(--sage)"}>{line.owner}</Pill>
+            <PaidPill line={line} />
             {line.locked ? <Pill color="var(--walnut)" bg="var(--cream-2)">🔒 baseline</Pill> : <StatusPill status={line.status} />}
             {line.changeOrders.length > 0 && <Pill color="var(--brass-2)" bg="#f0e6cd">{line.changeOrders.length} exhibit{line.changeOrders.length === 1 ? "" : "s"}</Pill>}
           </div>
@@ -291,6 +293,9 @@ function CostRow({ line, ro, first, onAi }: { line: CostLine; ro: boolean; first
             {approvedSavings(line) > 0 && <span style={{ color: "var(--ok)" }}>− savings {fmt(approvedSavings(line))}</span>}
             <span>= current <strong style={{ color: "var(--brass-2)" }}>{fmt(lineCurrent(line))}</strong></span>
           </div>
+
+          {/* Payment status */}
+          <PaymentBlock line={line} ro={ro} />
 
           {/* Contract document */}
           <ContractDoc line={line} ro={ro} />
@@ -532,6 +537,55 @@ function StatusPill({ status }: { status: CostLine["status"] }) {
     complete: { c: "#fff", b: "var(--walnut)" },
   };
   return <Pill color={map[status].c} bg={map[status].b}>{status}</Pill>;
+}
+
+function PaidPill({ line }: { line: CostLine }) {
+  const db = useStore().db;
+  const st = linePaidStatus(db, line);
+  if (st === "paid") return <Pill color="#fff" bg="var(--ok)">✓ Paid</Pill>;
+  if (st === "partial") return <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Part-paid</Pill>;
+  return null;
+}
+
+// Payment status for a line: paid via draws + direct (outside-draw) payment.
+function PaymentBlock({ line, ro }: { line: CostLine; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const cur = lineCurrent(line);
+  const viaDraws = linePaidByDraws(db, line.id);
+  const direct = line.directPaid ?? 0;
+  const paid = linePaid(db, line);
+  const remaining = lineUnpaid(db, line);
+  const st = linePaidStatus(db, line);
+  const remainingAfterDraws = Math.max(0, cur - viaDraws);
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, margin: "10px 0", background: st === "paid" ? "var(--sage-tint)" : "var(--paper)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <Label style={{ margin: 0 }}>Payment</Label>
+        {st === "paid" ? <Pill color="#fff" bg="var(--ok)">✓ Paid in full</Pill> : st === "partial" ? <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Partially paid</Pill> : <Pill color="var(--muted)">Unpaid</Pill>}
+        <span style={{ fontSize: 12.5, color: "var(--muted)" }}>
+          Paid <strong style={{ color: "var(--ok)" }}>{fmt(paid)}</strong> of {fmt(cur)} · Remaining <strong style={{ color: remaining > 0 ? "var(--ink)" : "var(--ok)" }}>{fmt(remaining)}</strong>
+        </span>
+      </div>
+      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 6, fontSize: 12 }}>
+        <span>Via draws: <strong>{fmt(viaDraws)}</strong> <Link href="/payments" style={{ color: "var(--sage-2)" }}>(draws ↗)</Link></span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          Paid directly:
+          <input type="number" disabled={ro} value={direct || ""} placeholder="0" onChange={(e) => store.setLineDirectPaid(line.id, Number(e.target.value || 0), line.directPaidNote)} style={{ width: 100, fontSize: 12 }} />
+          {line.directPaidDate && <span style={{ color: "var(--muted)" }}>· {line.directPaidDate}</span>}
+        </span>
+      </div>
+      {!ro && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+          {st !== "paid" && <button className="btn btn-sm btn-primary" onClick={() => store.setLineDirectPaid(line.id, remainingAfterDraws, line.directPaidNote)}>💵 Mark paid directly</button>}
+          {direct > 0 && <button className="btn btn-sm" onClick={() => store.setLineDirectPaid(line.id, 0)}>Clear direct payment</button>}
+          <input disabled={ro} value={line.directPaidNote ?? ""} placeholder="Note (e.g. paid by owner, check #…)" onChange={(e) => store.setLineDirectPaid(line.id, direct, e.target.value)} style={{ flex: 1, minWidth: 160, fontSize: 12 }} />
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Use this for items you pay for directly — no draw needed. Draw payments are recorded in <Link href="/payments" style={{ color: "var(--sage-2)" }}>Payment &amp; Draw Management</Link>.</div>
+    </div>
+  );
 }
 
 function Label({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {

@@ -93,6 +93,27 @@ export function lineDrawn(db: DB, lineId: string): number {
   if (!line) return 0;
   return db.draws.reduce((a, d) => a + d.allocations.filter((al) => al.lineId === lineId).reduce((s, al) => s + allocationAmount(line, al), 0), 0);
 }
+/** Amount of a line paid through PAID draws only (vs merely allocated). */
+export function linePaidByDraws(db: DB, lineId: string): number {
+  const line = db.costLines.find((l) => l.id === lineId);
+  if (!line) return 0;
+  return db.draws.filter((d) => d.status === "paid").reduce((a, d) => a + d.allocations.filter((al) => al.lineId === lineId).reduce((s, al) => s + allocationAmount(line, al), 0), 0);
+}
+/** Total paid for a line: paid draws + any direct (outside-draw) payment, capped at current. */
+export function linePaid(db: DB, line: CostLine): number {
+  return Math.min(lineCurrent(line), linePaidByDraws(db, line.id) + (line.directPaid ?? 0));
+}
+/** Outstanding (not yet paid) on a line. */
+export function lineUnpaid(db: DB, line: CostLine): number {
+  return Math.max(0, lineCurrent(line) - linePaid(db, line));
+}
+export type PaidStatus = "paid" | "partial" | "unpaid";
+export function linePaidStatus(db: DB, line: CostLine): PaidStatus {
+  const paid = linePaid(db, line);
+  const cur = lineCurrent(line);
+  if (cur > 0 && paid >= cur - 0.5) return "paid";
+  return paid > 0.5 ? "partial" : "unpaid";
+}
 
 export type Rollup = { key: string; label: string; total: number; base: number; markup: number; count: number };
 
