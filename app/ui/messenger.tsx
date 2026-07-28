@@ -35,13 +35,22 @@ export function emailsFor(users: { id: string; email?: string; emailOptOut?: boo
 }
 
 // Fire-and-forget; delivers when RESEND_API_KEY is configured on the server.
-export function pushEmail(emails: string[], subject: string, text: string) {
+// `opts.replyUrl` becomes the email's "Reply in the app" button target.
+export function pushEmail(emails: string[], subject: string, text: string, opts?: { replyUrl?: string; senderName?: string; photoCount?: number }) {
   if (!emails.length) return;
   void fetch("/api/send-update-email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ to: emails, subject, text, appUrl: typeof window !== "undefined" ? window.location.origin : undefined }),
+    body: JSON.stringify({ to: emails, subject, text, appUrl: typeof window !== "undefined" ? window.location.origin : undefined, ...opts }),
   }).catch(() => { /* in-app tracking still works */ });
+}
+
+/** Deep link that opens a specific Messenger conversation (same key for every
+ *  participant — the sorted participant-id set). */
+export function conversationUrl(participantIds: string[]): string {
+  const key = [...new Set(participantIds)].sort().join("+");
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://evergreen-rust-five.vercel.app";
+  return `${origin}/updates?conv=${encodeURIComponent(key)}`;
 }
 
 // ---- dictation ----------------------------------------------------------------
@@ -192,7 +201,8 @@ export function Composer({ context, onPosted }: { context?: UpdateContext; onPos
     const emails = emailsFor(db.users, toIds);
     const ctxLine = context ? `\nAbout: ${context.label} — open it here: ${typeof window !== "undefined" ? window.location.origin : ""}${context.href}\n` : "";
     pushEmail(emails, `🏠 ${db.project.name} — ${title.trim()}`,
-      `${name} sent a message:\n\n${title.trim()}\n${body.trim() ? `\n${body.trim()}\n` : ""}${ctxLine}${photos.length ? `\n📷 ${photos.length} photo${photos.length === 1 ? "" : "s"} attached — view them in the app.` : ""}`);
+      `${body.trim() ? `${body.trim()}\n` : ""}${ctxLine}`,
+      { replyUrl: conversationUrl([store.session.userId, ...toIds]), senderName: name, photoCount: photos.length || undefined });
     setTitle(context ? context.label : ""); setBody(""); att.clear(); setTo(new Set());
     setPosted(true); setTimeout(() => setPosted(false), 3500);
     onPosted?.();

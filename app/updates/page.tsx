@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
-import { ContextChip, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
+import { ContextChip, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
 import { tradeName } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +81,15 @@ export default function UpdatesPage() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, string>>({});
   useEffect(() => setReadMap(loadRead()), []);
+
+  // Deep link from email "Reply in the app" buttons: /updates?conv=<key>
+  useEffect(() => {
+    const key = new URLSearchParams(window.location.search).get("conv");
+    if (!key) return;
+    setPendingOthers(key.split("+").filter((id) => id !== store.session.userId));
+    setSel(key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const nameOf = (id: string) => db.users.find((x) => x.id === id)?.name ?? "—";
   const userOf = (id: string) => db.users.find((x) => x.id === id);
@@ -301,7 +310,8 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
       store.replyToUpdate(latest.id, text);
     }
     const emails = emailsFor(db.users, conv.otherIds);
-    pushEmail(emails, `💬 ${db.project.name} — message from ${name}`, `${name}:\n\n${text || "(photo)"}${photos.length ? `\n\n📷 ${photos.length} photo${photos.length === 1 ? "" : "s"} — view in the app.` : ""}`);
+    pushEmail(emails, `💬 ${db.project.name} — message from ${name}`, text || "(photo)",
+      { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
     setBody(""); att.clear();
   };
 
