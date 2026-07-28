@@ -27,7 +27,8 @@ export type ModuleKey =
   | "vendors"
   | "costs"
   | "budget"
-  | "payments";
+  | "payments"
+  | "updates";
 
 export type AccessLevel = "none" | "view" | "edit";
 
@@ -62,6 +63,8 @@ export interface User {
   inviteToken?: string;
   /** Adopted e-signature (data URL from the signature pad), saved to profile. */
   signature?: string;
+  /** Personal preference: opt OUT of email pushes (Messenger etc.). Default = emails on. */
+  emailOptOut?: boolean;
 }
 
 // ---- Trades & rooms ---------------------------------------------------------
@@ -374,12 +377,26 @@ export interface Artifact {
 }
 
 // ---- Materials --------------------------------------------------------------
-export type MaterialStatus = "needed" | "ordered" | "purchased" | "delivered";
+export type MaterialStatus = "needed" | "identified" | "ordered" | "purchased" | "delivered";
 export type Purchaser = "owner" | "trade" | "builder";
 
 export const MATERIAL_STATUS_LABEL: Record<MaterialStatus, string> = {
-  needed: "Needed", ordered: "Ordered", purchased: "Purchased", delivered: "Delivered",
+  needed: "Needed", identified: "Identified", ordered: "Ordered", purchased: "Purchased", delivered: "Delivered",
 };
+
+// An alternate product candidate for a material — owner/builder add 2-3 of
+// these; owner + designer compare and approve exactly ONE per item.
+export interface ProductOption {
+  id: string;
+  label: string;        // product / vendor name
+  url?: string;         // product page (drives the preview image)
+  price?: number;       // quoted price for the line (qty included)
+  note?: string;
+  addedBy?: string;
+  approved?: boolean;   // at most one option per material
+  approvedBy?: string;
+  approvedAt?: string;
+}
 
 export interface Material {
   id: string;
@@ -395,13 +412,107 @@ export interface Material {
   location?: string; // where it's stored
   notes?: string;
   purchaser: Purchaser; // who buys it
-  dueDate?: string; // critical-path selection due date
+  /** How the critical-path date(s) are set: a fixed "hard" date, or "trade" —
+   *  derived live from the linked trade's Gantt (identify-by = trade start,
+   *  on-hand-by = the trade's Finish phase). Defaults to "hard". */
+  dueMode?: "hard" | "trade";
+  /** When (within the trade's window) the material must be physically on-hand:
+   *  "start" = before the trade begins (default); "finish" = only by the last
+   *  week the trade is working (e.g. finish fixtures). Identify-by is always the
+   *  trade start regardless. */
+  needBy?: "start" | "finish";
+  dueDate?: string; // hard-mode critical-path selection due date
   critical?: boolean; // critical-path item tied to the timing grid
   linkedScheduleId?: string; // schedule task this gates
   imageUrl?: string; // product image (pulled from the spec URL)
   specs?: string; // product specs/notes pulled from the URL
   designerApproved?: boolean; // designer sign-off
-  approvalRequested?: boolean; // approval requested from the designer
+  ownerApproved?: boolean; // owner sign-off (independent of the designer)
+  approvalRequested?: boolean; // approval requested from the approvers
+  /** Alternate product candidates (2-3) added by owner/builder for review. */
+  options?: ProductOption[];
+  /** Planning budget for this item, set before a product is chosen. */
+  budget?: number;
+  /** The single approved option. While set, its price is the item's LOCKED cost
+   *  (the budget is "solidified"); revoke the approval to change it. */
+  approvedOptionId?: string;
+}
+
+/** The committed cost of a material: the approved option's price (else its
+ *  budget if the approval carried no price). Undefined until an option is approved. */
+export function materialLockedCost(m: Material): number | undefined {
+  if (!m.approvedOptionId) return undefined;
+  const opt = m.options?.find((o) => o.id === m.approvedOptionId);
+  return opt?.price ?? m.budget;
+}
+
+// ---- Site updates (message board) ------------------------------------------
+// A field update: photos + title + text, posted to specific recipients who can
+// respond in-line. Built to be trivially usable from a phone on-site.
+export interface UpdateReply {
+  id: string;
+  authorId: string;
+  authorName: string;
+  at: string;    // ISO
+  body: string;
+}
+
+/** What a message is ABOUT — set when it's launched from an item elsewhere in
+ *  the app (a material, cost line, timeline task, or document). Carries a deep
+ *  link so recipients can jump straight to that item. */
+export interface UpdateContext {
+  kind: "material" | "cost" | "timing" | "artifact";
+  refId: string;
+  label: string;   // item name at time of posting
+  href: string;    // in-app link, e.g. /materials?item=mat-12
+}
+
+export const UPDATE_CONTEXT_ICON: Record<UpdateContext["kind"], string> = {
+  material: "📦", cost: "🧾", timing: "📅", artifact: "📁",
+};
+
+export interface SiteUpdate {
+  id: string;
+  title: string;
+  body?: string;
+  /** Photo URLs — Supabase Storage links (or compressed data URLs in mock). */
+  photos?: string[];
+  authorId: string;
+  authorName: string;
+  at: string;    // ISO
+  /** Recipients (user ids). Visible to author + recipients (+ full admin). */
+  toUserIds: string[];
+  replies: UpdateReply[];
+  /** The app item this message was launched from, if any. */
+  context?: UpdateContext;
+}
+
+/** Who a user may send updates to:
+ *  • builder / full_admin → anyone
+ *  • owner → the builder(s), designer(s), architect, and their OWN (owner-managed) trades
+ *  • trade → the builder(s); plus the owner(s) when the trade contracts directly
+ *    with the owner (any of their trades is owner-managed)
+ *  • viewer (designer) → owner(s) + builder(s) */
+export function canMessageUser(sender: User | undefined, senderRole: Role, target: User, trades: Trade[]): boolean {
+  if (target.id === sender?.id || target.status === "invited" || target.status === "pending") return false;
+  if (senderRole === "full_admin" || senderRole === "builder") return true;
+  const targetOwnerManaged = (target.tradeIds ?? []).some((t) => isOwnerManaged(trades.find((x) => x.id === t)));
+  const isArchitect = (target.tradeIds ?? []).includes("architect");
+  if (senderRole === "owner") {
+    if (target.role === "builder" || target.role === "viewer" || target.role === "full_admin") return true;
+    if (target.role === "trade") return targetOwnerManaged || isArchitect;
+    return false;
+  }
+  if (senderRole === "trade") {
+    if (target.role === "builder" || target.role === "full_admin") return true;
+    const iAmOwnerManaged = (sender?.tradeIds ?? []).some((t) => isOwnerManaged(trades.find((x) => x.id === t)));
+    if (target.role === "owner") return iAmOwnerManaged;
+    return false;
+  }
+  if (senderRole === "viewer") {
+    return target.role === "owner" || target.role === "builder" || target.role === "full_admin";
+  }
+  return false;
 }
 
 // ---- Schedule (Gantt) -------------------------------------------------------
@@ -562,6 +673,7 @@ export interface DB {
   vendorAgreements: VendorAgreement[];
   materials: Material[];
   artifacts: Artifact[];
+  updates: SiteUpdate[];
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -578,28 +690,36 @@ export interface Session {
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   full_admin: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit",
   },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit",
   },
   trade: {
     dashboard: "view", timing: "edit", artifacts: "view", admin: "none",
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit",
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
-    materials: "view", vendors: "view", costs: "none", budget: "none", payments: "none",
+    // The designer curates the materials list — they add & assign for all trades.
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit",
   },
 };
 
 export function accessFor(user: User | undefined, role: Role, mod: ModuleKey): AccessLevel {
   return user?.access?.[mod] ?? ROLE_ACCESS[role][mod];
+}
+
+/** The architect is a trade with a whole-project view: full timing chart, all
+ *  materials, and all (non-contract) documents. Costs and other trades'
+ *  contracts stay hidden like any other trade. */
+export function isArchitectUser(u: User | undefined): boolean {
+  return !!u?.tradeIds?.includes("architect");
 }
 
 // Can the viewer remove the target user?
@@ -619,14 +739,33 @@ export function canRemoveUser(viewerRole: Role, viewer: User | undefined, target
 //  • owner sees only owner-managed trade contacts (not builder-managed)
 //  • non-trade users' contacts are visible to admins
 // Can this user view an artifact, given its audience + trade restrictions?
-export function canSeeArtifact(role: Role, user: User | undefined, a: Artifact): boolean {
+export function canSeeArtifact(role: Role, user: User | undefined, a: Artifact, trades?: Trade[]): boolean {
   // Full Admin always sees everything (and assigns who else can).
   if (role === "full_admin") return true;
   // Every other role honors the per-document audience set by the Full Admin.
   const audienceOk = !a.audience || a.audience.length === 0 || a.audience.includes(role);
   if (!audienceOk) return false;
-  if (role === "trade" && a.tradeIds && a.tradeIds.length) {
-    return (user?.tradeIds ?? []).some((t) => a.tradeIds!.includes(t));
+  const mine = user?.tradeIds ?? [];
+  if (a.kind === "contract") {
+    // Contracts are private — trades AND designers/viewers only see contracts
+    // explicitly assigned to their own trade (an unassigned contract is NOT theirs).
+    if (role === "trade" || role === "viewer") {
+      return !!a.tradeIds?.length && mine.some((t) => a.tradeIds!.includes(t));
+    }
+    // Builder ↔ Owner: a trade's contract belongs to whoever MANAGES that trade.
+    // The builder never sees owner-managed contracts and vice versa — unless the
+    // Full Admin explicitly granted the role via the document's audience list.
+    // Untagged contracts (e.g. the master owner↔builder agreement) stay shared.
+    if ((role === "builder" || role === "owner") && a.tradeIds?.length && trades && !a.audience?.includes(role)) {
+      const ownerMgd = a.tradeIds.some((t) => isOwnerManaged(trades.find((x) => x.id === t)));
+      return role === "owner" ? ownerMgd : !ownerMgd;
+    }
+    return true;
+  }
+  // Trades are further limited to artifacts tagged to their own trade — except
+  // the architect, who sees all project documents (contracts stay own-only above).
+  if (role === "trade" && a.tradeIds && a.tradeIds.length && !isArchitectUser(user)) {
+    return mine.some((t) => a.tradeIds!.includes(t));
   }
   return true;
 }

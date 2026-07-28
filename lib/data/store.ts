@@ -7,13 +7,13 @@
 
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
-  DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, Role, Room, RoomZone, ScheduleItem,
-  ScheduleStatus, ScopeStatus, Session, Trade, User, Worker,
+  DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
+  ScheduleStatus, ScopeStatus, Session, Trade, UpdateContext, User, Worker,
 } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
-import { authEnabled, authOnChange, authSignOut } from "./auth";
+import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
 
 type Listener = () => void;
 
@@ -27,6 +27,8 @@ class Store {
   version = 0;
   /** Set when a verified user signs in but their email isn't on the project. */
   authNoAccess: string | null = null;
+  /** True while a password-recovery link is being handled — show the reset screen. */
+  recoveryPending = false;
 
   private backend: Backend | null = null;
   private listeners = new Set<Listener>();
@@ -49,7 +51,18 @@ class Store {
         // Real auth: the Supabase session is the source of truth. Don't trust a
         // persisted app session; bind/unbind as auth state changes.
         this.session = { ...this.session, authed: false };
-        authOnChange((email) => { if (email) this.bindAuthEmail(email); else this.unbindAuth(); });
+        this.recoveryPending = isRecoveryUrl();
+        authOnChange((email, event) => {
+          // Password reset: land on the "set a new password" screen instead of
+          // binding straight into the app (or bouncing to login).
+          if (event === "PASSWORD_RECOVERY") { this.recoveryPending = true; this.emit(); return; }
+          if (this.recoveryPending) {
+            // Stay on the reset screen until the new password is saved (USER_UPDATED).
+            if (event === "USER_UPDATED" && email) { this.recoveryPending = false; this.bindAuthEmail(email); }
+            return;
+          }
+          if (email) this.bindAuthEmail(email); else this.unbindAuth();
+        });
       } else if (typeof window !== "undefined") {
         // Mock mode: accept an invite link directly (no password).
         const tok = new URLSearchParams(window.location.search).get("invite");
@@ -101,25 +114,64 @@ class Store {
 
   // ---- Session ----
   get currentUser(): User | undefined {
+    // Synthetic QA personas ("view as a role no one holds yet") aren't in
+    // db.users — build a stand-in so all role/trade logic behaves naturally.
+    if (this.session.userId.startsWith("persona:")) {
+      const [, role, trades] = this.session.userId.split(":");
+      return {
+        id: this.session.userId,
+        name: this.session.displayName,
+        email: "qa-persona@example.invalid",
+        role: role as Role,
+        tradeIds: trades ? trades.split(",") : undefined,
+        status: "active",
+      };
+    }
     return this.db.users.find((u) => u.id === this.session.userId);
   }
 
-  setRole(role: Role) {
-    // "View as" (admin impersonation / demo). Jumps to a representative user.
-    const u = this.db.users.find((x) => x.role === role) ?? this.currentUser;
-    this.session = { ...this.session, role, userId: u?.id ?? this.session.userId, displayName: u?.name ?? this.session.displayName };
-    void this.backend?.persistSession(this.session);
-    this.emit();
-  }
+  // ---- "View as" (QA impersonation for full admins) -------------------------
+  /** The admin's REAL session, parked while viewing as another persona. Memory
+   *  only — the persisted session stays the admin's, so a refresh always lands
+   *  back on Full Admin. */
+  viewAsBase: Session | null = null;
+  get isViewingAs(): boolean { return this.viewAsBase !== null; }
 
-  setUser(userId: string) {
-    const u = this.db.users.find((x) => x.id === userId);
+  private startViewAs(u: User | undefined) {
     if (!u) return;
+    if (!this.viewAsBase) {
+      if (this.session.role !== "full_admin") return; // only full admins may impersonate
+      this.viewAsBase = { ...this.session };
+    }
     this.session = { ...this.session, role: u.role, userId: u.id, displayName: u.name };
+    void this.backend?.persistSession(this.viewAsBase); // persist the ADMIN session
+    this.emit();
+  }
+  /** View the app exactly as a specific person (their role + per-user access). */
+  viewAsUser(userId: string) {
+    this.startViewAs(this.db.users.find((x) => x.id === userId));
+  }
+  /** View the app as a ROLE that may not be assigned to anyone yet — QA a
+   *  persona before inviting a person into it. tradeIds lets the generic
+   *  "trade"/"architect" personas exercise trade-scoped views. */
+  viewAsPersona(role: Role, displayName: string, tradeIds?: string[]) {
+    if (!this.viewAsBase) {
+      if (this.session.role !== "full_admin") return; // only full admins may impersonate
+      this.viewAsBase = { ...this.session };
+    }
+    const userId = `persona:${role}:${(tradeIds ?? []).join(",")}`;
+    this.session = { ...this.session, role, userId, displayName };
+    void this.backend?.persistSession(this.viewAsBase); // persist the ADMIN session
+    this.emit();
+  }
+  /** Return to the real Full Admin session. */
+  endViewAs() {
+    if (!this.viewAsBase) return;
+    this.session = this.viewAsBase;
+    this.viewAsBase = null;
     void this.backend?.persistSession(this.session);
     this.emit();
   }
-
   // ---- Auth (app-level; graduates to Supabase Auth later) ----
   private enter(u: User) {
     this.session = { role: u.role, userId: u.id, displayName: u.name, authed: true };
@@ -151,6 +203,7 @@ class Store {
   logout() {
     this.session = { ...this.session, authed: false };
     this.authNoAccess = null;
+    this.viewAsBase = null;
     void this.backend?.persistSession(this.session);
     void authSignOut();
     this.emit();
@@ -169,6 +222,7 @@ class Store {
     const fresh = this.db.users.find((x) => x.id === u.id)!;
     this.session = { role: fresh.role, userId: fresh.id, displayName: fresh.name, authed: true };
     this.authNoAccess = null;
+    this.viewAsBase = null; // fresh identity — drop any QA impersonation
     void this.backend?.persistSession(this.session);
     this.emit();
     return true;
@@ -176,6 +230,19 @@ class Store {
   unbindAuth() {
     this.session = { ...this.session, authed: false };
     this.emit();
+  }
+
+  /** Finish a password reset: set the new password on the recovery session, then
+   *  bind into the app. Called from the "set a new password" screen. */
+  async completePasswordReset(password: string): Promise<{ ok: boolean; error?: string }> {
+    const r = await authUpdatePassword(password);
+    if (!r.ok) return r;
+    this.recoveryPending = false;
+    // strip the recovery hash/query so a refresh doesn't re-trigger the flow
+    if (typeof window !== "undefined") { try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } }
+    const email = await authCurrentEmail();
+    if (email) this.bindAuthEmail(email); else this.emit();
+    return { ok: true };
   }
 
   /** Invite a user; returns the invite token for a shareable link. */
@@ -651,6 +718,43 @@ class Store {
     return { trades };
   }
 
+  // ---- Schedule: add new timeline items (owner / builder / full admin) ----
+  addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string }) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    if (!item.label.trim() || !item.start || !item.end) return;
+    this.mutate((db) => {
+      const tradeId = item.kind === "milestone" ? undefined : item.tradeId || undefined;
+      const tradeUser = tradeId ? db.users.find((u) => u.tradeIds?.includes(tradeId)) : undefined;
+      db.schedule.push({
+        id: newId("sch"),
+        label: item.label.trim(),
+        kind: item.kind,
+        tradeId,
+        start: item.start,
+        end: item.end,
+        status: "not_started",
+        origStart: item.start,
+        origEnd: item.end,
+        assignedUserId: tradeUser?.id,
+        // A trade on the hook must confirm the proposed dates, same as edits.
+        confirm: tradeUser ? "pending" : "confirmed",
+        ...(tradeUser ? {} : { confirmedStart: item.start, confirmedEnd: item.end }),
+      });
+      if (tradeUser) this.notify(db, { toUserId: tradeUser.id, kind: "info", message: `📅 New task "${item.label.trim()}" proposed ${item.start} → ${item.end}. Please confirm in Timing.` });
+    });
+  }
+
+  /** Move a Gantt row up/down in the display order (builder/full admin). */
+  moveScheduleItem(id: string, dir: -1 | 1) {
+    if (!["builder", "full_admin"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const i = db.schedule.findIndex((s) => s.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= db.schedule.length) return;
+      [db.schedule[i], db.schedule[j]] = [db.schedule[j], db.schedule[i]];
+    });
+  }
+
   // ---- Materials ----
   addMaterial(mat: Omit<Material, "id">) {
     this.mutate((db) => { db.materials.push({ id: newId("mat"), ...mat }); });
@@ -667,14 +771,20 @@ class Store {
   bulkSetMaterialStatus(ids: string[], status: Material["status"]) {
     this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.status = status; }); });
   }
+  /** Tie one timing item to many materials at once (single undo step). */
+  bulkSetMaterialTie(ids: string[], linkedScheduleId?: string) {
+    this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.linkedScheduleId = linkedScheduleId; }); });
+  }
   /** Designer signs off (or revokes) on a material selection. */
-  setMaterialApproved(id: string, approved: boolean, by: string) {
+  /** Designer or Owner sign-off (two independent approvers). */
+  setMaterialApproved(id: string, approved: boolean, by: string, kind: "designer" | "owner" = "designer") {
     this.mutate((db) => {
       const m = db.materials.find((x) => x.id === id);
       if (!m) return;
-      m.designerApproved = approved;
-      m.approvalRequested = false;
-      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} approved "${m.item}".` });
+      if (kind === "owner") m.ownerApproved = approved;
+      else m.designerApproved = approved;
+      if (m.designerApproved && m.ownerApproved) m.approvalRequested = false;
+      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} (${kind}) approved "${m.item}".` });
     });
   }
   requestMaterialApproval(id: string, by: string) {
@@ -684,6 +794,59 @@ class Store {
       m.approvalRequested = true;
       const designer = db.users.find((u) => u.role === "viewer");
       this.notify(db, { toUserId: designer?.id, toRole: designer ? undefined : "viewer", kind: "info", message: `🎨 ${by} requests designer approval for "${m.item}".` });
+      this.notify(db, { toRole: "owner", kind: "info", message: `🏠 ${by} requests owner approval for "${m.item}".` });
+    });
+  }
+  // ---- Product options (alternates) ----
+  /** Owner/builder add up to 3 alternate products for the owner + designer to compare. */
+  addMaterialOption(matId: string, opt: { label: string; url?: string; price?: number; note?: string }, by: string) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === matId);
+      if (!m || !opt.label.trim()) return;
+      m.options = m.options ?? [];
+      if (m.options.length >= 3) return; // 2-3 alternates max
+      m.options.push({ id: newId("opt"), label: opt.label.trim(), url: opt.url?.trim() || undefined, price: opt.price, note: opt.note?.trim() || undefined, addedBy: by });
+    });
+  }
+  updateMaterialOption(matId: string, optId: string, patch: Partial<ProductOption>) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === matId);
+      const o = m?.options?.find((x) => x.id === optId);
+      // An approved option's price is the locked cost — revoke approval to change it.
+      if (!m || !o || m.approvedOptionId === optId) return;
+      Object.assign(o, patch);
+    });
+  }
+  removeMaterialOption(matId: string, optId: string) {
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === matId);
+      if (!m?.options) return;
+      if (m.approvedOptionId === optId) m.approvedOptionId = undefined; // removing the winner unlocks the cost
+      m.options = m.options.filter((o) => o.id !== optId);
+    });
+  }
+  /** Approve exactly ONE option per item (owner/designer/admin); approving locks
+   *  its price in as the item's cost and points the spec link at the winner.
+   *  Calling it on the already-approved option revokes the approval. */
+  approveMaterialOption(matId: string, optId: string, by: string) {
+    if (!["full_admin", "owner", "viewer"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const m = db.materials.find((x) => x.id === matId);
+      const o = m?.options?.find((x) => x.id === optId);
+      if (!m || !o) return;
+      if (m.approvedOptionId === optId) {
+        // revoke
+        m.approvedOptionId = undefined;
+        o.approved = false; o.approvedBy = undefined; o.approvedAt = undefined;
+        return;
+      }
+      m.options!.forEach((x) => { x.approved = false; x.approvedBy = undefined; x.approvedAt = undefined; });
+      o.approved = true; o.approvedBy = by; o.approvedAt = new Date().toISOString();
+      m.approvedOptionId = optId;
+      if (o.url) m.specLink = o.url; // downstream (spec column, previews) follows the winner
+      if (m.status === "needed") m.status = "identified";
+      this.notify(db, { toRole: "builder", kind: "info", message: `🛍 ${by} approved product "${o.label}" for "${m.item}"${o.price != null ? ` — cost locked at $${o.price.toLocaleString()}` : ""}.` });
     });
   }
   /** Anyone (trade/designer/builder) can request details/specs for an item. */
@@ -694,19 +857,41 @@ class Store {
       this.notify(db, { toRole: "builder", kind: "info", message: `❓ ${by} requested details for "${m.item}".` });
     });
   }
-  /** Stub: "pull" image + specs from the product URL (real fetch comes later). */
-  fetchMaterialFromUrl(id: string) {
+
+  // ---- Site updates (message board) ----
+  /** Post a field update to specific recipients. Returns the new update's id. */
+  postUpdate(u: { title: string; body?: string; photos?: string[]; toUserIds: string[]; context?: UpdateContext }): string {
+    const id = newId("upd");
     this.mutate((db) => {
-      const m = db.materials.find((x) => x.id === id);
-      if (!m || !m.specLink) return;
-      let host = "store";
-      try { host = new URL(m.specLink).hostname.replace("www.", ""); } catch { /* ignore */ }
-      m.imageUrl = `https://placehold.co/320x220/efe8d6/3a2f25?text=${encodeURIComponent(m.item.slice(0, 20))}`;
-      m.specs = m.specs || `Fetched from ${host} (stub). Wire a live fetch/AI to pull real title, image, dimensions, finish, and price.`;
+      const me = db.users.find((x) => x.id === this.session.userId);
+      db.updates.unshift({
+        id, title: u.title.trim(), body: u.body?.trim() || undefined,
+        photos: u.photos?.length ? u.photos : undefined,
+        authorId: me?.id ?? this.session.userId, authorName: this.session.displayName,
+        at: new Date().toISOString(), toUserIds: u.toUserIds, replies: [],
+        context: u.context,
+      });
+      for (const uid of u.toUserIds) {
+        this.notify(db, { toUserId: uid, kind: "info", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
+      }
     });
+    return id;
   }
-  toggleMaterialCritical(id: string) {
-    this.mutate((db) => { const m = db.materials.find((x) => x.id === id); if (m) m.critical = !m.critical; });
+  /** In-line reply on an update — allowed for the author and any recipient. */
+  replyToUpdate(updateId: string, body: string): void {
+    this.mutate((db) => {
+      const up = db.updates.find((x) => x.id === updateId);
+      if (!up || !body.trim()) return;
+      const meId = this.session.userId;
+      const involved = up.authorId === meId || up.toUserIds.includes(meId) || this.session.role === "full_admin";
+      if (!involved) return;
+      up.replies.push({ id: newId("rep"), authorId: meId, authorName: this.session.displayName, at: new Date().toISOString(), body: body.trim() });
+      // Ping everyone on the thread except the person replying.
+      const others = new Set([up.authorId, ...up.toUserIds].filter((x) => x !== meId));
+      for (const uid of others) {
+        this.notify(db, { toUserId: uid, kind: "info", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
+      }
+    });
   }
 
   // ---- Vendor agreements ----
@@ -1096,11 +1281,6 @@ class Store {
     });
   }
 
-  addScheduleItem(item: Omit<ScheduleItem, "id">) {
-    this.mutate((db) => {
-      db.schedule.push({ id: newId("sch"), ...item });
-    });
-  }
   removeScheduleItem(id: string) {
     this.mutate((db) => {
       db.schedule = db.schedule.filter((s) => s.id !== id);

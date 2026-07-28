@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { Money, StatCard, SectionTitle, PageHeader, StackBar, Pill } from "./ui/bits";
-import { byCategory, totals, drawAmount, MACRO_ORDER, MACRO_COLOR, fmt } from "@/lib/data/money";
+import { byCategory, totals, drawAmount, MACRO_ORDER, MACRO_COLOR, fmt, materialDates, tradeName } from "@/lib/data/money";
 import { accessFor } from "@/lib/data/types";
 
 export default function Dashboard() {
@@ -11,16 +12,15 @@ export default function Dashboard() {
   const db = store.db;
   const role = store.session.role;
   const user = store.currentUser;
-  const canBudget = accessFor(user, role, "budget") !== "none";
+  // Cost visibility keys off the costs-module permission, not the role name —
+  // the Designer is a "viewer" (not a trade) but still must never see money.
+  const canSeeCosts = accessFor(user, role, "costs") !== "none";
+  const [qPage, setQPage] = useState(0);
 
   const t = totals(db.costLines);
   const cats = byCategory(db.costLines);
   const buffer = (t.grand * db.project.bufferPct) / 100;
   const allIn = t.grand + buffer;
-
-  // Funding coverage
-  const available = db.funding.reduce((a, f) => a + f.amount, 0);
-  const coverage = Math.min(1, available / (allIn || 1));
 
   // Scope progress
   const inScope = db.scope.filter((c) => c.status === "in");
@@ -32,12 +32,17 @@ export default function Dashboard() {
   const paidTotal = paidDraws.reduce((a, d) => a + drawAmount(db, d), 0);
   const remaining = Math.max(0, t.grand - paidTotal);
 
-  // Critical-path materials nearing their selection due date (next 30 days, not purchased).
+  // Purchase queue: materials still to buy (needed/identified), ordered by when
+  // they must be on-hand — dates derive from each material's assigned trade.
   const today = Date.now();
-  const soon = db.materials
-    .filter((m) => m.critical && m.dueDate && m.status !== "purchased" && m.status !== "delivered")
-    .map((m) => ({ m, days: Math.round((new Date(`${m.dueDate}T00:00:00`).getTime() - today) / 86400000) }))
-    .filter((x) => x.days <= 30)
+  const queue = db.materials
+    .filter((m) => m.status === "needed" || m.status === "identified")
+    .map((m) => {
+      const d = materialDates(db, m);
+      const due = d.onHandBy ?? d.identifyBy;
+      return { m, due, lastWk: d.needBy === "finish", days: due ? Math.round((new Date(`${due}T00:00:00`).getTime() - today) / 86400000) : Infinity };
+    })
+    .filter((x) => x.due)
     .sort((a, b) => a.days - b.days);
 
   // Trades get a focused dashboard — only their own work, no project financials.
@@ -51,51 +56,70 @@ export default function Dashboard() {
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginTop: 18 }}>
-        <StatCard label="Projected Cost" value={<Money value={t.grand} />} sub={<>Builder <Money value={t.builder} /> · Owner <Money value={t.owner} /></>} />
-        <StatCard label={`All-in (+${db.project.bufferPct}% buffer)`} value={<Money value={allIn} />} accent="var(--brass-2)" sub={<>Buffer <Money value={buffer} /></>} />
-        <StatCard label="Builder Markup" value={<Money value={t.markup} />} sub="Pass-through @ 20%" />
-        {canBudget && <StatCard label="Funding Available" value={<Money value={available} />} accent={coverage >= 1 ? "var(--ok)" : "var(--rust)"} sub={`${Math.round(coverage * 100)}% of all-in covered`} />}
+        {canSeeCosts && <>
+          <StatCard label="Projected Cost" value={<Money value={t.grand} />} sub={<>Builder <Money value={t.builder} /> · Owner <Money value={t.owner} /><div style={{ marginTop: 2 }}>incl. <Money value={t.markup} /> builder markup</div></>} />
+          <StatCard label={`All-in (+${db.project.bufferPct}% buffer)`} value={<Money value={allIn} />} accent="var(--brass-2)" sub={<>Buffer <Money value={buffer} /></>} />
+          <StatCard label="Builder Markup" value={<Money value={t.markup} />} sub="Pass-through @ 20%" />
+        </>}
         <StatCard label="QC Sign-offs" value={`${signed}/${items.length}`} sub="Owner + builder dual sign-off" />
       </div>
 
-      {soon.length > 0 && (
-        <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--rust)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <strong style={{ fontSize: 14, color: "var(--rust)" }}>⏰ Critical-path selections due soon</strong>
+      {queue.length > 0 && (() => {
+        const PAGE = 8;
+        const pages = Math.ceil(queue.length / PAGE);
+        const page = Math.min(qPage, pages - 1);
+        return (
+        <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--brass)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <strong style={{ fontSize: 14, color: "var(--walnut)" }}>🛒 Next materials to purchase</strong>
+            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>ordered by when each must be on-hand (from its trade’s schedule)</span>
             <Link href="/materials" className="btn btn-sm" style={{ marginLeft: "auto" }}>Materials →</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {soon.slice(0, 6).map(({ m, days }) => (
-              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                <Pill color="#fff" bg={days < 0 ? "var(--rust)" : days <= 7 ? "var(--rust)" : "var(--brass)"}>{days < 0 ? `${-days}d overdue` : `${days}d`}</Pill>
-                <span style={{ flex: 1 }}><strong>{m.item}</strong> <span style={{ color: "var(--muted)" }}>· {m.roomLabel ?? ""}</span></span>
-                <span style={{ color: "var(--muted)" }}>{m.designerApproved ? "approved" : m.approvalRequested ? "awaiting designer" : "needs approval"}</span>
-                <span style={{ color: "var(--muted)" }}>due {m.dueDate}</span>
+            {queue.slice(page * PAGE, page * PAGE + PAGE).map(({ m, days, due, lastWk }) => (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, flexWrap: "wrap" }}>
+                <Pill color="#fff" bg={days < 0 ? "var(--rust)" : days <= 7 ? "var(--rust)" : days <= 21 ? "var(--brass)" : "var(--sage)"}>{days < 0 ? `${-days}d overdue` : `${days}d`}</Pill>
+                <span style={{ flex: 1, minWidth: 140 }}>
+                  <strong>{m.item}</strong>{(m.qty ?? 1) > 1 ? <span style={{ color: "var(--muted)" }}> ×{m.qty}</span> : null}
+                  <span style={{ color: "var(--muted)" }}> · {m.roomLabel ?? "—"}{m.tradeId ? ` · ${tradeName(db, m.tradeId)}` : ""}</span>
+                </span>
+                <span style={{ color: "var(--muted)", fontSize: 11.5 }}>{m.designerApproved && m.ownerApproved ? "✓ approved" : (m.designerApproved || m.ownerApproved) ? "partly approved" : "needs approval"}</span>
+                <span style={{ color: "var(--sage-2)", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>📦 {due}{lastWk && <span style={{ color: "var(--brass-2)", fontWeight: 700 }}> · last wk</span>}</span>
               </div>
             ))}
           </div>
+          {pages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, justifyContent: "center" }}>
+              <button className="btn btn-sm" disabled={page === 0} onClick={() => setQPage(page - 1)}>‹ Prev</button>
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>Page {page + 1} of {pages} · {queue.length} items</span>
+              <button className="btn btn-sm" disabled={page >= pages - 1} onClick={() => setQPage(page + 1)}>Next ›</button>
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
-      <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Building Costs →</Link>}>Cost by Category</SectionTitle>
-      <div className="card" style={{ padding: 16 }}>
-        <StackBar height={14} segments={MACRO_ORDER.map((c) => ({ value: cats.find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px,1fr))", gap: "8px 18px", marginTop: 14 }}>
-          {MACRO_ORDER.map((c) => {
-            const r = cats.find((x) => x.key === c);
-            if (!r || r.total === 0) return null;
-            return (
-              <div key={c} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                <span style={{ width: 11, height: 11, borderRadius: 3, background: MACRO_COLOR[c], flexShrink: 0 }} />
-                <span style={{ fontSize: 13, flex: 1 }}>{c}</span>
-                <span style={{ fontSize: 13, fontWeight: 700 }}><Money value={r.total} /></span>
-              </div>
-            );
-          })}
+      {canSeeCosts && <>
+        <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Building Costs →</Link>}>Cost by Category</SectionTitle>
+        <div className="card" style={{ padding: 16 }}>
+          <StackBar height={14} segments={MACRO_ORDER.map((c) => ({ value: cats.find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px,1fr))", gap: "8px 18px", marginTop: 14 }}>
+            {MACRO_ORDER.map((c) => {
+              const r = cats.find((x) => x.key === c);
+              if (!r || r.total === 0) return null;
+              return (
+                <div key={c} style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: MACRO_COLOR[c], flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, flex: 1 }}>{c}</span>
+                  <span style={{ fontSize: 13, fontWeight: 700 }}><Money value={r.total} /></span>
+                </div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      </>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }} className="ever-two">
+      <div style={{ display: "grid", gridTemplateColumns: canSeeCosts ? "1fr 1fr" : "1fr", gap: 16, marginTop: 8 }} className="ever-two">
         <div>
           <SectionTitle right={<Link href="/admin" className="btn btn-sm">Scope matrix →</Link>}>Scope &amp; QC</SectionTitle>
           <div className="card" style={{ padding: 16 }}>
@@ -108,7 +132,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-        <div>
+        {canSeeCosts && <div>
           <SectionTitle right={<Link href="/payments" className="btn btn-sm">Payments →</Link>}>Draws &amp; Payments</SectionTitle>
           <div className="card" style={{ padding: 16 }}>
             <Row label="Paid to date" value={fmt(paidTotal)} />
@@ -126,7 +150,7 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        </div>
+        </div>}
       </div>
 
       <style>{`@media (max-width: 760px){ .ever-two{ grid-template-columns: 1fr !important; } }`}</style>

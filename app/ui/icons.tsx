@@ -6,11 +6,14 @@ const base = (p: SVGProps<SVGSVGElement>) => ({
   ...p,
 });
 
+export const GearIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><circle cx="12" cy="12" r="3.2" /><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4L9.6 5a7.7 7.7 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.5Z" /></svg>
+);
+export const ChatIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.9 8.9 0 0 1-3.8-.9L3 20l1-4.9a8.3 8.3 0 0 1-1-4A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5Z" /><path d="M8 10h8" /><path d="M8 13.5h5" /></svg>
+);
 export const HomeIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M9 21v-6h6v6" /></svg>
-);
-export const GridIcon = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base(p)}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
 );
 export const CoinsIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><ellipse cx="9" cy="6" rx="6" ry="3" /><path d="M3 6v6c0 1.7 2.7 3 6 3s6-1.3 6-3" /><path d="M15 12.5c2.5-.2 6-1.3 6-3.5 0-1.5-1.6-2.6-4-3" /><path d="M21 9v6c0 1.7-2.7 3-6 3-1 0-2-.1-3-.3" /></svg>
@@ -30,14 +33,8 @@ export const UsersIcon = (p: SVGProps<SVGSVGElement>) => (
 export const FolderIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M3 6a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" /></svg>
 );
-export const CheckIcon = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base(p)}><path d="M20 6 9 17l-5-5" /></svg>
-);
 export const ChevronIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="m9 6 6 6-6 6" /></svg>
-);
-export const SparkIcon = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base(p)}><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" /></svg>
 );
 export const ReceiptIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M5 3v18l2-1.2 2 1.2 2-1.2 2 1.2 2-1.2 2 1.2V3l-2 1.2L14 3l-2 1.2L10 3 8 4.2 6 3 5 3Z" /><path d="M8 8h8M8 12h8M8 16h5" /></svg>

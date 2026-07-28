@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
-import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard } from "../ui/bits";
+import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import {
-  accessFor, SCHEDULE_LABEL, type ScheduleItem, type ScheduleStatus, type MacroCategory,
+  accessFor, isArchitectUser, SCHEDULE_LABEL, type ScheduleItem, type ScheduleStatus, type MacroCategory,
 } from "@/lib/data/types";
-import { tradeCost, tradeName, MACRO_COLOR, fmt } from "@/lib/data/money";
+import { tradeName, MACRO_COLOR, MACRO_ORDER } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
+import { MsgButton } from "../ui/messenger";
 
 const DAY = 86400000;
 const BASE_MONTH_W = 58;
@@ -56,13 +57,31 @@ export default function TimingPage() {
   const autoRef = useRef(false);
   const MONTH_W = Math.round(BASE_MONTH_W * zoom);
   useEffect(() => setMounted(true), []);
+  // Visible width of the Gantt scroll pane — the drilldown pins itself to this
+  // so it stays on-screen no matter how far the chart is scrolled (phones!).
+  const [paneW, setPaneW] = useState<number | null>(null);
+  useEffect(() => {
+    const measure = () => setPaneW(scrollRef.current?.clientWidth ?? null);
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Deep link from Messenger context chips: /timing?task=<id> opens that drilldown.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("task");
+    if (id && store.db.schedule.some((s) => s.id === id)) setOpenId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const canEdit = (role === "builder" || role === "full_admin") && access === "edit";
+  // Owner AND builder can add brand-new timeline items (drag-editing stays builder/admin).
+  const canAdd = (role === "owner" || role === "builder" || role === "full_admin") && access === "edit";
   const ownerView = role === "owner";
   const canDrag = canEdit && editing;
 
   // Trades only see their own tasks (+ milestones for inspection context).
-  const myTradeIds = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
+  // Trades see only their own bars — except the architect, who needs the whole schedule.
+  const myTradeIds = role === "trade" && !isArchitectUser(user) ? new Set(user?.tradeIds ?? []) : null;
   const visible = myTradeIds ? db.schedule.filter((s) => (s.tradeId && myTradeIds.has(s.tradeId)) || s.kind === "milestone") : db.schedule;
 
   const catOf = (tradeId?: string): MacroCategory | undefined => db.trades.find((t) => t.id === tradeId)?.category;
@@ -119,6 +138,9 @@ export default function TimingPage() {
 
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
+  // Multi-select (edit mode): checked bars move together when any of them is dragged.
+  const [selIds, setSelIds] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) => setSelIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   function applyDelta(s: ScheduleItem, mode: "move" | "resize", days: number) {
     if (!days) return;
@@ -133,11 +155,23 @@ export default function TimingPage() {
     }
   }
 
+  /** Shift every selected bar by the same number of days (group move). */
+  function applyGroupDelta(days: number) {
+    if (!days) return;
+    selIds.forEach((id) => {
+      const it = db.schedule.find((x) => x.id === id);
+      if (!it) return;
+      const [ns, ne] = datesOf(it);
+      store.editSchedule(id, iso(ns + days * DAY), iso(ne + days * DAY));
+    });
+  }
+
   // edit-mode lifecycle
   function beginEdit() {
     const snap = new Map<string, { start: string; end: string }>();
     db.schedule.forEach((s) => snap.set(s.id, { start: s.start, end: s.end }));
     editSnapshot.current = snap;
+    setSelIds(new Set());
     setEditing(true);
   }
   function cancelEdit() {
@@ -146,6 +180,7 @@ export default function TimingPage() {
       if (s && (s.start !== v.start || s.end !== v.end)) store.editSchedule(id, v.start, v.end);
     });
     setEditing(false);
+    setSelIds(new Set());
     editSnapshot.current = new Map();
   }
   const pendingChanges = db.schedule
@@ -154,8 +189,6 @@ export default function TimingPage() {
 
   if (access === "none") return <NoAccess module="Timing" />;
 
-  const distinctTrades = [...new Set(visible.map((s) => s.tradeId).filter(Boolean) as string[])];
-  const scheduledCost = distinctTrades.reduce((a, id) => a + tradeCost(db, id), 0);
   const pending = visible.filter((s) => s.confirm === "pending");
   const notifs = store.notificationsFor(user, role).filter((n) => !n.read);
 
@@ -164,11 +197,10 @@ export default function TimingPage() {
       <PageHeader
         title="Timing"
         subtitle={
-          canEdit ? "Enter Edit mode to drag bars (move) or their right edge (length). Publish to log the change with a reason, notify trades, and email the client."
+          canEdit ? "Enter Edit mode to drag bars (move) or their right edge (length). Tick several rows to move them together. Publish to log the change with a reason, notify trades, and email the client."
           : ownerView ? "The approved construction schedule. You see dates once the trade has confirmed them."
           : "Your assigned tasks. Confirm the dates the builder proposes."
         }
-        right={<Link href="/costs" className="btn btn-sm">Building Costs →</Link>}
       />
 
       {(role === "builder" || role === "trade" || role === "full_admin") && notifs.length > 0 && (
@@ -184,7 +216,6 @@ export default function TimingPage() {
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
-        <StatCard label="Scheduled Trades Cost" value={<Money value={scheduledCost} />} sub="live from Building Costs" accent="var(--brass-2)" />
         <StatCard label="Tasks" value={`${visible.length}`} sub={`${visible.filter((s) => s.status === "done").length} done`} />
         <StatCard label="Awaiting Trade Confirm" value={`${pending.length}`} accent={pending.length ? "var(--rust)" : "var(--ok)"} sub="date changes pending" />
         <StatCard label="Revisions" value={`${db.scheduleRevisions.length}`} sub="published timing changes" />
@@ -218,7 +249,10 @@ export default function TimingPage() {
             <>
               <Pill color="#fff" bg="var(--brass)">EDIT MODE</Pill>
               <span style={{ fontSize: 12.5 }}>{pendingChanges.length} change{pendingChanges.length === 1 ? "" : "s"} staged</span>
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>drag bar = move · drag right edge = length</span>
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>
+                drag bar = move · drag right edge = length · {selIds.size > 1 ? <strong style={{ color: "var(--brass-2)" }}>{selIds.size} selected — drag any one to move them together</strong> : "tick rows to move several together"}
+              </span>
+              {selIds.size > 0 && <button className="btn btn-sm" onClick={() => setSelIds(new Set())}>Clear selection</button>}
               <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
                 <button className="btn btn-sm" onClick={cancelEdit}>Cancel</button>
                 <button className="btn btn-primary btn-sm" disabled={!pendingChanges.length} onClick={() => setPublishOpen(true)}>Publish {pendingChanges.length || ""} change{pendingChanges.length === 1 ? "" : "s"}</button>
@@ -229,6 +263,8 @@ export default function TimingPage() {
       )}
 
       {showHistory && <HistoryPanel />}
+
+      {canAdd && <AddTimelineItem />}
 
       {/* Gantt: maxHeight + sticky header */}
       <div ref={scrollRef} className="card" style={{ padding: 0, overflow: "auto", maxHeight: "62vh" }}>
@@ -243,8 +279,11 @@ export default function TimingPage() {
           {visible.map((s) => {
             const [ds, de] = datesOf(s);
             const isDrag = drag?.id === s.id;
-            const moveDays = isDrag && drag!.mode === "move" ? drag!.days : 0;
-            const endDays = isDrag ? (drag!.mode === "move" ? drag!.days : drag!.days) : 0;
+            // group drag: dragging any SELECTED bar previews the shift on all selected bars
+            const inGroup = !!drag && !isDrag && drag.mode === "move" && selIds.has(drag.id) && selIds.has(s.id);
+            const moveDays = (isDrag && drag!.mode === "move") || inGroup ? drag!.days : 0;
+            const endDays = isDrag || inGroup ? drag!.days : 0;
+            const isSel = canDrag && selIds.has(s.id);
             const left = x(ds + moveDays * DAY);
             const right = x(de + endDays * DAY);
             const w = Math.max(s.kind === "milestone" ? 0 : 6, right - left);
@@ -252,7 +291,6 @@ export default function TimingPage() {
             const barColor = typeof cat === "string" && cat.startsWith("#") ? cat : "#6b7f5b";
             const prog = s.tradeId ? qc.get(s.tradeId) : undefined;
             const frac = prog && prog.total ? prog.signed / prog.total : s.status === "done" ? 1 : s.status === "in_progress" ? 0.4 : 0;
-            const cost = s.tradeId ? tradeCost(db, s.tradeId) : 0;
             const isOpen = openId === s.id;
             const isPending = s.confirm === "pending" && !ownerView;
             const dl = durLabel(iso(ds + moveDays * DAY), iso(de + endDays * DAY));
@@ -260,17 +298,29 @@ export default function TimingPage() {
             return (
               <div key={s.id}>
                 <div style={{ display: "flex", alignItems: "stretch", borderBottom: "1px solid var(--line)", background: isOpen ? "var(--sage-tint)" : undefined }}>
-                  <button onClick={() => setOpenId(isOpen ? null : s.id)} style={{ width: LABEL_W, flexShrink: 0, position: "sticky", left: 0, zIndex: 2, background: isOpen ? "var(--sage-tint)" : "var(--paper)", borderRight: "1px solid var(--line)", border: "none", textAlign: "left", padding: "5px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+                  <div role="button" onClick={() => setOpenId(isOpen ? null : s.id)} style={{ width: LABEL_W, flexShrink: 0, position: "sticky", left: 0, zIndex: 2, background: isOpen ? "var(--sage-tint)" : "var(--paper)", borderRight: "1px solid var(--line)", textAlign: "left", padding: "5px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+                    {canDrag && (
+                      <>
+                        {/* Row-order controls — tap-friendly, no drag needed */}
+                        <span style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                          <button title="Move row up" onClick={() => store.moveScheduleItem(s.id, -1)}
+                            style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▲</button>
+                          <button title="Move row down" onClick={() => store.moveScheduleItem(s.id, 1)}
+                            style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▼</button>
+                        </span>
+                        <input type="checkbox" checked={selIds.has(s.id)} title="Select to move together with other checked bars"
+                          onClick={(e) => e.stopPropagation()} onChange={() => toggleSel(s.id)} style={{ flexShrink: 0 }} />
+                      </>
+                    )}
                     <span style={{ width: 8, height: 8, borderRadius: 99, background: STATUS_COLOR[s.status], flexShrink: 0 }} />
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 12.5, fontWeight: 600, display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</span>
                       <span style={{ fontSize: 10.5, color: "var(--muted)" }}>
                         {s.kind === "milestone" ? "Milestone" : s.kind === "procurement" ? "Procurement" : tradeName(db, s.tradeId!)}
-                        {cost > 0 && <> · {fmt(cost)}</>}
                         {isPending && <> · <span style={{ color: "var(--rust)" }}>pending</span></>}
                       </span>
                     </span>
-                  </button>
+                  </div>
                   <div style={{ position: "relative", width: totalW, height: ROW_H }}>
                     {months.map((_, i) => (<div key={i} style={{ position: "absolute", left: i * MONTH_W, top: 0, bottom: 0, width: 1, background: "var(--line)", opacity: .5 }} />))}
                     {/* original-plan ghost */}
@@ -284,8 +334,8 @@ export default function TimingPage() {
                         title={`${s.label} · ${dl}${canDrag ? " · drag to move, edge to resize" : ""}`}
                         onPointerDown={(e) => { if (!canDrag) return; e.currentTarget.setPointerCapture(e.pointerId); const st = { id: s.id, startX: e.clientX, days: 0, mode: "move" as const }; dragRef.current = st; setDrag(st); }}
                         onPointerMove={(e) => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = Math.round((e.clientX - d.startX) / pxPerDay); if (days !== d.days) { dragRef.current = { ...d, days }; setDrag({ ...d, days }); } }}
-                        onPointerUp={() => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = d.days; const mode = d.mode; dragRef.current = null; setDrag(null); if (days) applyDelta(s, mode, days); }}
-                        style={{ position: "absolute", left, top: 6, width: w, height: ROW_H - 12, borderRadius: 5, background: hexA(barColor, 0.28), border: isPending ? "1.5px dashed var(--rust)" : `1px solid ${s.status === "blocked" ? "var(--rust)" : s.status === "done" ? "var(--ok)" : hexA(barColor, 0.9)}`, overflow: "hidden", display: "flex", alignItems: "center", cursor: canDrag ? "grab" : "pointer", touchAction: "none" }}>
+                        onPointerUp={() => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = d.days; const mode = d.mode; dragRef.current = null; setDrag(null); if (days) { if (mode === "move" && selIds.size > 1 && selIds.has(s.id)) applyGroupDelta(days); else applyDelta(s, mode, days); } }}
+                        style={{ position: "absolute", left, top: 6, width: w, height: ROW_H - 12, borderRadius: 5, background: hexA(barColor, 0.28), border: isPending ? "1.5px dashed var(--rust)" : `1px solid ${s.status === "blocked" ? "var(--rust)" : s.status === "done" ? "var(--ok)" : hexA(barColor, 0.9)}`, boxShadow: isSel ? "0 0 0 2px var(--brass)" : undefined, overflow: "hidden", display: "flex", alignItems: "center", cursor: canDrag ? "grab" : "pointer", touchAction: "none" }}>
                         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${frac * 100}%`, background: barColor, opacity: .85 }} />
                         {w > 40 && <span style={{ position: "relative", fontSize: 9.5, fontWeight: 700, color: frac > 0.5 ? "#fff" : "var(--ink)", padding: "0 5px", whiteSpace: "nowrap" }}>{dl}</span>}
                         {canDrag && (
@@ -299,7 +349,13 @@ export default function TimingPage() {
                     )}
                   </div>
                 </div>
-                {isOpen && <Drilldown item={s} editing={editing} canEdit={canEdit} onJump={() => setOpenId(null)} />}
+                {/* The Gantt canvas is wide + horizontally scrolled; pin the
+                    drilldown to the VISIBLE pane so it never opens off-screen. */}
+                {isOpen && (
+                  <div style={{ position: "sticky", left: 0, width: paneW ?? "100%", maxWidth: "100%" }}>
+                    <Drilldown item={s} editing={editing} canEdit={canEdit} onJump={() => setOpenId(null)} />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -309,16 +365,71 @@ export default function TimingPage() {
       </div>
 
       <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>
-        Auto-zoomed to ~5 weeks from today (red line). Bars fill with QC sign-off; cost is live from <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>Building Costs</Link>. Toggle <em>overlay original</em> to compare the first plan (dashed) with current.
+        Auto-zoomed to ~5 weeks from today (red line). Bars fill with QC sign-off. Toggle <em>overlay original</em> to compare the first plan (dashed) with current.
       </p>
 
       {cascade && <CascadeModal cascade={cascade} editing={editing} onClose={() => setCascade(null)} />}
-      {publishOpen && <PublishModal changes={pendingChanges} onClose={() => setPublishOpen(false)} onDone={() => { setPublishOpen(false); setEditing(false); editSnapshot.current = new Map(); }} />}
+      {publishOpen && <PublishModal changes={pendingChanges} onClose={() => setPublishOpen(false)} onDone={() => { setPublishOpen(false); setEditing(false); setSelIds(new Set()); editSnapshot.current = new Map(); }} />}
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
+// Owner/builder add a brand-new bar: task, procurement window, or milestone.
+// Items with an assigned trade go out as "pending" for the trade to confirm.
+function AddTimelineItem() {
+  const store = useStore();
+  const db = store.db;
+  const [open, setOpen] = useState(false);
+  const [label, setLabel] = useState("");
+  const [kind, setKind] = useState<ScheduleItem["kind"]>("work");
+  const [tradeId, setTradeId] = useState("");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const milestone = kind === "milestone";
+  const ready = !!label.trim() && !!start && (milestone || (!!end && end >= start));
+
+  const add = () => {
+    if (!ready) return;
+    store.addScheduleItem({ label, kind, tradeId: tradeId || undefined, start, end: milestone ? start : end });
+    setLabel(""); setStart(""); setEnd(""); setOpen(false);
+  };
+  const cell = (l: string, node: React.ReactNode) => (
+    <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>{l}</span>
+      {node}
+    </label>
+  );
+
+  if (!open) return (
+    <button className="btn btn-sm" style={{ marginBottom: 10 }} onClick={() => setOpen(true)}>＋ Add timeline item</button>
+  );
+  return (
+    <div className="card" style={{ padding: 12, marginBottom: 10, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", borderLeft: "3px solid var(--sage)" }}>
+      <strong style={{ fontSize: 13, alignSelf: "center" }}>New timeline item</strong>
+      {cell("Task", <input autoFocus placeholder="e.g. Install radiant floor" value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} style={{ minWidth: 190 }} />)}
+      {cell("Type", (
+        <select value={kind} onChange={(e) => setKind(e.target.value as ScheduleItem["kind"])}>
+          <option value="work">Trade work</option>
+          <option value="procurement">Procurement</option>
+          <option value="milestone">Milestone</option>
+        </select>
+      ))}
+      {!milestone && cell("Trade", (
+        <select value={tradeId} onChange={(e) => setTradeId(e.target.value)}>
+          <option value="">— none —</option>
+          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+        </select>
+      ))}
+      {cell(milestone ? "Date" : "Start", <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />)}
+      {!milestone && cell("Finish", <input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />)}
+      <button className="btn btn-primary btn-sm" disabled={!ready} onClick={add}>Add to timeline</button>
+      <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+      {tradeId && !milestone && <span style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>The assigned trade will be notified and asked to confirm the dates.</span>}
+    </div>
+  );
+}
+
 function HistoryPanel() {
   const store = useStore();
   const db = store.db;
@@ -417,9 +528,8 @@ function Drilldown({ item, editing, canEdit, onJump }: { item: ScheduleItem; edi
     <div style={{ padding: "12px 16px 18px", background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <strong style={{ fontSize: 13.5 }}>{item.tradeId ? tradeName(db, item.tradeId) : item.kind}</strong>
-        {item.tradeId && <span style={{ fontSize: 13 }}>Cost: <strong><Money value={tradeCost(db, item.tradeId)} /></strong></span>}
         {item.assignedUserId && <ConfirmBadge item={item} />}
-        {item.tradeId && <Link href="/costs" className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={onJump}>Open in Building Costs →</Link>}
+        <MsgButton kind="timing" refId={item.id} label={item.label} href={`/timing?task=${item.id}`} small />
       </div>
 
       {canEdit && editing ? (

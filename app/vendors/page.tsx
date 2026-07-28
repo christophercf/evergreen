@@ -68,9 +68,10 @@ function downloadTradePdf(db: DB, tradeId: string) {
       text(`Billing: ${bill}`, { size: 9, color: [80, 72, 60], indent: 8 });
     }
   };
+  // Only the contract's two parties appear: vendor + whoever manages them.
   contactLine(ownerMgd ? "Vendor (Owner Managed)" : "Vendor", vC);
-  contactLine("Builder / GC", bC);
-  contactLine("Owner", oC);
+  if (ownerMgd) contactLine("Owner", oC);
+  else contactLine("Builder / GC", bC);
 
   const ag0 = db.vendorAgreements.find((a) => a.tradeId === tradeId);
   if (ag0?.scopeDrawingId) {
@@ -84,7 +85,9 @@ function downloadTradePdf(db: DB, tradeId: string) {
   heading("Signatures");
   const ag = db.vendorAgreements.find((a) => a.tradeId === tradeId);
   const fmtDt = (s: string) => new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-  (["builder", "trade", "owner"] as const).forEach((party) => {
+  // Signature blocks: the managing party + the vendor only.
+  const pdfMgr: "builder" | "owner" = ownerMgd ? "owner" : "builder";
+  ([pdfMgr, "trade"] as const).forEach((party) => {
     const label = party === "builder" ? "Builder / GC" : party === "trade" ? "Trade / Vendor" : "Owner / Client";
     const sig = ag?.round1.find((s) => s.party === party);
     ensure(54);
@@ -105,23 +108,41 @@ export default function VendorsPage() {
   const access = accessFor(user, role, "vendors");
   if (access === "none") return <NoAccess module="Vendor Management" />;
 
-  const myTrades = role === "trade" ? new Set(user?.tradeIds ?? []) : null;
+  // Trades and designers/viewers are scoped to their own assigned trades —
+  // they only see contracts for work assigned to them, never the whole roster.
+  const scopedToOwn = role === "trade" || role === "viewer";
+  const myTrades = scopedToOwn ? new Set(user?.tradeIds ?? []) : null;
   // Trades with a cost line OR a managed vendor contact (so owner-managed vendors show too).
   const contactTradeIds = db.contacts.filter((c) => c.party === "vendor" && c.tradeId).map((c) => c.tradeId!);
   const activeTradeIds = Array.from(new Set([...db.costLines.map((l) => l.tradeId), ...contactTradeIds]))
     .filter((id) => !myTrades || myTrades.has(id))
+    // Contracts are private to whoever manages the trade: the builder never sees
+    // owner-managed contracts, and the owner never sees builder-managed ones.
+    // Full Admin sees all; trades/viewers were already scoped above.
+    .filter((id) => {
+      const ownerMgd = isOwnerManaged(db.trades.find((t) => t.id === id));
+      if (role === "builder") return !ownerMgd;
+      if (role === "owner") return ownerMgd;
+      return true;
+    })
     .sort((a, b) => tradeCost(db, b) - tradeCost(db, a));
 
   return (
     <>
       <PageHeader
-        title="Vendor Management"
-        subtitle="Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."
-        right={<Link href="/costs" className="btn btn-sm">Building Costs →</Link>}
+        title={role === "trade" ? "Current Contract" : "Vendor Management"}
+        subtitle={role === "trade"
+          ? "Your contract with the project: scope, terms, your requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."
+          : "Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."}
+        right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Building Costs →</Link> : undefined}
       />
-      <SectionTitle>Vendors &amp; Contracts</SectionTitle>
+      <SectionTitle>{role === "trade" ? "Your Contract" : "Vendors & Contracts"}</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {activeTradeIds.map((tid) => <VendorCard key={tid} tradeId={tid} />)}
+        {activeTradeIds.length === 0 ? (
+          <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+            {scopedToOwn ? "No vendor contracts are assigned to you." : "No vendors or contracts yet."}
+          </div>
+        ) : activeTradeIds.map((tid) => <VendorCard key={tid} tradeId={tid} />)}
       </div>
     </>
   );
@@ -135,13 +156,20 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const name = store.session.displayName;
   const access = accessFor(me, role, "vendors");
   const ro = access !== "edit";
+  // The Designer can review vendor scope/materials/contacts but never money.
+  const canSeeCosts = accessFor(me, role, "costs") !== "none";
 
   const agreement: VendorAgreement = db.vendorAgreements.find((a) => a.tradeId === tradeId) ?? { tradeId, round1: [], round2: [] };
   const vendorUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
   const isAssignedTrade = role === "trade" && !!vendorUser && vendorUser.id === me?.id;
-  const canBuilderSign = role === "builder" || role === "full_admin";
+
+  // Each contract is between the vendor and whoever MANAGES the trade —
+  // builder-managed contracts sign builder↔trade, owner-managed sign owner↔trade.
+  // The other party isn't an approver and doesn't co-sign.
+  const ownerManaged = isOwnerManaged(db.trades.find((t) => t.id === tradeId));
+  const manager: "builder" | "owner" = ownerManaged ? "owner" : "builder";
+  const canManagerSign = role === manager || role === "full_admin";
   const canTradeSign = isAssignedTrade || role === "full_admin";
-  const canOwnerSign = role === "owner" || role === "full_admin";
   const canEditRequest = !ro || isAssignedTrade;
 
   const cost = tradeCost(db, tradeId);
@@ -151,8 +179,8 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const mats = db.materials.filter((m) => m.tradeId === tradeId);
   const terms = renderTerms(db, tradeId);
 
-  const r1Done = agreement.round1.some((s) => s.party === "builder") && agreement.round1.some((s) => s.party === "trade");
-  const r2Done = agreement.round2.some((s) => s.party === "builder") && agreement.round2.some((s) => s.party === "trade");
+  const r1Done = agreement.round1.some((s) => s.party === manager) && agreement.round1.some((s) => s.party === "trade");
+  const r2Done = agreement.round2.some((s) => s.party === manager) && agreement.round2.some((s) => s.party === "trade");
 
   // This trade's draw allocations (for round 2 schedule).
   const myLineIds = new Set(db.costLines.filter((l) => l.tradeId === tradeId).map((l) => l.id));
@@ -164,7 +192,6 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   const [start, setStart] = useState(agreement.startDate ?? "");
   const [finish, setFinish] = useState(agreement.finishDate ?? "");
 
-  const ownerManaged = isOwnerManaged(db.trades.find((t) => t.id === tradeId));
   const vendorContact = db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId);
   const builderContact = db.contacts.find((c) => c.party === "builder");
   const ownerContact = db.contacts.find((c) => c.party === "owner");
@@ -177,8 +204,10 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         {vendorUser && <Pill bg="var(--cream-2)">{vendorUser.name}</Pill>}
         <Pill color="#fff" bg={r1Done ? "var(--ok)" : "var(--sc-unset)"}>R1 {r1Done ? "executed" : "draft"}</Pill>
         <Pill color="#fff" bg={r2Done ? "var(--ok)" : "var(--sc-unset)"}>R2 {r2Done ? "executed" : "draft"}</Pill>
-        <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 16 }}><Money value={cost} /></span>
-        <button className="btn btn-sm" title="Download trade packet (terms, rooms, materials)" onClick={() => downloadTradePdf(db, tradeId)}>⬇ PDF</button>
+        {canSeeCosts && <>
+          <span style={{ marginLeft: "auto", fontWeight: 700, fontSize: 16 }}><Money value={cost} /></span>
+          <button className="btn btn-sm" title="Download trade packet (terms, rooms, materials)" onClick={() => downloadTradePdf(db, tradeId)}>⬇ PDF</button>
+        </>}
       </div>
 
       <ContactsBilling vendor={vendorContact} builder={builderContact} owner={ownerContact} ownerManaged={ownerManaged} />
@@ -236,11 +265,11 @@ function VendorCard({ tradeId }: { tradeId: string }) {
           {r1Done && <Pill color="#fff" bg="var(--ok)">executed</Pill>}
         </div>
         <p style={{ fontSize: 12.5, margin: "6px 0", color: "var(--muted)" }}>
-          Vendor agrees to the scope above for a total of <strong style={{ color: "var(--ink)" }}>{fmt(cost)}</strong>. Terms &amp; conditions apply.
+          Vendor agrees to the scope above{canSeeCosts ? <> for a total of <strong style={{ color: "var(--ink)" }}>{fmt(cost)}</strong></> : null}. Terms &amp; conditions apply.
         </p>
         <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Full terms &amp; conditions</summary><pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{terms}</pre></details>
-        <BindingBlock canEdit={canBuilderSign && !ro} />
-        <SignRow round={1} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} canOwner={canOwnerSign && !ro} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
+        <BindingBlock canEdit={canManagerSign && !ro} />
+        <SignRow round={1} agreement={agreement} parties={[manager, "trade"]} canManager={canManagerSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
       </div>
 
       {/* Round 2 — draw schedule & timeline */}
@@ -252,9 +281,9 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         </div>
         {r1Done && <>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", margin: "8px 0" }}>
-            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Start<br /><input type="date" value={start} disabled={!canBuilderSign || ro} onChange={(e) => setStart(e.target.value)} /></label>
-            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Finish<br /><input type="date" value={finish} disabled={!canBuilderSign || ro} onChange={(e) => setFinish(e.target.value)} /></label>
-            {(canBuilderSign && !ro) && <button className="btn btn-sm" disabled={!start || !finish} onClick={() => store.setVendorDates(tradeId, start, finish)}>Save dates</button>}
+            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Start<br /><input type="date" value={start} disabled={!canManagerSign || ro} onChange={(e) => setStart(e.target.value)} /></label>
+            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Finish<br /><input type="date" value={finish} disabled={!canManagerSign || ro} onChange={(e) => setFinish(e.target.value)} /></label>
+            {(canManagerSign && !ro) && <button className="btn btn-sm" disabled={!start || !finish} onClick={() => store.setVendorDates(tradeId, start, finish)}>Save dates</button>}
             {agreement.startDate && <span style={{ fontSize: 12, color: "var(--muted)" }}>Saved: {agreement.startDate} → {agreement.finishDate}</span>}
           </div>
           <Lbl>Draw schedule (from Payments)</Lbl>
@@ -262,12 +291,12 @@ function VendorCard({ tradeId }: { tradeId: string }) {
             {drawRows.length ? drawRows.map(({ d, l, amt }, i) => (
               <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
                 <span style={{ flex: 1 }}>{d.name} · {l.name}</span>
-                <span style={{ fontWeight: 600 }}>{fmt(amt)}</span>
+                {canSeeCosts && <span style={{ fontWeight: 600 }}>{fmt(amt)}</span>}
                 <span style={{ minWidth: 92, textAlign: "right", color: d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass-2)" : "var(--muted)" }}>{d.status}</span>
               </div>
             )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment &amp; Draw Management).</span>}
           </div>
-          <SignRow round={2} agreement={agreement} canBuilder={canBuilderSign && !ro} canTrade={canTradeSign} canOwner={canOwnerSign && !ro} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 2, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
+          <SignRow round={2} agreement={agreement} parties={[manager, "trade"]} canManager={canManagerSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 2, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
         </>}
       </div>
     </div>
@@ -296,16 +325,16 @@ function BindingBlock({ canEdit }: { canEdit: boolean }) {
 
 const PARTY_LABEL: Record<"builder" | "trade" | "owner", string> = { builder: "Builder / GC", trade: "Trade / Vendor", owner: "Owner / Client" };
 
-function SignRow({ round, agreement, canBuilder, canTrade, canOwner, signerSig, onSign, onAdopt }: { round: 1 | 2; agreement: VendorAgreement; canBuilder: boolean; canTrade: boolean; canOwner: boolean; signerSig?: string; onSign: (party: "builder" | "trade" | "owner", img?: string) => void; onAdopt: (img: string) => void }) {
+function SignRow({ round, agreement, parties, canManager, canTrade, signerSig, onSign, onAdopt }: { round: 1 | 2; agreement: VendorAgreement; parties: ("builder" | "trade" | "owner")[]; canManager: boolean; canTrade: boolean; signerSig?: string; onSign: (party: "builder" | "trade" | "owner", img?: string) => void; onAdopt: (img: string) => void }) {
   const [pad, setPad] = useState<null | "builder" | "trade" | "owner">(null);
   const sigs = round === 1 ? agreement.round1 : agreement.round2;
   const sig = (party: "builder" | "trade" | "owner") => sigs.find((s) => s.party === party);
   const fmtTs = (s?: string) => (s ? new Date(s).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
-      {(["builder", "trade", "owner"] as const).map((party) => {
+      {parties.map((party) => {
         const s = sig(party);
-        const can = party === "builder" ? canBuilder : party === "trade" ? canTrade : canOwner;
+        const can = party === "trade" ? canTrade : canManager;
         return (
           <div key={party} style={{ flex: 1, minWidth: 200, border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px" }}>
             <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 700 }}>{PARTY_LABEL[party]}</div>
@@ -361,13 +390,16 @@ function ContactBlock({ title, c, accent }: { title: string; c?: ContactSheet; a
 }
 
 function ContactsBilling({ vendor, builder, owner, ownerManaged }: { vendor?: ContactSheet; builder?: ContactSheet; owner?: ContactSheet; ownerManaged: boolean }) {
+  // A contract shows only its two parties: the vendor and whoever manages them.
+  // Owner-managed contracts never show the builder (and vice versa).
   return (
     <div style={{ marginTop: 12 }}>
       <Lbl>Contacts &amp; billing (on contract &amp; draws)</Lbl>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
         <ContactBlock title={ownerManaged ? "Vendor · Owner Managed" : "Vendor"} c={vendor} accent={ownerManaged ? "var(--brass)" : "var(--sage)"} />
-        <ContactBlock title="Builder / GC" c={builder} accent="var(--walnut)" />
-        <ContactBlock title="Owner" c={owner} accent="var(--brass)" />
+        {ownerManaged
+          ? <ContactBlock title="Owner" c={owner} accent="var(--brass)" />
+          : <ContactBlock title="Builder / GC" c={builder} accent="var(--walnut)" />}
       </div>
     </div>
   );

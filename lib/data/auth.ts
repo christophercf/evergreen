@@ -57,6 +57,44 @@ export async function authSendReset(email: string) {
   await c()?.auth.resetPasswordForEmail(email.trim(), { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined });
 }
 
+// Captured the moment this module loads — BEFORE the Supabase client initializes
+// and strips the tokens out of the URL. Reading location later is unreliable.
+const urlAtLoad = typeof window !== "undefined" ? window.location.hash + window.location.search : "";
+const recoveryAtLoad = /type=(recovery|invite)/.test(urlAtLoad);
+const urlErrorAtLoad = (() => {
+  const m = urlAtLoad.match(/error_description=([^&]+)/);
+  return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : null;
+})();
+
+/** True when the user arrived via a Supabase password-recovery or invite link —
+ *  either way they need to set a password before entering the app. */
+export function isRecoveryUrl(): boolean {
+  if (typeof window === "undefined") return false;
+  return recoveryAtLoad || /type=(recovery|invite)/.test(window.location.hash + window.location.search);
+}
+
+/** Error carried on an auth redirect (e.g. “Email link is invalid or has expired”). */
+export function authUrlError(): string | null {
+  return urlErrorAtLoad;
+}
+
+/** Set a new password for the user in the active (recovery) session. */
+export async function authUpdatePassword(password: string): Promise<{ ok: boolean; error?: string }> {
+  const s = c();
+  if (!s) return { ok: false, error: "Auth not configured." };
+  const { error } = await s.auth.updateUser({ password });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Email of the currently signed-in (or recovery) session, if any. */
+export async function authCurrentEmail(): Promise<string | null> {
+  const s = c();
+  if (!s) return null;
+  const { data } = await s.auth.getSession();
+  return data.session?.user?.email ?? null;
+}
+
 /** Send an invite email to the address (server route uses the service_role key). */
 export type InviteReview = { userExists: boolean; confirmed: boolean; lastSignInAt: string | null };
 export async function sendInviteEmail(email: string): Promise<{ ok: boolean; error?: string; emailed?: boolean; link?: string; review?: InviteReview }> {
@@ -92,10 +130,11 @@ export async function removeAuthUser(email: string): Promise<{ ok: boolean; erro
   }
 }
 
-/** Subscribe to auth changes; cb receives the signed-in email (or null). Fires immediately with current session. */
-export function authOnChange(cb: (email: string | null) => void): () => void {
+/** Subscribe to auth changes; cb receives the signed-in email (or null) and the
+ *  Supabase event name (e.g. "SIGNED_IN", "PASSWORD_RECOVERY", "USER_UPDATED"). */
+export function authOnChange(cb: (email: string | null, event: string) => void): () => void {
   const s = c();
   if (!s) return () => {};
-  const { data } = s.auth.onAuthStateChange((_e, session) => cb(session?.user?.email ?? null));
+  const { data } = s.auth.onAuthStateChange((event, session) => cb(session?.user?.email ?? null, event));
   return () => data.subscription.unsubscribe();
 }

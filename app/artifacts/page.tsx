@@ -9,6 +9,7 @@ import { tradeName } from "@/lib/data/money";
 import { fileToDataURL, storeFile, driveViewLink } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
+import { MsgButton } from "../ui/messenger";
 import { FilePreview, FileViewerModal, currentVersion } from "./file-view";
 
 const KIND_ORDER: ArtifactKind[] = ["survey", "drawing", "permit", "contract", "photo", "design", "other"];
@@ -37,7 +38,7 @@ export default function ArtifactsPage() {
   const [viewer, setViewer] = useState<{ id: string; trade?: string } | null>(null);
   const [fileView, setFileView] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
-  const [layout, setLayout] = useState<"cards" | "list">("cards");
+  const [layout, setLayout] = useState<"cards" | "list">("list");
 
   // deep-link: ?artifact=…&view=scope&trade=…
   useEffect(() => {
@@ -49,7 +50,7 @@ export default function ArtifactsPage() {
   if (access === "none") return <NoAccess module="Artifacts" />;
   const ro = access !== "edit";
 
-  const seen = db.artifacts.filter((a) => canSeeArtifact(role, user, a));
+  const seen = db.artifacts.filter((a) => canSeeArtifact(role, user, a, db.trades));
   const visible = seen.filter((a) => !a.archived);
   const archived = seen.filter((a) => a.archived);
   const byKind = (k: ArtifactKind) => visible.filter((a) => a.kind === k);
@@ -170,6 +171,7 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
         {hasAnyFile && <button className="btn btn-sm btn-primary" onClick={onView}>👁 View</button>}
         {href ? (cur?.fileUrl ? <a className="btn btn-sm" href={href} download={cur.fileName ?? a.name}>⬇ Download</a> : <a className="btn btn-sm" href={driveViewLink(href)} target="_blank" rel="noreferrer">↗ Open</a>) : null}
         <button className="btn btn-sm" onClick={() => setHist((v) => !v)}>🕑 {(a.versions?.length ?? (a.url || a.version ? 1 : 0))} ver.</button>
+        <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
         {!ro && <button className="btn btn-sm" title="Notify the team on new versions" onClick={() => store.toggleArtifactWatch(a.id)} style={{ color: a.watch ? "var(--brass-2)" : "var(--muted)" }}>{a.watch ? "🔔 Watching" : "🔕 Watch"}</button>}
         {isAdmin && <button className="btn btn-sm" title="Assign which roles can view this" onClick={() => setShowAccess((v) => !v)}>🔐 Access</button>}
         {!ro && <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
@@ -285,7 +287,7 @@ function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: b
   const th: React.CSSProperties = { textAlign: "left", padding: "6px 8px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--muted)", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" };
   const tdS: React.CSSProperties = { padding: "6px 8px", fontSize: 12.5, borderBottom: "1px solid var(--line)", verticalAlign: "middle" };
   return (
-    <div className="card" style={{ padding: 0, overflow: "auto" }}>
+    <div className="card" style={{ padding: 0, overflow: "auto", maxHeight: "68vh" }}>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr><th style={th}></th><th style={th}>Document</th><th style={th}>Type</th><th style={th}>Source</th><th style={th}>Version</th><th style={th}>Access</th><th style={{ ...th, textAlign: "right" }}>Actions</th></tr></thead>
         <tbody>
@@ -304,6 +306,7 @@ function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: b
                   {a.kind === "drawing" && <button className="btn btn-sm" title="Interactive view" onClick={() => onOpen(a.id)}>✍️</button>}
                   {hasFile && <button className="btn btn-sm" title="View" onClick={() => onView(a.id)}>👁</button>}
                   {cur?.fileUrl ? <a className="btn btn-sm" title="Download" href={cur.fileUrl} download={cur.fileName ?? a.name}>⬇</a> : cur?.driveUrl ? <a className="btn btn-sm" title="Open" href={driveViewLink(cur.driveUrl)} target="_blank" rel="noreferrer">↗</a> : null}
+                  <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
                   {!ro && <button className="btn btn-sm" title={a.archived ? "Unarchive" : "Archive"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "♻" : "🗄"}</button>}
                   {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete" onClick={() => { if (confirm(`Permanently remove "${a.name}"?`)) store.removeArtifact(a.id); }}>🗑</button>}
                 </td>

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle } from "../ui/bits";
 import {
-  accessFor, canRemoveUser, canSeeContacts, isOwnerManaged, SCOPE_LABEL, ROLE_LABEL,
+  accessFor, canRemoveUser, canSeeContacts, isArchitectUser, isOwnerManaged, SCOPE_LABEL, ROLE_LABEL,
   type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User,
 } from "@/lib/data/types";
 import { MACRO_ORDER, tradeName } from "@/lib/data/money";
@@ -103,8 +103,8 @@ function MatrixTab({ ro }: { ro: boolean }) {
       </div>
       {armCopy && <div style={{ fontSize: 12, color: "var(--brass-2)", marginBottom: 8 }}>Click a cell to copy its scope…</div>}
 
-      {/* matrix — sticky header (top) + sticky room column (left) */}
-      <div className="card" style={{ overflow: "auto", maxHeight: "70vh", padding: 0 }}>
+      {/* matrix — sticky header (top) + sticky room column (left) + persistent bottom scrollbar */}
+      <PersistentScroll maxHeight="70vh" dep={`${trades.length}:${db.rooms.length}:${cat}`}>
         <table style={{ fontSize: 12.5, borderCollapse: "separate", borderSpacing: 0 }}>
           <thead>
             <tr>
@@ -144,7 +144,7 @@ function MatrixTab({ ro }: { ro: boolean }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </PersistentScroll>
 
       {/* rooms management */}
       <SectionTitle>Rooms ({db.rooms.length})</SectionTitle>
@@ -290,6 +290,7 @@ const MODULES: { key: ModuleKey; label: string }[] = [
   { key: "dashboard", label: "Dashboard" }, { key: "admin", label: "Admin" }, { key: "costs", label: "Costs" },
   { key: "payments", label: "Payments" }, { key: "budget", label: "Budget" }, { key: "timing", label: "Timing" },
   { key: "materials", label: "Materials" }, { key: "vendors", label: "Vendors" }, { key: "artifacts", label: "Artifacts" },
+  { key: "updates", label: "Updates" },
 ];
 const LEVELS: AccessLevel[] = ["none", "view", "edit"];
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
@@ -305,66 +306,261 @@ function TeamTab({ ro }: { ro: boolean }) {
   const [email, setEmail] = useState("");
   const [nrole, setNrole] = useState<Role>("trade");
   const [confirmRemove, setConfirmRemove] = useState<{ id: string; name: string; email: string } | null>(null);
-
-  const firstTrade = (u: User) => (u.tradeIds ?? [])[0];
-  const builderUsers = db.users.filter((u) => u.role === "builder" || u.role === "full_admin");
-  const ownerUsers = db.users.filter((u) => u.role === "owner");
-  const tradeUsers = db.users.filter((u) => u.role === "trade");
-  const otherUsers = db.users.filter((u) => u.role === "viewer" || (u.role === "trade" && !firstTrade(u)));
-  const vendorTradeIds = Array.from(new Set([
-    ...db.contacts.filter((c) => c.party === "vendor" && c.tradeId).map((c) => c.tradeId!),
-    ...(tradeUsers.map(firstTrade).filter(Boolean) as string[]),
-  ])).sort((a, b) => tradeName(db, a).localeCompare(tradeName(db, b)));
+  const canManageAccess = viewerRole === "full_admin";
 
   return (
     <>
       {confirmRemove && <RemoveDialog target={confirmRemove} onClose={() => setConfirmRemove(null)} />}
-      <SectionTitle>Team, Access &amp; Billing</SectionTitle>
-      <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 12 }}>
-        One place per company — its contact &amp; billing on top, and the people inside it with their roles &amp; module access. Only a <strong>Full Admin</strong> changes roles/permissions; builders invite &amp; manage trades; the owner keeps their own card and owner-managed vendors.
+      <SectionTitle>Access Matrix</SectionTitle>
+      <p style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 10 }}>
+        Everyone on the project in one grid — their role and exactly what each person can see or edit in every module.
+        {canManageAccess
+          ? " Change a role or any cell to grant access."
+          : <> Roles &amp; permissions are read-only — only a <strong>Full Admin</strong> can change them.</>}
+        {" "}Expand a row (▸) for contacts, door code &amp; invite controls.
       </p>
+      <AccessMatrix ro={ro} onRemove={setConfirmRemove} />
 
-      <Group party="builder" title="Builder / GC" users={builderUsers} ro={ro} onRemove={setConfirmRemove} />
-      <Group party="owner" title="Owner" users={ownerUsers} ro={ro} onRemove={setConfirmRemove} />
-
-      <SectionTitle right={!ro ? <AddVendorTrade /> : undefined}>Vendors</SectionTitle>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {vendorTradeIds.map((tid) => <Group key={tid} party="vendor" tradeId={tid} users={tradeUsers.filter((u) => firstTrade(u) === tid)} ro={ro} onRemove={setConfirmRemove} />)}
-        {!vendorTradeIds.length && <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No vendors yet.</div>}
+      <div style={{ marginTop: 22 }}>
+        <SectionTitle right={!ro && (viewerRole === "full_admin" || viewerRole === "builder" || viewerRole === "owner") ? <AddVendorTrade /> : undefined}>Companies &amp; Billing</SectionTitle>
+        <CompaniesBilling ro={ro} />
       </div>
-
-      {otherUsers.length > 0 && <Group party="other" title="Designers / viewers" users={otherUsers} ro={ro} onRemove={setConfirmRemove} />}
 
       {!ro && <div style={{ marginTop: 16 }}><InvitePanel viewerRole={viewerRole} name={name} setName={setName} email={email} setEmail={setEmail} nrole={nrole} setNrole={setNrole} /></div>}
     </>
   );
 }
 
-function Group({ party, title, tradeId, users, ro, onRemove }: { party: "builder" | "owner" | "vendor" | "other"; title?: string; tradeId?: string; users: User[]; ro: boolean; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+const firstTrade = (u: User) => (u.tradeIds ?? [])[0];
+// Cluster order for the access matrix: Owners → Architect → Builders → Trades → Designers/Viewers.
+const GROUP_LABELS = ["Owners", "Architect", "Builders / GC", "Trades", "Designers & Viewers"];
+const groupOf = (u: User): number =>
+  u.role === "full_admin" || u.role === "owner" ? 0
+    : isArchitectUser(u) ? 1
+      : u.role === "builder" ? 2
+        : u.role === "trade" ? 3
+          : 4;
+const lvlColor = (l: AccessLevel) => (l === "edit" ? "var(--sage-2)" : l === "view" ? "var(--ink)" : "var(--muted)");
+
+// One clean grid: a row per person, a column per module. Sticky person column +
+// sticky header + persistent bottom scrollbar so it pans cleanly when wide.
+function AccessMatrix({ ro, onRemove }: { ro: boolean; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+  const store = useStore();
+  const db = store.db;
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  const users = [...db.users].sort((a, b) =>
+    (groupOf(a) - groupOf(b)) ||
+    (tradeName(db, firstTrade(a) ?? "").localeCompare(tradeName(db, firstTrade(b) ?? ""))) ||
+    a.name.localeCompare(b.name));
+
+  const company = (u: User) =>
+    u.role === "trade" ? (firstTrade(u) ? tradeName(db, firstTrade(u)) : "Unassigned")
+      : u.role === "owner" ? "Owner"
+        : u.role === "viewer" ? "Designer / Viewer"
+          : "Builder / GC";
+
+  return (
+    <PersistentScroll maxHeight="72vh" dep={`${users.length}:${open.size}`}>
+      <table style={{ fontSize: 12.5, borderCollapse: "separate", borderSpacing: 0, width: "100%" }}>
+        <thead>
+          <tr>
+            <th style={{ ...thLeft, zIndex: 6, minWidth: 230 }}>Person</th>
+            <th style={{ ...thCell, textAlign: "left", minWidth: 110 }}>Role</th>
+            <th style={{ ...thCell, textAlign: "left", minWidth: 130 }}>Company / Trade</th>
+            {MODULES.map((m) => <th key={m.key} style={{ ...thCell, minWidth: 64 }}>{m.label}</th>)}
+            <th style={{ ...thCell, minWidth: 40 }} />
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u, i) => {
+            const g = groupOf(u);
+            const newGroup = i === 0 || groupOf(users[i - 1]) !== g;
+            return (
+              <Fragment key={u.id}>
+                {newGroup && (
+                  <tr>
+                    <td colSpan={MODULES.length + 4} style={{ padding: "8px 12px 4px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--brass-2)", background: "var(--cream)", borderBottom: "1px solid var(--line)", position: "sticky", left: 0 }}>
+                      {GROUP_LABELS[g]}
+                    </td>
+                  </tr>
+                )}
+                <AccessRow u={u} ro={ro} expanded={open.has(u.id)} onToggle={() => toggle(u.id)} company={company(u)} onRemove={onRemove} />
+              </Fragment>
+            );
+          })}
+          {!users.length && <tr><td style={{ padding: 16, color: "var(--muted)", fontSize: 13 }} colSpan={MODULES.length + 4}>No people yet — invite someone below.</td></tr>}
+        </tbody>
+      </table>
+    </PersistentScroll>
+  );
+}
+
+function AccessRow({ u, ro, expanded, onToggle, company, onRemove }: { u: User; ro: boolean; expanded: boolean; onToggle: () => void; company: string; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+  const store = useStore();
+  const viewerRole = store.session.role;
+  const viewer = store.currentUser;
+  const canManageAccess = viewerRole === "full_admin";
+  const seeContacts = canSeeContacts(viewerRole, u);
+  const canRemove = !ro && canRemoveUser(viewerRole, viewer, u);
+  const pending = u.status && u.status !== "active";
+  const rowBg = expanded ? "var(--sage-tint)" : "var(--paper)";
+
+  return (
+    <>
+      <tr>
+        <td style={{ ...tdLeft, minWidth: 230, background: rowBg, verticalAlign: "top" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+            <button className="btn btn-sm" onClick={onToggle} title={expanded ? "Hide details" : "Show contacts & invite"} style={{ padding: "1px 6px", lineHeight: 1.2 }}>{expanded ? "▾" : "▸"}</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <input defaultValue={u.name} disabled={ro} onBlur={(e) => e.target.value.trim() && store.updateUser(u.id, { name: e.target.value.trim() })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 14, fontFamily: "var(--font-serif)", color: "var(--walnut)", width: "100%", padding: 0 }} />
+              <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{seeContacts ? u.email : "🔒 contact hidden"}</div>
+              {pending === true && (
+                <div style={{ marginTop: 3 }}>
+                  <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited" : "pending"}</Pill>
+                </div>
+              )}
+            </div>
+          </div>
+        </td>
+        <td style={{ ...td, background: rowBg }}>
+          {canManageAccess ? (
+            <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
+              {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+            </select>
+          ) : (
+            <Pill bg="var(--cream-2)">{ROLE_LABEL[u.role]}</Pill>
+          )}
+        </td>
+        <td style={{ ...td, background: rowBg, fontSize: 12, color: "var(--ink)" }}>
+          {company}
+          {u.role === "trade" && (
+            <div style={{ marginTop: 3, fontSize: 10.5, color: "var(--muted)", display: "flex", alignItems: "center", gap: 4 }}>
+              by
+              <select value={u.managedBy ?? "builder"} disabled={!canManageAccess} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 10.5, padding: "1px 2px" }}>
+                <option value="builder">Builder</option>
+                <option value="owner">Owner</option>
+              </select>
+            </div>
+          )}
+        </td>
+        {MODULES.map((m) => {
+          const eff = accessFor(u, u.role, m.key);
+          return (
+            <td key={m.key} style={{ ...td, textAlign: "center", background: rowBg }}>
+              {canManageAccess ? (
+                <select value={eff} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} title={m.label} style={{ fontSize: 11, padding: "2px 3px", color: lvlColor(eff), fontWeight: eff === "edit" ? 700 : 400 }}>
+                  {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
+                </select>
+              ) : (
+                <span title={`${m.label}: ${eff}`} style={{ fontSize: 11.5, fontWeight: eff === "none" ? 400 : 700, color: lvlColor(eff) }}>{eff === "none" ? "—" : eff === "edit" ? "edit" : "view"}</span>
+              )}
+            </td>
+          );
+        })}
+        <td style={{ ...td, textAlign: "center", background: rowBg }}>
+          {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)", padding: "1px 6px" }} title="Remove user" onClick={() => onRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
+        </td>
+      </tr>
+      {expanded && (
+        <tr>
+          <td colSpan={MODULES.length + 4} style={{ padding: 0, borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
+            <UserDetail u={u} ro={ro} seeContacts={seeContacts} canManageAccess={canManageAccess} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function UserDetail({ u, ro, seeContacts, canManageAccess }: { u: User; ro: boolean; seeContacts: boolean; canManageAccess: boolean }) {
+  const store = useStore();
+  const pending = u.status && u.status !== "active";
+  return (
+    <div style={{ padding: "12px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+      {/* Status & invite */}
+      {pending === true && (
+        <div>
+          <Lbl>Status</Lbl>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
+            <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
+            {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
+            {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
+            {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
+          </div>
+        </div>
+      )}
+
+      {/* Contacts */}
+      <div>
+        <Lbl>Contact</Lbl>
+        {seeContacts ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 5 }}>
+            <ContactRow label="Email" value={u.email} disabled={ro} onSave={(v) => store.updateUser(u.id, { email: v })} />
+            <ContactRow label="Phone" value={u.phone ?? ""} disabled={ro} onSave={(v) => store.updateUser(u.id, { phone: v })} />
+            {(u.secondaryContacts ?? []).map((c) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingLeft: 8, borderLeft: "2px solid var(--line)" }}>
+                <span style={{ color: "var(--muted)", minWidth: 54 }}>{c.label ?? "Secondary"}</span>
+                <input defaultValue={c.name ?? ""} placeholder="name" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { name: e.target.value })} style={{ width: 90, fontSize: 12 }} />
+                <input defaultValue={c.phone ?? ""} placeholder="phone" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { phone: e.target.value })} style={{ width: 100, fontSize: 12 }} />
+                {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeContact(u.id, c.id)}>✕</button>}
+              </div>
+            ))}
+            {!ro && <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => store.addContact(u.id, { label: "Secondary" })}>+ Secondary contact</button>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 5, fontStyle: "italic" }}>🔒 Trade contact managed by the builder — hidden from the owner.</div>
+        )}
+      </div>
+
+      {/* Door code */}
+      <div>
+        <Lbl>Door code</Lbl>
+        <input value={u.doorCode ?? ""} disabled={ro} placeholder="—" onChange={(e) => store.setDoorCode(u.id, e.target.value)} style={{ width: 120, fontSize: 12, marginTop: 5 }} />
+      </div>
+    </div>
+  );
+}
+
+// Companies & billing — builder, owner, and each vendor trade, with the same
+// contact/billing sheet editor (no more per-person module cards here).
+function CompaniesBilling({ ro }: { ro: boolean }) {
   const store = useStore();
   const db = store.db;
   const viewerRole = store.session.role;
-  const trade = tradeId ? db.trades.find((t) => t.id === tradeId) : undefined;
-  const ownerManaged = isOwnerManaged(trade);
-  const sheet = party === "vendor" ? db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId)
-    : party === "builder" ? db.contacts.find((c) => c.party === "builder")
-      : party === "owner" ? db.contacts.find((c) => c.party === "owner") : undefined;
-  const heading = party === "vendor" ? (trade ? tradeName(db, trade.id) : "Vendor") : title;
-  const accent = party === "builder" ? "var(--walnut)" : party === "owner" ? "var(--brass)" : ownerManaged ? "var(--brass)" : party === "other" ? "var(--muted)" : "var(--sage)";
   const canManage = !ro && (viewerRole === "full_admin" || viewerRole === "builder");
-  const canEditCompany = canManage || (viewerRole === "owner" && (party === "owner" || (party === "vendor" && ownerManaged)));
+  const vendorTradeIds = Array.from(new Set([
+    ...db.contacts.filter((c) => c.party === "vendor" && c.tradeId).map((c) => c.tradeId!),
+    ...(db.users.filter((u) => u.role === "trade").map(firstTrade).filter(Boolean) as string[]),
+  ])).sort((a, b) => tradeName(db, a).localeCompare(tradeName(db, b)));
+
+  const card = (key: string, party: "builder" | "owner" | "vendor", tradeId?: string) => {
+    const trade = tradeId ? db.trades.find((t) => t.id === tradeId) : undefined;
+    const ownerManaged = isOwnerManaged(trade);
+    const sheet = party === "vendor" ? db.contacts.find((c) => c.party === "vendor" && c.tradeId === tradeId)
+      : db.contacts.find((c) => c.party === party);
+    const heading = party === "vendor" ? (trade ? tradeName(db, trade.id) : "Vendor") : party === "builder" ? "Builder / GC" : "Owner";
+    const accent = party === "builder" ? "var(--walnut)" : party === "owner" ? "var(--brass)" : ownerManaged ? "var(--brass)" : "var(--sage)";
+    const canEditCompany = canManage || (viewerRole === "owner" && (party === "owner" || (party === "vendor" && ownerManaged)));
+    return (
+      <div key={key} className="card" style={{ padding: 0, borderTop: `3px solid ${accent}`, overflow: "hidden" }}>
+        <CompanyHeader sheet={sheet} party={party} tradeId={tradeId} heading={heading} ownerManaged={ownerManaged} trade={trade} canEdit={canEditCompany} />
+        {party === "vendor" && canManage && tradeId && (
+          <div style={{ padding: "8px 12px", background: "var(--cream)", borderTop: "1px solid var(--line)" }}>
+            <InviteToTrade tradeId={tradeId} ownerManaged={ownerManaged} />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ marginTop: party === "vendor" ? 0 : 16 }}>
-      {party !== "vendor" && <SectionTitle>{heading}</SectionTitle>}
-      <div className="card" style={{ padding: 0, borderTop: `3px solid ${accent}`, overflow: "hidden" }}>
-        {party !== "other" && <CompanyHeader sheet={sheet} party={party} tradeId={tradeId} heading={party === "vendor" ? heading : undefined} ownerManaged={ownerManaged} trade={trade} canEdit={canEditCompany} />}
-        <div style={{ padding: 12, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px,1fr))", gap: 12, background: "var(--cream)" }}>
-          {users.map((u) => <UserCard key={u.id} u={u} ro={ro} onRemove={onRemove} />)}
-          {!users.length && <div style={{ fontSize: 12.5, color: "var(--muted)", padding: 8 }}>No app accounts yet.{party === "vendor" && canManage ? " Invite below." : ""}</div>}
-          {party === "vendor" && canManage && tradeId && <InviteToTrade tradeId={tradeId} ownerManaged={ownerManaged} />}
-        </div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {card("builder", "builder")}
+      {card("owner", "owner")}
+      {vendorTradeIds.map((tid) => card(`v-${tid}`, "vendor", tid))}
+      {!vendorTradeIds.length && <div style={{ fontSize: 12.5, color: "var(--muted)", padding: "4px 2px" }}>No vendors yet{canManage ? " — add one above." : "."}</div>}
     </div>
   );
 }
@@ -372,10 +568,20 @@ function Group({ party, title, tradeId, users, ro, onRemove }: { party: "builder
 function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, canEdit }: { sheet?: ContactSheet; party: "builder" | "owner" | "vendor" | "other"; tradeId?: string; heading?: string; ownerManaged: boolean; trade?: { id: string }; canEdit: boolean }) {
   const store = useStore();
   const [showBilling, setShowBilling] = useState(false);
+  // Vendor cards: the trade/vendor display name is renamable (e.g. "Windows —
+  // Diverse" vs "Windows — Builder" when two vendors cover the same trade).
+  const headingNode = party === "vendor" && trade && canEdit && heading != null
+    ? <input key={trade.id} defaultValue={heading} title="Rename this vendor / trade"
+        onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== heading) store.updateTrade(trade.id, { name: v }); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+        className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)", border: "1px dashed transparent", borderRadius: 6, padding: "1px 4px", background: "transparent", minWidth: 140 }}
+        onFocus={(e) => (e.target.style.borderColor = "var(--line)")}
+        onBlurCapture={(e) => ((e.target as HTMLInputElement).style.borderColor = "transparent")} />
+    : heading ? <strong className="serif" style={{ fontSize: 15, color: "var(--walnut)" }}>{heading}</strong> : null;
   if (!sheet) {
     return (
       <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: "var(--paper)" }}>
-        {heading && <strong className="serif" style={{ fontSize: 15, color: "var(--walnut)" }}>{heading}</strong>}
+        {headingNode}
         {ownerManaged && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
         <span style={{ fontSize: 12, color: "var(--muted)" }}>No company / billing info yet.</span>
         {canEdit && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => store.addContactSheet({ party: party === "vendor" ? "vendor" : (party as "builder" | "owner"), tradeId, company: heading ?? (party === "builder" ? "Our company (GC)" : "Owner") })}>＋ Add company &amp; billing</button>}
@@ -386,7 +592,8 @@ function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, ca
   return (
     <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8, background: "var(--paper)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        {heading && <span style={{ fontSize: 12, color: "var(--muted)" }}>{heading} ·</span>}
+        {party === "vendor" ? headingNode : heading ? <span style={{ fontSize: 12, color: "var(--muted)" }}>{heading} ·</span> : null}
+        {party === "vendor" && heading && <span style={{ fontSize: 12, color: "var(--muted)" }}>·</span>}
         <input value={c.company} disabled={!canEdit} placeholder="Company name" onChange={(e) => store.updateContactSheet(c.id, { company: e.target.value })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", flex: 1, minWidth: 150 }} />
         {ownerManaged && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
         {c.shareAll && <Pill bg="var(--sage-tint)">shared</Pill>}
@@ -460,6 +667,7 @@ function AddVendorTrade() {
   const [tradeId, setTradeId] = useState("");
   const [newName, setNewName] = useState("");
   const [cat, setCat] = useState<MacroCategory>("Exterior");
+  const [ownerMgd, setOwnerMgd] = useState(isOwnerRole);
   const taken = new Set(db.contacts.filter((c) => c.party === "vendor").map((c) => c.tradeId));
   const trades = db.trades.filter((t) => !taken.has(t.id));
   if (!open) return <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>＋ Add vendor / trade</button>;
@@ -473,108 +681,28 @@ function AddVendorTrade() {
         </select>
       ) : (
         <>
-          <input placeholder="New trade name (e.g. Driveway)" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ fontSize: 12, width: 180 }} />
+          <input placeholder="New trade name (e.g. Windows — Builder)" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ fontSize: 12, width: 190 }} />
           <select value={cat} onChange={(e) => setCat(e.target.value as MacroCategory)} style={{ fontSize: 12 }}>{MACRO_ORDER.map((c) => <option key={c} value={c}>{c}</option>)}</select>
         </>
       )}
-      {isOwnerRole && <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill>}
+      {isOwnerRole ? <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill> : (
+        <label style={{ fontSize: 11.5, color: "var(--muted)", display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <input type="checkbox" checked={ownerMgd} onChange={(e) => setOwnerMgd(e.target.checked)} /> Owner-managed
+        </label>
+      )}
       <button className="btn btn-sm btn-primary" disabled={mode === "existing" ? !tradeId : !newName.trim()} onClick={() => {
         let tid = tradeId;
-        if (mode === "new") tid = store.addTrade({ name: newName.trim(), category: cat, managedBy: isOwnerRole ? "owner" : "builder" });
-        else if (isOwnerRole) store.setTradeManaged(tid, "owner");
+        const managedBy = isOwnerRole || ownerMgd ? "owner" as const : "builder" as const;
+        if (mode === "new") tid = store.addTrade({ name: newName.trim(), category: cat, managedBy });
+        else if (managedBy === "owner") store.setTradeManaged(tid, "owner");
         const tName = mode === "new" ? newName.trim() : db.trades.find((x) => x.id === tid)?.name;
         store.addContactSheet({ party: "vendor", tradeId: tid, company: `${tName ?? "Vendor"} vendor` });
         setOpen(false); setTradeId(""); setNewName("");
       }}>Add</button>
       <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
-    </div>
-  );
-}
-
-function UserCard({ u, ro, onRemove }: { u: User; ro: boolean; onRemove: (t: { id: string; name: string; email: string }) => void }) {
-  const store = useStore();
-  const viewerRole = store.session.role;
-  const viewer = store.currentUser;
-  const canManageAccess = viewerRole === "full_admin";
-  const seeContacts = canSeeContacts(viewerRole, u);
-  const canRemove = !ro && canRemoveUser(viewerRole, viewer, u);
-  return (
-    <div className="card" style={{ padding: 14 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <input defaultValue={u.name} disabled={ro} onBlur={(e) => e.target.value.trim() && store.updateUser(u.id, { name: e.target.value.trim() })} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, flex: 1, fontFamily: "var(--font-serif)", color: "var(--walnut)" }} />
-        {canManageAccess ? (
-          <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
-            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-          </select>
-        ) : (
-          <Pill bg="var(--cream-2)">{ROLE_LABEL[u.role]}</Pill>
-        )}
-        {canRemove && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove user" onClick={() => onRemove({ id: u.id, name: u.name, email: u.email })}>✕</button>}
-      </div>
-      {(u.status && u.status !== "active") && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-          <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
-          {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
-          {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
-          {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
-        </div>
-      )}
-
-      {u.role === "trade" && (
-        <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-          Managed by
-          <select value={u.managedBy ?? "builder"} disabled={!canManageAccess} onChange={(e) => store.updateUser(u.id, { managedBy: e.target.value as "builder" | "owner" })} style={{ fontSize: 11.5 }}>
-            <option value="builder">Builder</option>
-            <option value="owner">Owner</option>
-          </select>
-        </div>
-      )}
-
-      {/* Contacts (gated) */}
-      <div style={{ marginTop: 10 }}>
-        <Lbl>Contact</Lbl>
-        {seeContacts ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 4 }}>
-            <ContactRow label="Email" value={u.email} disabled={ro} onSave={(v) => store.updateUser(u.id, { email: v })} />
-            <ContactRow label="Phone" value={u.phone ?? ""} disabled={ro} onSave={(v) => store.updateUser(u.id, { phone: v })} />
-            {(u.secondaryContacts ?? []).map((c) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, paddingLeft: 8, borderLeft: "2px solid var(--line)" }}>
-                <span style={{ color: "var(--muted)", minWidth: 54 }}>{c.label ?? "Secondary"}</span>
-                <input defaultValue={c.name ?? ""} placeholder="name" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { name: e.target.value })} style={{ width: 90, fontSize: 12 }} />
-                <input defaultValue={c.phone ?? ""} placeholder="phone" disabled={ro} onBlur={(e) => store.updateContact(u.id, c.id, { phone: e.target.value })} style={{ width: 100, fontSize: 12 }} />
-                {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeContact(u.id, c.id)}>✕</button>}
-              </div>
-            ))}
-            {!ro && <button className="btn btn-sm" style={{ alignSelf: "flex-start" }} onClick={() => store.addContact(u.id, { label: "Secondary" })}>+ Secondary contact</button>}
-          </div>
-        ) : (
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, fontStyle: "italic" }}>🔒 Trade contact managed by the builder — hidden from the owner.</div>
-        )}
-      </div>
-
-      {/* Door code */}
-      <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <Lbl>Door code</Lbl>
-        <input value={u.doorCode ?? ""} disabled={ro} placeholder="—" onChange={(e) => store.setDoorCode(u.id, e.target.value)} style={{ width: 80, fontSize: 12 }} />
-      </div>
-
-      {/* Access */}
-      <div style={{ marginTop: 10 }}>
-        <Lbl>Module access {!canManageAccess && <span style={{ color: "var(--muted)", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>· Full Admin only</span>}</Lbl>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, marginTop: 4 }}>
-          {MODULES.map((m) => {
-            const eff = accessFor(u, u.role, m.key);
-            return (
-              <label key={m.key} style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
-                {m.label}
-                <select value={eff} disabled={!canManageAccess} onChange={(e) => store.setUserAccess(u.id, m.key, e.target.value as AccessLevel)} style={{ fontSize: 11, padding: "2px 4px", color: eff === "none" ? "var(--muted)" : eff === "edit" ? "var(--sage-2)" : "var(--ink)" }}>
-                  {LEVELS.map((l) => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </label>
-            );
-          })}
-        </div>
-      </div>
+      <span style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>
+        Two vendors can cover the same trade — add a <em>new trade</em> per vendor (e.g. “Windows — Diverse” owner-managed and “Windows — Builder”); each gets its own contract, costs &amp; schedule. Names are renamable on each vendor card below.
+      </span>
     </div>
   );
 }
@@ -734,6 +862,59 @@ function Lbl({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>{children}</div>;
 }
 
+// A horizontally-scrollable card whose scrollbar is mirrored by a thin bar that
+// sticks to the bottom of the viewport — so wide tables can be panned while the
+// column headers stay in view and the scrollbar never gets buried below the fold.
+function PersistentScroll({ children, maxHeight, dep }: { children: React.ReactNode; maxHeight?: number | string; dep?: unknown }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const proxyRef = useRef<HTMLDivElement>(null);
+  const [dims, setDims] = useState({ sw: 0, overflow: false });
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => setDims({ sw: el.scrollWidth, overflow: el.scrollWidth > el.clientWidth + 1 });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dep]);
+
+  // Wheel: translate horizontal/shift-wheel intent into scrollLeft (the box itself
+  // has overflowX hidden so there's no native horizontal scrollbar to fight with).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+      if (dx) { el.scrollLeft += dx; if (proxyRef.current) proxyRef.current.scrollLeft = el.scrollLeft; e.preventDefault(); }
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  return (
+    <>
+      <div ref={scrollRef} className="card" style={{ overflowX: "hidden", overflowY: "auto", maxHeight: maxHeight ?? "70vh", padding: 0 }}>
+        {children}
+      </div>
+      {dims.overflow && (
+        <div
+          ref={proxyRef}
+          onScroll={() => { const el = scrollRef.current; if (el && proxyRef.current) el.scrollLeft = proxyRef.current.scrollLeft; }}
+          style={{ position: "sticky", bottom: 0, zIndex: 9, overflowX: "auto", overflowY: "hidden", height: 15, marginTop: -1, background: "var(--paper)", borderTop: "1px solid var(--line)", borderRadius: "0 0 10px 10px", boxShadow: "0 -3px 8px rgba(60,50,40,0.06)" }}
+          title="Scroll the table sideways">
+          <div style={{ width: dims.sw, height: 1 }} />
+        </div>
+      )}
+    </>
+  );
+}
+
 const thLeft: React.CSSProperties = { textAlign: "left", padding: "9px 12px", borderBottom: "2px solid var(--line)", position: "sticky", left: 0, top: 0, background: "var(--paper)", fontSize: 11.5, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em" };
 const thCell: React.CSSProperties = { textAlign: "center", padding: "9px 8px", borderBottom: "2px solid var(--line)", fontSize: 11, color: "var(--muted)", fontWeight: 700, position: "sticky", top: 0, background: "var(--paper)", zIndex: 3 };
 const tdLeft: React.CSSProperties = { padding: "8px 12px", borderBottom: "1px solid var(--line)", position: "sticky", left: 0, background: "var(--paper)", minWidth: 170, zIndex: 2 };
+const td: React.CSSProperties = { padding: "7px 8px", borderBottom: "1px solid var(--line)", verticalAlign: "top" };

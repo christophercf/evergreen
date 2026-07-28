@@ -3,7 +3,7 @@
 // number, so Building Costs, the Budget, and the dashboard all agree.
 // ----------------------------------------------------------------------------
 
-import type { CostLine, DB, Draw, DrawAllocation, LinePhase, MacroCategory } from "./types";
+import type { CostLine, DB, Draw, DrawAllocation, LinePhase, MacroCategory, Material, ScheduleItem } from "./types";
 
 export function fmt(n: number, opts: { cents?: boolean } = {}): string {
   return n.toLocaleString("en-US", {
@@ -176,6 +176,62 @@ export function byCategory(lines: CostLine[]): Rollup[] {
 
 export function tradeName(db: DB, id: string): string {
   return db.trades.find((t) => t.id === id)?.name ?? id;
+}
+
+// ---- Material critical-path dates (derived from the trade's Gantt) ----------
+
+const schStart = (s: ScheduleItem): string => s.confirmedStart ?? s.start;
+const schEnd = (s: ScheduleItem): string => s.confirmedEnd ?? s.end;
+
+/** Shift an ISO yyyy-mm-dd date by whole days (UTC, no timezone drift). */
+function addDays(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * A trade's overall window on the Gantt: `start` (first bar), `end` (last bar),
+ * and `lastWeekStart` (the start of the final week the trade is working). Drives
+ * material timing — everything is identified by `start`; on-hand is either at
+ * `start` (needed when work begins) or by `lastWeekStart` (needed near the end).
+ */
+export function tradePhaseDates(db: DB, tradeId: string): { start?: string; end?: string; lastWeekStart?: string } {
+  const bars = db.schedule.filter((s) => s.tradeId === tradeId);
+  if (!bars.length) return {};
+  const start = bars.map(schStart).sort()[0];
+  const end = bars.map(schEnd).sort().slice(-1)[0];
+  const lw = addDays(end, -6); // start of the last 7-day window
+  return { start, end, lastWeekStart: lw < start ? start : lw };
+}
+
+/** The two critical-path dates for a material. Schedule-driven ("trade" mode)
+ *  dates derive live — from the TIED TASK when one is linked (most specific),
+ *  else from the assigned trade's whole Gantt window — so they shift
+ *  automatically whenever the tie changes or the builder moves the timing.
+ *  identify-by = start; on-hand-by = start, or the last week when the material
+ *  isn't needed until finishing. "hard" mode carries a single fixed date. */
+export function materialDates(db: DB, m: Material): {
+  identifyBy?: string; onHandBy?: string; mode: "hard" | "trade"; needBy: "start" | "finish";
+  via: "task" | "trade" | "hard"; sourceLabel?: string;
+} {
+  const needBy = m.needBy ?? "start";
+  if (m.dueMode === "trade") {
+    const task = m.linkedScheduleId ? db.schedule.find((s) => s.id === m.linkedScheduleId) : undefined;
+    if (task) {
+      const start = schStart(task);
+      const lw = addDays(schEnd(task), -6);
+      const lastWeek = lw < start ? start : lw;
+      return { identifyBy: start, onHandBy: needBy === "finish" ? lastWeek : start, mode: "trade", needBy, via: "task", sourceLabel: task.label };
+    }
+    if (m.tradeId) {
+      const p = tradePhaseDates(db, m.tradeId);
+      const onHandBy = needBy === "finish" ? (p.lastWeekStart ?? p.end) : p.start;
+      return { identifyBy: p.start, onHandBy, mode: "trade", needBy, via: "trade", sourceLabel: tradeName(db, m.tradeId) };
+    }
+    return { identifyBy: undefined, onHandBy: undefined, mode: "trade", needBy, via: "trade" };
+  }
+  return { identifyBy: m.dueDate, onHandBy: undefined, mode: "hard", needBy, via: "hard" };
 }
 
 export function byTrade(db: DB, lines: CostLine[]): Rollup[] {

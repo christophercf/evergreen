@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
-import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
+import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput, TextInput } from "../ui/bits";
 import { accessFor, type FundingSource } from "@/lib/data/types";
 import { totals, fmt, budgetRange } from "@/lib/data/money";
 
@@ -36,20 +36,26 @@ export default function BudgetPage() {
   const allIn = allInHigh; // conservative (high end) for coverage / draw-plan math
   const hasRange = Math.round(allInLow) !== Math.round(allInHigh);
 
-  const available = db.funding.reduce((a, f) => a + f.amount, 0);
+  // Remaining (untapped) capacity of a source. Money already DRAWN from a line is
+  // gone — it's no longer available to fund the project — so the roll-up excludes it.
+  const remainOf = (f: FundingSource) => Math.max(0, f.amount - f.drawn);
+  const cashSources = db.funding.filter((f) => f.fundType !== "debt");
+  const debtItems = db.funding.filter((f) => f.fundType === "debt");
   const drawn = db.funding.reduce((a, f) => a + f.drawn, 0);
+  // Funding = non-debt sources, counting only what's still UNTAPPED (Available − Drawn).
+  const funding = cashSources.reduce((a, f) => a + remainOf(f), 0);
+  const tappedCash = cashSources.reduce((a, f) => a + Math.min(f.amount, f.drawn), 0);
+  // Cash vs debt: debt must be repaid, so it's always a negative against the surplus.
+  const totalDebt = debtItems.reduce((a, f) => a + f.amount, 0);
+  const totalCash = funding;
+  // Total still-drawable (cash remaining + debt remaining) — drives the shortfall check.
+  const available = funding + debtItems.reduce((a, f) => a + remainOf(f), 0);
   const gap = allIn - available;
-  // Cash vs debt: debt must be repaid, so the true surplus excludes it.
-  const totalDebt = db.funding.filter((f) => f.fundType === "debt").reduce((a, f) => a + f.amount, 0);
-  const totalCash = available - totalDebt;
-  // Funding = non-debt only; debt is always a negative.
-  const funding = totalCash;
   // Surplus = Funding − Debt − All-in Need (a range: worst case uses the high cost, best case the low).
   const surplusLow = funding - totalDebt - allInHigh;
   const surplusHigh = funding - totalDebt - allInLow;
   const surplusIsRange = Math.round(surplusLow) !== Math.round(surplusHigh);
   // Debt obligations: what's been drawn (borrowed) vs repaid.
-  const debtItems = db.funding.filter((f) => f.fundType === "debt");
   const debtDrawn = debtItems.reduce((a, f) => a + f.drawn, 0);
   const debtRepaid = debtItems.reduce((a, f) => a + (f.repaid ?? 0), 0);
   const debtOutstanding = debtDrawn - debtRepaid;
@@ -58,7 +64,7 @@ export default function BudgetPage() {
   const ranked = [...db.funding].sort((a, b) => marginalRate(a) - marginalRate(b) || a.liquidityRank - b.liquidityRank);
   let need = allIn;
   const plan = ranked.map((f) => {
-    const use = Math.max(0, Math.min(f.amount, need));
+    const use = Math.max(0, Math.min(remainOf(f), need));
     need -= use;
     const cost = f.amount ? (use / f.amount) * marginalCost(f) : 0;
     return { f, use, cost, rate: marginalRate(f) };
@@ -72,7 +78,7 @@ export default function BudgetPage() {
   const manualTapped = new Map<string, number>();
   let manualCost = 0;
   for (const f of orderedManual) {
-    const use = Math.max(0, Math.min(f.amount, needM));
+    const use = Math.max(0, Math.min(remainOf(f), needM));
     needM -= use;
     manualTapped.set(f.id, use);
     manualCost += f.amount ? (use / f.amount) * marginalCost(f) : 0;
@@ -93,7 +99,7 @@ export default function BudgetPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="All-in Need" value={hasRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(allInLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(allInHigh)}</span> : <Money value={allInHigh} />} sub={`cost range + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />
-        <StatCard label="Funding" value={<Money value={funding} />} accent="var(--ok)" sub="non-debt sources" />
+        <StatCard label="Funding" value={<Money value={funding} />} accent="var(--ok)" sub={tappedCash > 0 ? `untapped cash (${fmt(tappedCash)} already drawn)` : "non-debt sources"} />
         <StatCard label="Debt" value={<span style={{ color: "var(--rust)" }}>−<Money value={totalDebt} /></span>} accent="var(--rust)" sub={`${fmt(debtOutstanding)} drawn & owed`} />
         <StatCard label="Surplus" value={surplusIsRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(surplusLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(surplusHigh)}</span> : <Money value={surplusHigh} />} accent={surplusLow >= 0 ? "var(--ok)" : surplusHigh >= 0 ? "var(--brass-2)" : "var(--rust)"} sub="funding − debt − all-in need" />
         <StatCard label="Cost of Capital" value={<Money value={recommendedCost} />} sub="cheapest-first plan" />
@@ -128,22 +134,23 @@ export default function BudgetPage() {
       <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: -6, marginBottom: 8 }}>
         Sources are tapped top-down by the editable <strong>Order</strong> column. Your current order costs <strong style={{ color: "var(--ink)" }}>{fmt(manualCost)}</strong> to access{orderSavings > 100 ? <> — cheapest-first would cost <strong style={{ color: "var(--ok)" }}>{fmt(recommendedCost)}</strong>.</> : <> (cheapest-first, optimal).</>}
       </div>
-      <div className="card" style={{ overflowX: "auto" }}>
+      {/* Bounded height keeps the horizontal scrollbar on-screen at all times. */}
+      <div className="card" style={{ overflow: "auto", maxHeight: "62vh" }}>
         <table style={{ fontSize: 12.5 }}>
           <thead>
             <tr>
-              <th style={thC}>#</th>
+              <th style={thC} className="m-hide">#</th>
               <th style={th}>Source</th>
               <th style={thC}>Type</th>
               <th style={thR}>Available</th>
-              <th style={thR}>Drawn</th>
-              <th style={thR}>Rate</th>
-              <th style={thR}>Cost to access</th>
-              <th style={thR}>When</th>
+              <th style={thR} className="m-hide">Drawn</th>
+              <th style={thR} className="m-hide">Rate</th>
+              <th style={thR} className="m-hide">Cost to access</th>
+              <th style={thR} className="m-hide">When</th>
               <th style={thC}>Order</th>
-              <th style={thR}>Tapped</th>
-              <th style={thR}>Access cost</th>
-              {!ro && <th style={th}></th>}
+              <th style={thR} className="m-hide">Tapped</th>
+              <th style={thR} className="m-hide">Access cost</th>
+              {!ro && <th style={th} className="m-hide"></th>}
             </tr>
           </thead>
           <tbody>
@@ -152,41 +159,48 @@ export default function BudgetPage() {
               const cost = f.amount ? (use / f.amount) * marginalCost(f) : 0;
               return (
                 <tr key={f.id}>
-                  <td style={tdC}><span style={{ width: 20, height: 20, borderRadius: 99, background: use > 0 ? "var(--sage)" : "var(--cream-2)", color: use > 0 ? "#fff" : "var(--muted)", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span></td>
+                  <td style={tdC} className="m-hide"><span style={{ width: 20, height: 20, borderRadius: 99, background: use > 0 ? "var(--sage)" : "var(--cream-2)", color: use > 0 ? "#fff" : "var(--muted)", fontSize: 11, fontWeight: 700, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span></td>
                   <td style={td}>
-                    <input value={f.name} disabled={ro} onChange={(e) => store.updateFunding(f.id, { name: e.target.value })} style={cellInput(150)} />
-                    <input value={f.note ?? ""} disabled={ro} placeholder="note…" onChange={(e) => store.updateFunding(f.id, { note: e.target.value })} style={{ ...cellInput(180), fontSize: 11, fontWeight: 400, color: "var(--muted)", display: "block" }} />
+                    <TextInput value={f.name} disabled={ro} onCommit={(v) => store.updateFunding(f.id, { name: v })} style={cellInput(150)} />
+                    <TextInput value={f.note ?? ""} disabled={ro} placeholder="note…" onCommit={(v) => store.updateFunding(f.id, { note: v })} style={{ ...cellInput(180), fontSize: 11, fontWeight: 400, color: "var(--muted)", display: "block" }} />
                   </td>
                   <td style={tdC}>
                     {ro ? <Pill bg={f.fundType === "debt" ? "#f3d9cf" : "var(--sage-tint)"} color={f.fundType === "debt" ? "var(--rust)" : "var(--sage-2)"}>{f.fundType === "debt" ? "Debt" : "Cash"}</Pill>
                       : <select value={f.fundType ?? "cash"} onChange={(e) => store.updateFunding(f.id, { fundType: e.target.value as "cash" | "debt" })} style={{ fontSize: 11.5, color: f.fundType === "debt" ? "var(--rust)" : "var(--sage-2)", fontWeight: 700 }}><option value="cash">Cash</option><option value="debt">Debt</option></select>}
                   </td>
                   <td style={tdR}><NumCell value={f.amount} ro={ro} onChange={(v) => store.updateFunding(f.id, { amount: v })} money /></td>
-                  <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
-                  <td style={tdR}><NumCell value={f.rate * 100} ro={ro} onChange={(v) => store.updateFunding(f.id, { rate: v / 100 })} suffix="%" width={50} /></td>
-                  <td style={tdR}><NumCell value={f.costToAccess ?? 0} ro={ro} onChange={(v) => store.updateFunding(f.id, { costToAccess: v })} money /></td>
-                  <td style={tdR}><input value={f.timeframe ?? ""} disabled={ro} onChange={(e) => store.updateFunding(f.id, { timeframe: e.target.value })} style={cellInput(56)} /></td>
+                  <td style={tdR} className="m-hide"><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
+                  <td style={tdR} className="m-hide"><NumCell value={f.rate * 100} ro={ro} onChange={(v) => store.updateFunding(f.id, { rate: v / 100 })} suffix="%" width={50} /></td>
+                  <td style={tdR} className="m-hide"><NumCell value={f.costToAccess ?? 0} ro={ro} onChange={(v) => store.updateFunding(f.id, { costToAccess: v })} money /></td>
+                  <td style={tdR} className="m-hide"><TextInput value={f.timeframe ?? ""} disabled={ro} onCommit={(v) => store.updateFunding(f.id, { timeframe: v })} style={cellInput(56)} /></td>
                   <td style={tdC}><NumCell value={f.liquidityRank} ro={ro} onChange={(v) => store.updateFunding(f.id, { liquidityRank: v })} width={40} /></td>
-                  <td style={tdR}><strong style={{ color: use > 0 ? "var(--ink)" : "var(--muted)" }}>{use > 0 ? fmt(use) : "—"}</strong></td>
-                  <td style={tdR}>{cost > 0 ? <span style={{ color: "var(--rust)" }}>+{fmt(cost)}</span> : <span style={{ color: "var(--muted)" }}>free</span>}</td>
-                  {!ro && <td style={td}><button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeFunding(f.id)}>✕</button></td>}
+                  <td style={tdR} className="m-hide"><strong style={{ color: use > 0 ? "var(--ink)" : "var(--muted)" }}>{use > 0 ? fmt(use) : "—"}</strong></td>
+                  <td style={tdR} className="m-hide">{cost > 0 ? <span style={{ color: "var(--rust)" }}>+{fmt(cost)}</span> : <span style={{ color: "var(--muted)" }}>free</span>}</td>
+                  {!ro && <td style={td} className="m-hide"><button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeFunding(f.id)}>✕</button></td>}
                 </tr>
               );
             })}
             <tr style={{ background: "var(--cream)" }}>
-              <td style={tdC}></td>
+              <td style={tdC} className="m-hide"></td>
               <td style={{ ...td, fontWeight: 700 }}>Total</td>
               <td style={{ ...tdC, fontSize: 10.5, color: "var(--muted)", lineHeight: 1.4 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)} cash</div><div style={{ color: "var(--rust)" }}>−{fmt(totalDebt)} debt</div></td>
-              <td style={{ ...tdR, fontWeight: 700 }}><div style={{ color: "var(--sage-2)" }}>{fmt(totalCash)}</div><div style={{ color: "var(--rust)", fontSize: 11 }}>−{fmt(totalDebt)}</div><div style={{ borderTop: "1px solid var(--line)", marginTop: 1 }}>{fmt(totalCash - totalDebt)} net</div></td>
-              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(drawn)}</td>
+              <td style={{ ...tdR, fontWeight: 700, fontSize: 11, lineHeight: 1.55 }}>
+                <div style={{ color: "var(--sage-2)" }}>{fmt(funding)} cash{tappedCash > 0 ? <span style={{ color: "var(--muted)", fontWeight: 400 }} title={`${fmt(tappedCash)} already drawn is excluded`}> *</span> : null}</div>
+                <div style={{ color: "var(--rust)" }}>−{fmt(totalDebt)} debt</div>
+                <div style={{ borderTop: "1px solid var(--line)", marginTop: 2, paddingTop: 1 }}>{fmt(funding - totalDebt)} net</div>
+                <div style={{ color: "var(--brass-2)" }}>−{hasRange ? `(${fmt(allInLow)} – ${fmt(allInHigh)})` : fmt(allInHigh)} all-in</div>
+                <div style={{ borderTop: "1px solid var(--line)", marginTop: 2, paddingTop: 2, color: surplusLow >= 0 ? "var(--ok)" : surplusHigh >= 0 ? "var(--brass-2)" : "var(--rust)" }}>{surplusIsRange ? `${fmt(surplusLow)} – ${fmt(surplusHigh)}` : fmt(surplusHigh)} surplus</div>
+              </td>
+              <td style={{ ...tdR, fontWeight: 700 }} className="m-hide">{fmt(drawn)}</td>
               <td colSpan={4}></td>
-              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(allIn - Math.max(0, gap))}</td>
-              <td style={{ ...tdR, fontWeight: 700 }}>{fmt(manualCost)}</td>
-              {!ro && <td></td>}
+              <td style={{ ...tdR, fontWeight: 700 }} className="m-hide">{fmt(allIn - Math.max(0, gap))}</td>
+              <td style={{ ...tdR, fontWeight: 700 }} className="m-hide">{fmt(manualCost)}</td>
+              {!ro && <td className="m-hide"></td>}
             </tr>
           </tbody>
         </table>
       </div>
+      {tappedCash > 0 && <div style={{ marginTop: 8, fontSize: 11.5, color: "var(--muted)" }}>* Funding counts only <strong>untapped</strong> cash — {fmt(tappedCash)} already drawn (e.g. from Joint WROS) is excluded from the roll-up.</div>}
       {gap > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--rust)" }}>⚠ Sources fall <Money value={gap} /> short of the all-in need. Add a source below or trim scope.</div>}
       {!ro && <AddSource />}
 
@@ -200,16 +214,16 @@ export default function BudgetPage() {
       {debtItems.length === 0 ? (
         <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No debt sources yet — set a funding source’s Type to <strong>Debt</strong> above to track it here.</div>
       ) : (
-        <div className="card" style={{ overflowX: "auto" }}>
+        <div className="card" style={{ overflow: "auto", maxHeight: "62vh" }}>
           <table style={{ fontSize: 12.5 }}>
             <thead>
               <tr>
                 <th style={th}>Debt source</th>
-                <th style={thR}>Drawn (owed)</th>
+                <th style={thR} className="m-hide">Drawn (owed)</th>
                 <th style={thR}>Repaid</th>
                 <th style={thR}>Balance owed</th>
-                <th style={thR}>Rate</th>
-                <th style={thR}>By</th>
+                <th style={thR} className="m-hide">Rate</th>
+                <th style={thR} className="m-hide">By</th>
                 {!ro && <th style={th}></th>}
               </tr>
             </thead>
@@ -224,18 +238,18 @@ export default function BudgetPage() {
                       <div style={{ fontWeight: 600 }}>{f.name}</div>
                       <div style={{ marginTop: 3 }}><StackBar height={5} segments={[{ value: repaid, color: "var(--ok)" }, { value: owed, color: "var(--rust)" }]} /></div>
                     </td>
-                    <td style={tdR}><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
+                    <td style={tdR} className="m-hide"><NumCell value={f.drawn} ro={ro} onChange={(v) => store.updateFunding(f.id, { drawn: v })} money /></td>
                     <td style={tdR}><NumCell value={repaid} ro={ro} onChange={(v) => store.updateFunding(f.id, { repaid: v })} money /></td>
                     <td style={tdR}><strong style={{ color: owed > 0 ? "var(--rust)" : "var(--ok)" }}>{fmt(owed)}</strong>{owed === 0 ? " ✓" : <span style={{ color: "var(--muted)", fontSize: 11 }}> · {pctRepaid}% paid</span>}</td>
-                    <td style={tdR}>{f.rate ? `${(f.rate * 100).toFixed(1)}%` : "—"}</td>
-                    <td style={tdR}>{f.timeframe ?? "—"}</td>
+                    <td style={tdR} className="m-hide">{f.rate ? `${(f.rate * 100).toFixed(1)}%` : "—"}</td>
+                    <td style={tdR} className="m-hide">{f.timeframe ?? "—"}</td>
                     {!ro && <td style={td}>{repaid < f.drawn && <button className="btn btn-sm" title="Mark fully repaid" onClick={() => store.updateFunding(f.id, { repaid: f.drawn })}>Paid off</button>}</td>}
                   </tr>
                 );
               })}
               <tr style={{ background: "var(--cream)" }}>
                 <td style={{ ...td, fontWeight: 700 }}>Total debt</td>
-                <td style={{ ...tdR, fontWeight: 700 }}>{fmt(debtDrawn)}</td>
+                <td style={{ ...tdR, fontWeight: 700 }} className="m-hide">{fmt(debtDrawn)}</td>
                 <td style={{ ...tdR, fontWeight: 700, color: "var(--ok)" }}>{fmt(debtRepaid)}</td>
                 <td style={{ ...tdR, fontWeight: 700, color: debtOutstanding > 0 ? "var(--rust)" : "var(--ok)" }}>{fmt(debtOutstanding)}</td>
                 <td colSpan={ro ? 2 : 3}></td>
@@ -248,15 +262,9 @@ export default function BudgetPage() {
   );
 }
 
+// Thin wrapper over the shared commit-on-blur NumInput (keeps existing call sites).
 function NumCell({ value, onChange, ro, money, suffix, width = 90 }: { value: number; onChange: (v: number) => void; ro: boolean; money?: boolean; suffix?: string; width?: number }) {
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, justifyContent: "flex-end" }}>
-      {money && <span style={{ color: "var(--muted)" }}>$</span>}
-      <input type="number" value={Math.round(value)} disabled={ro} onChange={(e) => onChange(Number(e.target.value))}
-        style={{ width, textAlign: "right", fontVariantNumeric: "tabular-nums" }} />
-      {suffix && <span style={{ color: "var(--muted)" }}>{suffix}</span>}
-    </span>
-  );
+  return <NumInput value={value} onCommit={onChange} disabled={ro} money={money} suffix={suffix} width={width} />;
 }
 
 function AddSource() {

@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
-import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
+import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
-  lineBase, lineStart, lineDelta, totals, byCategory, byTrade,
+  lineBase, lineStart, lineDelta, totals, byCategory, byTrade, drawAmount,
   lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
   phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
   linePaid, linePaidByDraws, lineUnpaid, linePaidStatus,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
+import { MsgButton } from "../ui/messenger";
 
 type GroupBy = "category" | "trade" | "owner";
 
@@ -49,7 +50,7 @@ export default function CostsPage() {
     <>
       <PageHeader
         title="Building Costs"
-        subtitle="The locked baseline is your original budget. Every change flows through a change order (a numbered exhibit on that line's contract), so the owner can always see budget → current and where savings were found."
+        subtitle="The locked baseline is your original budget. Every change flows through a change order (a numbered exhibit on that line's contract), so the owner can always see budget → current and where savings were found. All figures shown include builder markup."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {ro && <Pill color="var(--muted)">View only</Pill>}
@@ -255,6 +256,8 @@ function AddCostLine() {
 function CostChart() {
   const store = useStore();
   const db = store.db;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const monthIdx = (d: string) => { const dt = new Date(`${d}T00:00:00`); return dt.getFullYear() * 12 + dt.getMonth(); };
   const fmtMonth = (idx: number) => new Date(Math.floor(idx / 12), idx % 12, 1).toLocaleString("en-US", { month: "short", year: "2-digit" });
 
@@ -263,16 +266,26 @@ function CostChart() {
     const ends = db.schedule.filter((s) => s.tradeId === l.tradeId).map((s) => monthIdx(s.end));
     return ends.length ? Math.max(...ends) : null;
   };
+  // Actual money out the door: paid draws (by paid date) + direct payments.
+  const paidEvents: { idx: number; amt: number }[] = [];
+  for (const d of db.draws) if (d.status === "paid" && d.paidDate) paidEvents.push({ idx: monthIdx(d.paidDate), amt: drawAmount(db, d) });
+  for (const l of db.costLines) if (l.directPaid && l.directPaidDate) paidEvents.push({ idx: monthIdx(l.directPaidDate), amt: l.directPaid });
+  const paidTotal = paidEvents.reduce((a, e) => a + e.amt, 0);
+  const cumPaid = (uptoIdx: number) => paidEvents.filter((e) => e.idx <= uptoIdx).reduce((a, e) => a + e.amt, 0);
+
+  const now = new Date();
+  const todayIdx = now.getFullYear() * 12 + now.getMonth();
   const sIdx = db.schedule.map((s) => monthIdx(s.start));
   const coIdx = db.costLines.flatMap((l) => l.changeOrders.filter((c) => c.status === "approved").map((c) => monthIdx(c.date)));
-  const first = Math.min(...sIdx, ...coIdx);
-  const last = Math.max(...db.schedule.map((s) => monthIdx(s.end)), ...coIdx);
+  const pIdx = paidEvents.map((e) => e.idx);
+  const first = Math.min(...sIdx, ...coIdx, ...(pIdx.length ? pIdx : [Infinity]));
+  const last = Math.max(...db.schedule.map((s) => monthIdx(s.end)), ...coIdx, ...(pIdx.length ? pIdx : [-Infinity]));
   const months: number[] = [];
   for (let i = first; i <= last; i++) months.push(i);
 
   const baseTotal = totals(db.costLines).baseline;
   const grand = totals(db.costLines).grand;
-  const maxV = Math.max(baseTotal, grand) || 1;
+  const maxV = Math.max(baseTotal, grand, paidTotal) || 1;
 
   // cumulative value by category at each month
   const cum = (uptoIdx: number, cat: MacroCategory) =>
@@ -308,6 +321,17 @@ function CostChart() {
   });
   const totalLine = months.map((m, i) => `${xAt(i).toFixed(1)},${y(bottom[i]).toFixed(1)}`).join(" ");
 
+  // Actual-paid overlay: cumulative payments up to today, plus a Today marker.
+  // (Rendered after mount so server/client HTML match.)
+  const lastActualIdx = Math.min(todayIdx, last);
+  const actualMonths = months.filter((m) => m <= lastActualIdx);
+  const actualPts = actualMonths.map((m) => ({ x: xAt(months.indexOf(m)), yv: y(cumPaid(m)) }));
+  const dayFrac = Math.min(1, (now.getDate() - 1) / 28);
+  const todayX = todayIdx >= first && todayIdx <= last ? xAt(months.indexOf(todayIdx) + Math.min(dayFrac, months.length - 1 - months.indexOf(todayIdx))) : null;
+  if (todayX !== null && actualPts.length) actualPts.push({ x: todayX, yv: y(cumPaid(todayIdx)) });
+  const actualLine = actualPts.map((p) => `${p.x.toFixed(1)},${p.yv.toFixed(1)}`).join(" ");
+  const actualEnd = actualPts[actualPts.length - 1];
+
   return (
     <div className="card" style={{ padding: 16, overflowX: "auto" }}>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 520, display: "block" }}>
@@ -325,13 +349,34 @@ function CostChart() {
         {/* budget reference line */}
         <line x1={padL} x2={W - 10} y1={budgetY} y2={budgetY} stroke="var(--brass)" strokeWidth={1.5} strokeDasharray="5 4" />
         <text x={W - 12} y={budgetY - 4} textAnchor="end" fontSize={9.5} fill="var(--brass-2)" fontWeight={700}>Baseline budget {fmt(baseTotal)}</text>
+        {/* actual paid-to-date overlay + today marker (client-only) */}
+        {mounted && actualPts.length > 0 && (
+          <g>
+            <polyline points={actualLine} fill="none" stroke="var(--ok)" strokeWidth={2.5} strokeLinejoin="round" />
+            {actualEnd && <circle cx={actualEnd.x} cy={actualEnd.yv} r={3.5} fill="var(--ok)" stroke="#fff" strokeWidth={1.2} />}
+            {actualEnd && (
+              <text x={Math.min(actualEnd.x + 6, W - 12)} y={Math.max(actualEnd.yv - 7, 10)} textAnchor={actualEnd.x > W - 130 ? "end" : "start"} fontSize={9.5} fill="var(--ok)" fontWeight={700}>
+                Paid to date {fmt(paidTotal)}
+              </text>
+            )}
+          </g>
+        )}
+        {mounted && todayX !== null && (
+          <g>
+            <line x1={todayX} x2={todayX} y1={padT} y2={padT + plotH} stroke="var(--rust)" strokeWidth={1.5} strokeDasharray="3 3" />
+            <text x={todayX + 4} y={padT + 10} fontSize={9.5} fill="var(--rust)" fontWeight={700}>Today</text>
+          </g>
+        )}
         {/* month labels */}
         {months.map((m, i) => <text key={i} x={xAt(i)} y={H - padB + 16} textAnchor="middle" fontSize={9} fill="var(--muted)">{fmtMonth(m)}</text>)}
       </svg>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 6, fontSize: 11 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--ok)" }}><span style={{ width: 14, height: 3, background: "var(--ok)", borderRadius: 2 }} />Actual paid</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--walnut)" }}><span style={{ width: 14, height: 2, background: "var(--walnut)", borderRadius: 2 }} />Projected</span>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--rust)" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed var(--rust)" }} />Today</span>
         {cats.map((c) => <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: MACRO_COLOR[c] }} />{c}</span>)}
       </div>
-      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Cumulative cost over time as a stacked area by category, building toward the baseline budget (dashed). Approved change orders lift the curve above the line.</p>
+      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>The stacked area is the <strong>projected</strong> cumulative cost (each trade lands per the schedule), building toward the baseline budget (dashed brass). The solid green line is <strong>actual money paid</strong> (draws + direct payments) up to the Today marker — the gap between green and the area is work committed but not yet paid.</p>
     </div>
   );
 }
@@ -355,6 +400,15 @@ function CostRow({ line, ro, first }: { line: CostLine; ro: boolean; first: bool
   const db = store.db;
   const role = store.session.role;
   const [open, setOpen] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
+  // Deep link from Messenger context chips: /costs?line=<id> opens this row.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("line") === line.id) {
+      setOpen(true);
+      setTimeout(() => rowRef.current?.scrollIntoView({ block: "center" }), 60);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const net = approvedNetChange(line);
   const locked = isLocked(line);
   const paid = linePaid(db, line);
@@ -367,7 +421,7 @@ function CostRow({ line, ro, first }: { line: CostLine; ro: boolean; first: bool
   })() : null;
 
   return (
-    <div style={{ borderTop: first ? undefined : "1px solid var(--line)" }}>
+    <div ref={rowRef} style={{ borderTop: first ? undefined : "1px solid var(--line)" }}>
       <div title={open ? "Collapse" : "Expand"} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer", background: open ? "var(--sage-tint)" : undefined, borderLeft: open ? "4px solid var(--sage)" : "4px solid transparent" }} onClick={() => setOpen((v) => !v)}>
         <span style={{ fontSize: 13, color: open ? "var(--sage-2)" : "var(--muted)", width: 12, flexShrink: 0 }}>{open ? "▾" : "▸"}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -378,6 +432,7 @@ function CostRow({ line, ro, first }: { line: CostLine; ro: boolean; first: bool
             <PaidPill line={line} />
             {isLocked(line) ? <Pill color="#fff" bg="var(--ok)">🔒 Locked</Pill> : lineHasRange(line) ? <Pill color="var(--brass-2)" bg="#f0e6cd">Estimate</Pill> : <StatusPill status={line.status} />}
             {line.changeOrders.length > 0 && <Pill color="var(--brass-2)" bg="#f0e6cd">{line.changeOrders.length} exhibit{line.changeOrders.length === 1 ? "" : "s"}</Pill>}
+            <MsgButton kind="cost" refId={line.id} label={line.name} href={`/costs?line=${line.id}`} small />
           </div>
           <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 2 }}>
             {tradeName(db, line.tradeId)} · {line.roomIds.length === 0 ? "whole project" : `${line.roomIds.length} room${line.roomIds.length === 1 ? "" : "s"}`}
@@ -452,7 +507,7 @@ function CostRow({ line, ro, first }: { line: CostLine; ro: boolean; first: bool
                 {line.markupModel === "passthrough" && (
                   line.owner === "builder"
                     ? <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5 }}><strong>{line.markupPct}%</strong> <span style={{ color: "var(--muted)", fontSize: 11.5 }}>· builder markup, managed globally above</span></span>
-                    : <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}><input type="number" value={line.markupPct} disabled={ro || line.locked} onChange={(e) => store.updateCostLine(line.id, { markupPct: Number(e.target.value) })} style={{ width: 56 }} />%</span>
+                    : <NumInput value={line.markupPct} disabled={ro || line.locked} onCommit={(v) => store.updateCostLine(line.id, { markupPct: v })} width={56} suffix="%" align="left" />
                 )}
               </div>
               {line.locked && <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>Locked — adjust via change orders above.</div>}
@@ -638,7 +693,7 @@ function Phases({ line, ro }: { line: CostLine; ro: boolean }) {
                 <option value="pct">%</option>
                 <option value="amount">$</option>
               </select>
-              <input type="number" value={p.value} disabled={ro || locked} onChange={(e) => store.updateLinePhase(line.id, p.id, { value: Number(e.target.value) })} style={{ width: 72, textAlign: "right" }} />
+              <NumInput value={p.value} disabled={ro || locked} onCommit={(v) => store.updateLinePhase(line.id, p.id, { value: v })} width={72} />
               <span style={{ width: 90, textAlign: "right", fontWeight: 700 }}>{fmt(phaseAmount(line, p))}</span>
               {locked ? <Pill color="#fff" bg="var(--ok)">paid</Pill> : !ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeLinePhase(line.id, p.id)}>✕</button>}
             </div>
@@ -761,7 +816,7 @@ function CostPanel({ line, ro }: { line: CostLine; ro: boolean }) {
         <div style={{ display: "flex", gap: 12, fontSize: 12, flexWrap: "wrap", alignItems: "center" }}>
           {st === "paid" ? <Pill color="#fff" bg="var(--ok)">✓ Paid in full</Pill> : st === "partial" ? <Pill color="var(--brass-2)" bg="#f0e6cd">◐ Partially paid</Pill> : <Pill color="var(--muted)">Unpaid</Pill>}
           <span>Via draws <strong>{fmt(viaDraws)}</strong> <Link href="/payments" style={{ color: "var(--sage-2)" }}>↗</Link></span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Paid directly $<input type="number" disabled={ro} value={direct || ""} placeholder="0" onChange={(e) => store.setLineDirectPaid(line.id, Number(e.target.value || 0), line.directPaidNote)} style={{ width: 96, fontSize: 12 }} />{line.directPaidDate && <span style={{ color: "var(--muted)" }}>· {line.directPaidDate}</span>}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>Paid directly <NumInput value={direct || 0} disabled={ro} money onCommit={(v) => store.setLineDirectPaid(line.id, v, line.directPaidNote)} width={96} style={{ fontSize: 12 }} />{line.directPaidDate && <span style={{ color: "var(--muted)" }}>· {line.directPaidDate}</span>}</span>
         </div>
         {!ro && (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
@@ -792,7 +847,7 @@ function BuilderMarkupControl() {
         <div style={{ fontSize: 12.5, color: "var(--muted)" }}>One markup applied across all {count} builder-managed pass-through lines. Set it once — it’s the same for every vendor you manage.</div>
       </div>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-        <input type="number" value={pct} onChange={(e) => store.setBuilderMarkup(Number(e.target.value))} style={{ width: 70, fontSize: 18, fontWeight: 700, textAlign: "right", color: "var(--brass-2)" }} />
+        <NumInput value={pct} onCommit={(v) => store.setBuilderMarkup(v)} width={70} style={{ fontSize: 18, fontWeight: 700, color: "var(--brass-2)" }} />
         <span style={{ fontWeight: 700, color: "var(--brass-2)", fontSize: 16 }}>%</span>
       </span>
     </div>

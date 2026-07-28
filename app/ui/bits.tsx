@@ -1,9 +1,71 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode, type CSSProperties } from "react";
 import type { ScopeStatus } from "@/lib/data/types";
 import { SCOPE_LABEL } from "@/lib/data/types";
 import { fmt } from "@/lib/data/money";
+
+// ---------------------------------------------------------------------------
+// Commit-on-blur inputs. Free-form entry must never fight the typist: while a
+// field is focused it shows a local draft and writes NOTHING to the store, then
+// commits once on blur/Enter. This avoids the classic "auto-adjusts what I type"
+// bug where a controlled value is transformed (rounded, ×100, comma-formatted)
+// or the row re-sorts on every keystroke.
+// ---------------------------------------------------------------------------
+function numText(v: number): string {
+  if (!Number.isFinite(v)) return "";
+  if (Number.isInteger(v)) return String(v);
+  return String(Math.round(v * 1e6) / 1e6); // strip float artifacts + trailing zeros
+}
+
+export function NumInput({ value, onCommit, disabled, money, suffix, width = 90, align = "right", style }: {
+  value: number; onCommit: (v: number) => void; disabled?: boolean; money?: boolean; suffix?: string; width?: number; align?: "right" | "center" | "left"; style?: CSSProperties;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const edited = useRef(false); // ref so blur sees live edits even before re-render
+  const idle = money ? Math.round(value).toLocaleString("en-US") : numText(value);
+  const blur = (raw: string) => {
+    if (edited.current) { const n = Number(raw.replace(/[^0-9.\-]/g, "")); onCommit(Number.isFinite(n) ? n : 0); }
+    edited.current = false;
+    setDraft(null);
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 2, justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start" }}>
+      {money && <span style={{ color: "var(--muted)" }}>$</span>}
+      <input
+        type="text" inputMode="decimal"
+        value={draft !== null ? draft : idle}
+        disabled={disabled}
+        onFocus={() => setDraft(numText(value))}
+        onChange={(e) => { edited.current = true; setDraft(e.target.value); }}
+        onBlur={(e) => blur(e.currentTarget.value)}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        style={{ width, textAlign: align, fontVariantNumeric: "tabular-nums", ...style }}
+      />
+      {suffix && <span style={{ color: "var(--muted)" }}>{suffix}</span>}
+    </span>
+  );
+}
+
+export function TextInput({ value, onCommit, disabled, placeholder, style, type }: {
+  value: string; onCommit: (v: string) => void; disabled?: boolean; placeholder?: string; style?: CSSProperties; type?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const edited = useRef(false);
+  return (
+    <input
+      type={type}
+      value={draft !== null ? draft : value}
+      disabled={disabled}
+      placeholder={placeholder}
+      onFocus={() => setDraft(value)}
+      onChange={(e) => { edited.current = true; setDraft(e.target.value); }}
+      onBlur={(e) => { if (edited.current) onCommit(e.currentTarget.value); edited.current = false; setDraft(null); }}
+      onKeyDown={(e) => { if (type !== "textarea" && e.key === "Enter") e.currentTarget.blur(); }}
+      style={style}
+    />
+  );
+}
 
 export function Money({ value, className, cents }: { value: number; className?: string; cents?: boolean }) {
   return <span className={className} style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(value, { cents })}</span>;

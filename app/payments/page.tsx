@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
-import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar } from "../ui/bits";
+import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
 import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid, isLocked } from "@/lib/data/money";
 
@@ -214,7 +214,7 @@ function AllocationRow({ draw, alloc, ro, locked }: { draw: Draw; alloc: DrawAll
             <select value={alloc.mode} onChange={(e) => store.setAllocation(draw.id, alloc.lineId, { mode: e.target.value as "pct" | "flat" })} style={{ fontSize: 11, padding: "1px 3px" }}>
               <option value="pct">%</option><option value="flat">$</option>
             </select>
-            <input type="number" value={alloc.value} onChange={(e) => store.setAllocation(draw.id, alloc.lineId, { value: Number(e.target.value) })} style={{ width: 56, fontSize: 11, textAlign: "right" }} />
+            <NumInput value={alloc.value} onCommit={(v) => store.setAllocation(draw.id, alloc.lineId, { value: v })} width={56} style={{ fontSize: 11 }} />
           </>
         ) : <span style={{ color: "var(--muted)" }}>{alloc.mode === "pct" ? `${alloc.value}%` : "$"}</span>}
         <span style={{ width: 72, textAlign: "right", fontWeight: 700 }}>{fmt(allocationAmount(l, alloc))}</span>

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
-import { authEnabled, authSignIn, authSignUp, authResendVerification, authSendReset, authSignOut } from "@/lib/data/auth";
+import { authEnabled, authSignIn, authSignUp, authResendVerification, authSendReset, authSignOut, authUrlError } from "@/lib/data/auth";
 import { LeafIcon } from "./icons";
 
 export function Landing() {
@@ -11,12 +11,26 @@ export function Landing() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [info, setInfo] = useState("");
   const [needVerify, setNeedVerify] = useState(false);
 
   const reset = () => { setErr(""); setInfo(""); setNeedVerify(false); };
+
+  // Password-recovery: user arrived from a reset link. Set a new password.
+  const submitReset = async () => {
+    reset();
+    if (password.length < 8) { setErr("Choose a password of at least 8 characters."); return; }
+    if (password !== confirm) { setErr("Passwords don’t match."); return; }
+    setBusy(true);
+    try {
+      const r = await store.completePasswordReset(password);
+      if (!r.ok) setErr(r.error ?? "Couldn’t set your password. The reset link may have expired — request a new one.");
+      // on success the store binds the session and the app renders automatically
+    } finally { setBusy(false); }
+  };
 
   // Mock mode (no Supabase): email-only sign-in.
   const submitMock = () => { reset(); const r = store.login(email); if (!r.ok) setErr(r.error ?? "Login failed."); };
@@ -72,7 +86,44 @@ export function Landing() {
 
           {/* right: auth card */}
           <div style={{ background: "var(--paper)", color: "var(--ink)", borderRadius: 16, padding: 26, boxShadow: "0 20px 50px rgba(0,0,0,.35)" }}>
-            {!realAuth ? (
+            {realAuth && store.recoveryPending ? (
+              <>
+                <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Set a new password</div>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>You followed a password-reset link. Choose a new password to finish.</p>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>New password
+                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" style={{ width: "100%", marginTop: 4, marginBottom: 12 }} />
+                </label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Confirm password
+                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" onKeyDown={(e) => e.key === "Enter" && submitReset()} style={{ width: "100%", marginTop: 4 }} />
+                </label>
+                {err && <div style={{ fontSize: 12.5, color: "var(--rust)", marginTop: 10 }}>{err}</div>}
+                {info && <div style={{ fontSize: 12.5, color: "var(--sage-2)", marginTop: 10 }}>{info}</div>}
+                <button className="btn btn-primary" disabled={busy || !password || !confirm} style={{ width: "100%", marginTop: 16, justifyContent: "center", padding: 10 }} onClick={submitReset}>
+                  {busy ? "…" : "Set password →"}
+                </button>
+              </>
+            ) : realAuth && authUrlError() ? (
+              <>
+                <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>That link didn’t work</div>
+                <div style={{ padding: "10px 12px", background: "#f7e6e0", borderRadius: 8, fontSize: 12.5, color: "var(--rust)", marginBottom: 12 }}>
+                  ⚠ {authUrlError()}. Reset links are single-use and expire after about an hour — and requesting a new one cancels the older emails.
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>Enter your email and we’ll send a fresh link. Click only the <strong>newest</strong> email you receive.</p>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>Email
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={{ width: "100%", marginTop: 4 }} />
+                </label>
+                {info && <div style={{ fontSize: 12.5, color: "var(--sage-2)", marginTop: 10 }}>{info}</div>}
+                {err && <div style={{ fontSize: 12.5, color: "var(--rust)", marginTop: 10 }}>{err}</div>}
+                <button className="btn btn-primary" disabled={!email} style={{ width: "100%", marginTop: 14, justifyContent: "center", padding: 10 }}
+                  onClick={async () => { reset(); await authSendReset(email); setInfo("Fresh reset link sent — check your inbox (and spam)."); }}>
+                  Send a fresh reset link →
+                </button>
+                <button className="btn btn-sm" style={{ width: "100%", marginTop: 8, border: "none", background: "transparent", color: "var(--muted)" }}
+                  onClick={() => { try { window.history.replaceState(null, "", window.location.pathname); } catch { /* ignore */ } window.location.reload(); }}>
+                  ← Back to log in
+                </button>
+              </>
+            ) : !realAuth ? (
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Log in</div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Use the email your project admin invited.</p>

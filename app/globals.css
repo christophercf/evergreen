@@ -81,6 +81,9 @@ a { color: inherit; text-decoration: none; }
 .btn-primary:hover { background: var(--sage-2); }
 .btn-sm { padding: 4px 8px; font-size: 12px; }
 
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
+
 .pill {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 11px; font-weight: 700; letter-spacing: .02em;
@@ -99,8 +102,75 @@ input[type="checkbox"] { accent-color: var(--sage); }
 
 table { border-collapse: collapse; width: 100%; }
 
-::-webkit-scrollbar { height: 10px; width: 10px; }
-::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+/* ----------------------------------------------------------------------------
+   Mobile (≤860px = the sidebar-drawer breakpoint; ≤700px = table breakpoint)
+---------------------------------------------------------------------------- */
+/* Two-column layouts collapse to one (shared across pages). */
+@media (max-width: 760px) {
+  .ever-two { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 860px) {
+  /* iOS zooms the page when focusing an input below 16px — keep them at 16px. */
+  input, select, textarea { font-size: 16px !important; }
+  /* Comfortable tap targets (Apple HIG ~44px). */
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 40px; }
+  .scope-btn { min-height: 36px; }
+  /* Single-line, truncated project tagline in the top bar. */
+  .ever-tagline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-hide-i { display: none !important; } /* inline bits hidden on mobile (e.g. button labels) */
+}
+
+@media (max-width: 700px) {
+  /* Column-priority tables: cells tagged .m-hide disappear on phones; the row
+     expander carries the secondary fields instead. */
+  .m-hide { display: none !important; }
+  /* Tighter cells + capped selects so the priority columns fit without panning. */
+  td, th { padding-left: 6px !important; padding-right: 6px !important; }
+  td select { max-width: 96px; }
+  td input[type="date"] { width: 104px !important; }
+  td input:not([type]):not([inputmode]) { max-width: 96px; }
+  td input[inputmode="decimal"] { max-width: 76px; }
+  .m-due { min-width: 0 !important; font-size: 10px !important; }
+  /* Blocks that only exist on mobile (e.g. edit controls for hidden columns). */
+  .m-only { display: flex !important; }
+  /* Collapsible filter bars. */
+  .m-filters { display: none !important; }
+  .m-filters.open { display: flex !important; }
+  .m-filters-toggle { display: inline-flex !important; }
+}
+.m-only { display: none; }
+.m-filters-toggle { display: none; }
+
+/* Bottom tab bar (mobile only). */
+.ever-bottomnav { display: none; }
+@media (max-width: 860px) {
+  .ever-bottomnav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 35;
+    background: var(--walnut); border-top: 1px solid rgba(255,255,255,.12);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .ever-bottomnav a, .ever-bottomnav button {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none; border: none; color: #b7ab97; font-size: 10px; font-weight: 700;
+    padding: 4px 2px; border-radius: 8px; cursor: pointer; min-height: 44px; justify-content: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* Native selects size to their longest option — never let one stretch a page. */
+  select { max-width: 86vw; }
+  .ever-bottomnav a.active { color: #fdf8ee; background: rgba(255,255,255,.08); }
+  .ever-main { padding-bottom: 110px !important; }
+}
+
+/* Always-visible, easy-to-grab scrollbars — styling these forces Android
+   Chrome to keep them persistent instead of auto-hiding, so every wide grid
+   can slide left/right without hunting for an invisible bar. */
+::-webkit-scrollbar { height: 12px; width: 10px; }
+::-webkit-scrollbar-thumb { background: #b9ad99; border-radius: 99px; border: 2px solid var(--cream); }
+::-webkit-scrollbar-thumb:hover { background: var(--brass); }
+::-webkit-scrollbar-track { background: var(--cream-2); border-radius: 99px; }
+* { scrollbar-width: thin; scrollbar-color: #b9ad99 var(--cream-2); }
 
 .scope-btn {
   width: 100%; border: 1px solid var(--line); background: var(--paper);
