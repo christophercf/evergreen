@@ -9,7 +9,7 @@ import {
 } from "@/lib/data/types";
 import { tradeName, MACRO_COLOR, MACRO_ORDER } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
-import { MsgButton } from "../ui/messenger";
+import { conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
 
 const DAY = 86400000;
 const BASE_MONTH_W = 58;
@@ -82,7 +82,11 @@ export default function TimingPage() {
   // Trades only see their own tasks (+ milestones for inspection context).
   // Trades see only their own bars — except the architect, who needs the whole schedule.
   const myTradeIds = role === "trade" && !isArchitectUser(user) ? new Set(user?.tradeIds ?? []) : null;
-  const visible = myTradeIds ? db.schedule.filter((s) => (s.tradeId && myTradeIds.has(s.tradeId)) || s.kind === "milestone") : db.schedule;
+  const baseVisible = myTradeIds ? db.schedule.filter((s) => (s.tradeId && myTradeIds.has(s.tradeId)) || s.kind === "milestone") : db.schedule;
+  // Display order: the hand-arranged custom order (▲▼), or by start date.
+  const [rowSort, setRowSort] = useState<"custom" | "latest" | "earliest">("custom");
+  const visible = rowSort === "custom" ? baseVisible
+    : [...baseVisible].sort((a, b) => (rowSort === "latest" ? b.start.localeCompare(a.start) : a.start.localeCompare(b.start)));
 
   const catOf = (tradeId?: string): MacroCategory | undefined => db.trades.find((t) => t.id === tradeId)?.category;
   const colorOf = (s: ScheduleItem) => (s.kind === "milestone" ? "var(--walnut)" : MACRO_COLOR[catOf(s.tradeId) ?? "Soft Costs"]);
@@ -226,6 +230,11 @@ export default function TimingPage() {
           <label style={{ display: "inline-flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
             <input type="checkbox" checked={showOrig} onChange={(e) => setShowOrig(e.target.checked)} /> overlay original
           </label>
+          <select value={rowSort} onChange={(e) => setRowSort(e.target.value as "custom" | "latest" | "earliest")} title="Row order" style={{ fontSize: 11.5 }}>
+            <option value="custom">Custom order</option>
+            <option value="latest">Most recent first</option>
+            <option value="earliest">Earliest first</option>
+          </select>
           <button className="btn btn-sm" onClick={() => setShowHistory((v) => !v)}>History ({db.scheduleRevisions.length})</button>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <button className="btn btn-sm" onClick={() => setZoom((z) => Math.max(1, +(z - 0.5).toFixed(2)))} title="Zoom out">－</button>
@@ -301,13 +310,13 @@ export default function TimingPage() {
                   <div role="button" onClick={() => setOpenId(isOpen ? null : s.id)} style={{ width: LABEL_W, flexShrink: 0, position: "sticky", left: 0, zIndex: 2, background: isOpen ? "var(--sage-tint)" : "var(--paper)", borderRight: "1px solid var(--line)", textAlign: "left", padding: "5px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
                     {canDrag && (
                       <>
-                        {/* Row-order controls — tap-friendly, no drag needed */}
-                        <span style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                        {/* Row-order controls — tap-friendly, no drag needed (custom order only) */}
+                        {rowSort === "custom" && <span style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                           <button title="Move row up" onClick={() => store.moveScheduleItem(s.id, -1)}
                             style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▲</button>
                           <button title="Move row down" onClick={() => store.moveScheduleItem(s.id, 1)}
                             style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▼</button>
-                        </span>
+                        </span>}
                         <input type="checkbox" checked={selIds.has(s.id)} title="Select to move together with other checked bars"
                           onClick={(e) => e.stopPropagation()} onChange={() => toggleSel(s.id)} style={{ flexShrink: 0 }} />
                       </>
@@ -353,7 +362,7 @@ export default function TimingPage() {
                     drilldown to the VISIBLE pane so it never opens off-screen. */}
                 {isOpen && (
                   <div style={{ position: "sticky", left: 0, width: paneW ?? "100%", maxWidth: "100%" }}>
-                    <Drilldown item={s} editing={editing} canEdit={canEdit} onJump={() => setOpenId(null)} />
+                    <Drilldown item={s} editing={editing} canEdit={canEdit} onJump={() => setOpenId(null)} onCascade={setCascade} />
                   </div>
                 )}
               </div>
@@ -386,13 +395,15 @@ function AddTimelineItem() {
   const [tradeId, setTradeId] = useState("");
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
+  const [deps, setDeps] = useState<string[]>([]);
+  const [matDeps, setMatDeps] = useState<string[]>([]);
   const milestone = kind === "milestone";
   const ready = !!label.trim() && !!start && (milestone || (!!end && end >= start));
 
   const add = () => {
     if (!ready) return;
-    store.addScheduleItem({ label, kind, tradeId: tradeId || undefined, start, end: milestone ? start : end });
-    setLabel(""); setStart(""); setEnd(""); setOpen(false);
+    store.addScheduleItem({ label, kind, tradeId: tradeId || undefined, start, end: milestone ? start : end, deps, materialDeps: matDeps });
+    setLabel(""); setStart(""); setEnd(""); setDeps([]); setMatDeps([]); setOpen(false);
   };
   const cell = (l: string, node: React.ReactNode) => (
     <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -425,6 +436,21 @@ function AddTimelineItem() {
       {!milestone && cell("Finish", <input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />)}
       <button className="btn btn-primary btn-sm" disabled={!ready} onClick={add}>Add to timeline</button>
       <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+
+      {/* Dependencies: other timeline items and/or materials this waits on. */}
+      <div style={{ width: "100%", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", borderTop: "1px dashed var(--line)", paddingTop: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Depends on</span>
+        {deps.map((d) => <Pill key={d} bg="var(--sage-tint)">⛓ {db.schedule.find((s) => s.id === d)?.label ?? d} <button onClick={() => setDeps((p) => p.filter((x) => x !== d))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)" }}>✕</button></Pill>)}
+        {matDeps.map((m) => <Pill key={m} bg="#f0e6cd">📦 {db.materials.find((x) => x.id === m)?.item ?? m} <button onClick={() => setMatDeps((p) => p.filter((x) => x !== m))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)" }}>✕</button></Pill>)}
+        <select value="" onChange={(e) => { if (e.target.value) setDeps((p) => [...p, e.target.value]); }} style={{ fontSize: 11.5, maxWidth: 190 }}>
+          <option value="">+ timeline item…</option>
+          {db.schedule.filter((s) => !deps.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+        <select value="" onChange={(e) => { if (e.target.value) setMatDeps((p) => [...p, e.target.value]); }} style={{ fontSize: 11.5, maxWidth: 190 }}>
+          <option value="">+ material…</option>
+          {db.materials.filter((m) => !matDeps.includes(m.id)).map((m) => <option key={m.id} value={m.id}>{m.item}{m.roomLabel ? ` · ${m.roomLabel}` : ""}</option>)}
+        </select>
+      </div>
       {tradeId && !milestone && <span style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>The assigned trade will be notified and asked to confirm the dates.</span>}
     </div>
   );
@@ -452,23 +478,76 @@ function HistoryPanel() {
 
 function PublishModal({ changes, onClose, onDone }: { changes: { itemId: string; label: string; fromStart: string; fromEnd: string; toStart: string; toEnd: string }[]; onClose: () => void; onDone: () => void }) {
   const store = useStore();
+  const db = store.db;
+  const meId = store.session.userId;
   const [reason, setReason] = useState("");
-  const trades = new Set(changes.map((c) => store.db.schedule.find((s) => s.id === c.itemId)?.assignedUserId).filter(Boolean));
+  const [step, setStep] = useState<"reason" | "message">("reason");
+  const [msg, setMsg] = useState("");
+  const [to, setTo] = useState<Set<string>>(new Set());
+  const trades = new Set(changes.map((c) => db.schedule.find((s) => s.id === c.itemId)?.assignedUserId).filter(Boolean));
+  const summary = changes.map((c) => `• ${c.label}: ${fmtD(c.fromStart)}–${fmtD(c.fromEnd)} → ${fmtD(c.toStart)}–${fmtD(c.toEnd)}`).join("\n");
+
+  const publish = () => {
+    store.publishScheduleEdits(changes, reason.trim(), store.session.displayName);
+    // Step 2: offer a Messenger message to everyone affected.
+    const impacted = db.users.filter((u) =>
+      u.id !== meId && u.status === "active" &&
+      (u.role === "owner" || u.role === "builder" ||
+        (u.role === "trade" && changes.some((c) => { const s = db.schedule.find((x) => x.id === c.itemId); return s?.tradeId && u.tradeIds?.includes(s.tradeId); }))));
+    setTo(new Set(impacted.map((u) => u.id)));
+    setMsg(`Schedule update:\n${summary}\n\nReason: ${reason.trim()}`);
+    setStep("message");
+  };
+
+  const sendMsg = () => {
+    const toIds = [...to];
+    store.postUpdate({ title: `Schedule change — ${changes.length} task${changes.length === 1 ? "" : "s"}`, body: msg, toUserIds: toIds });
+    pushEmail(emailsFor(db.users, toIds), `📅 ${db.project.name} — schedule change`, msg,
+      { replyUrl: conversationUrl([meId, ...toIds]), senderName: store.session.displayName });
+    onDone();
+  };
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 540, width: "100%", padding: 22 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>Publish timing changes</h3>
-        <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 10px" }}>{changes.length} task(s) changed. {trades.size} trade(s) will be notified to confirm, and a summary will be emailed to the client.</p>
-        <div style={{ maxHeight: 160, overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 8, fontSize: 12 }}>
-          {changes.map((c) => <div key={c.itemId} style={{ padding: "2px 0" }}>• <strong>{c.label}</strong>: {fmtD(c.fromStart)}–{fmtD(c.fromEnd)} → {fmtD(c.toStart)}–{fmtD(c.toEnd)}</div>)}
-        </div>
-        <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginTop: 12 }}>Reason for the change (required)
-          <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Inspection delayed; materials backordered…" style={{ width: "100%", marginTop: 4, minHeight: 60 }} />
-        </label>
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!reason.trim()} onClick={() => { store.publishScheduleEdits(changes, reason.trim(), store.session.displayName); onDone(); }}>Publish · notify · email</button>
-        </div>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={step === "reason" ? onClose : undefined}>
+      <div className="card" style={{ maxWidth: 540, width: "100%", padding: 22, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+        {step === "reason" ? (
+          <>
+            <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>Publish timing changes</h3>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 10px" }}>{changes.length} task(s) changed. {trades.size} trade(s) will be notified to confirm.</p>
+            <div style={{ maxHeight: 160, overflow: "auto", border: "1px solid var(--line)", borderRadius: 8, padding: 8, fontSize: 12 }}>
+              {changes.map((c) => <div key={c.itemId} style={{ padding: "2px 0" }}>• <strong>{c.label}</strong>: {fmtD(c.fromStart)}–{fmtD(c.fromEnd)} → {fmtD(c.toStart)}–{fmtD(c.toEnd)}</div>)}
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)", display: "block", marginTop: 12 }}>Reason for the change (required — logged on each task)
+              <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Inspection delayed; materials backordered…" style={{ width: "100%", marginTop: 4, minHeight: 60 }} />
+            </label>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+              <button className="btn" onClick={onClose}>Cancel</button>
+              <button className="btn btn-primary" disabled={!reason.trim()} onClick={publish}>Publish &amp; notify</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>✓ Published — send a message?</h3>
+            <p style={{ fontSize: 12.5, color: "var(--muted)", margin: "6px 0 10px" }}>Let the builders, impacted trades and the owner know via Messenger (+ email). Edit before sending.</p>
+            <textarea value={msg} onChange={(e) => setMsg(e.target.value)} style={{ width: "100%", minHeight: 110, fontSize: 12.5 }} />
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", margin: "10px 0 4px" }}>Send to</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {db.users.filter((u) => u.id !== meId && u.status === "active").map((u) => {
+                const on = to.has(u.id);
+                return (
+                  <button key={u.id} className="btn btn-sm" onClick={() => setTo((s) => { const n = new Set(s); on ? n.delete(u.id) : n.add(u.id); return n; })}
+                    style={{ background: on ? "var(--sage)" : undefined, color: on ? "#fff" : undefined, borderColor: on ? "var(--sage)" : undefined }}>
+                    {on ? "✓ " : ""}{u.name}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 14 }}>
+              <button className="btn" onClick={onDone}>Skip</button>
+              <button className="btn btn-primary" disabled={!to.size || !msg.trim()} onClick={sendMsg}>💬 Send message</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -508,7 +587,7 @@ function CascadeModal({ cascade, editing, onClose }: { cascade: NonNullable<Casc
 }
 
 // ---------------------------------------------------------------------------
-function Drilldown({ item, editing, canEdit, onJump }: { item: ScheduleItem; editing: boolean; canEdit: boolean; onJump: () => void }) {
+function Drilldown({ item, editing, canEdit, onJump, onCascade }: { item: ScheduleItem; editing: boolean; canEdit: boolean; onJump: () => void; onCascade: (c: { sourceId: string; deltaDays: number; deps: ScheduleItem[] }) => void }) {
   const store = useStore();
   const db = store.db;
   const role = store.session.role;
@@ -536,7 +615,13 @@ function Drilldown({ item, editing, canEdit, onJump }: { item: ScheduleItem; edi
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>
           <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Start<br /><input type="date" value={start} onChange={(e) => setStart(e.target.value)} /></label>
           <label style={{ fontSize: 11.5, color: "var(--muted)" }}>End<br /><input type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></label>
-          <button className="btn btn-primary" disabled={start === item.start && end === item.end} onClick={() => store.editSchedule(item.id, start, end)}>Apply</button>
+          <button className="btn btn-primary" disabled={start === item.start && end === item.end} onClick={() => {
+            const deltaDays = Math.round((parse(start) - parse(item.start)) / DAY);
+            store.editSchedule(item.id, start, end);
+            // Pushing this task later drags its dependents — surface them.
+            const deps = store.dependentsOf(item.id);
+            if (deltaDays > 0 && deps.length) onCascade({ sourceId: item.id, deltaDays, deps });
+          }}>Apply</button>
           <div style={{ display: "flex", gap: 4, marginLeft: 8 }}>
             {(["not_started", "in_progress", "blocked", "done"] as ScheduleStatus[]).map((st) => (
               <button key={st} className="btn btn-sm" onClick={() => store.setScheduleStatus(item.id, st)} style={{ background: item.status === st ? STATUS_COLOR[st] : "var(--paper)", color: item.status === st ? "#fff" : "var(--ink)", borderColor: item.status === st ? STATUS_COLOR[st] : "var(--line)" }}>{SCHEDULE_LABEL[st]}</button>
@@ -563,6 +648,8 @@ function Drilldown({ item, editing, canEdit, onJump }: { item: ScheduleItem; edi
         </div>
       )}
       {item.confirm === "confirmed" && item.confirmedBy && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>✓ Confirmed by {item.confirmedBy} · {fmtTs(item.confirmedAt)}</div>}
+
+      <ItemChangeLog item={item} />
 
       {item.tradeId && (
         <>
@@ -597,6 +684,30 @@ function Drilldown({ item, editing, canEdit, onJump }: { item: ScheduleItem; edi
   );
 }
 
+// Per-item change history: every published revision that touched this task,
+// with who / when / the required reason.
+function ItemChangeLog({ item }: { item: ScheduleItem }) {
+  const db = useStore().db;
+  const entries = db.scheduleRevisions
+    .map((r) => ({ r, c: r.changes.find((c) => c.itemId === item.id) }))
+    .filter((x) => x.c);
+  if (!entries.length) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 5 }}>Change log</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+        {entries.map(({ r, c }) => (
+          <div key={r.id} style={{ fontSize: 12, borderLeft: "2px solid var(--brass)", paddingLeft: 9 }}>
+            <span style={{ fontWeight: 600 }}>{fmtD(c!.fromStart)}–{fmtD(c!.fromEnd)} → {fmtD(c!.toStart)}–{fmtD(c!.toEnd)}</span>
+            <span style={{ color: "var(--muted)" }}> · {r.by} · {fmtTs(r.at)}</span>
+            <div style={{ color: "var(--muted)", fontSize: 11.5 }}>Reason: {r.reason}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ConfirmBadge({ item }: { item: ScheduleItem }) {
   if (item.confirm === "pending") return <Pill color="#fff" bg="var(--rust)">awaiting trade confirm</Pill>;
   if (item.confirm === "declined") return <Pill color="#fff" bg="var(--rust)">trade declined</Pill>;
@@ -606,23 +717,28 @@ function ConfirmBadge({ item }: { item: ScheduleItem }) {
 function DepsEditor({ item }: { item: ScheduleItem }) {
   const store = useStore();
   const db = store.db;
-  const [adding, setAdding] = useState(false);
   const deps = item.deps ?? [];
+  const matDeps = item.materialDeps ?? [];
   const candidates = db.schedule.filter((s) => s.id !== item.id && !deps.includes(s.id));
   return (
     <div style={{ marginTop: 12 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>Critical-path dependencies</div>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 6 }}>Dependencies (tasks &amp; materials)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         {deps.map((d) => { const dep = db.schedule.find((s) => s.id === d); return (
           <span key={d} className="pill" style={{ background: "var(--sage-tint)", color: "var(--ink)" }}>⛓ {dep?.label ?? d}<button onClick={() => store.setScheduleDeps(item.id, deps.filter((x) => x !== d))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)", marginLeft: 2 }}>✕</button></span>
         ); })}
-        {!deps.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>None.</span>}
-        {adding ? (
-          <select autoFocus onChange={(e) => { if (e.target.value) { store.setScheduleDeps(item.id, [...deps, e.target.value]); setAdding(false); } }} defaultValue="">
-            <option value="" disabled>Pick a predecessor…</option>
-            {candidates.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-          </select>
-        ) : <button className="btn btn-sm" onClick={() => setAdding(true)}>+ Add dependency</button>}
+        {matDeps.map((m) => { const mat = db.materials.find((x) => x.id === m); const onHand = mat?.status === "delivered" || mat?.status === "purchased"; return (
+          <span key={m} className="pill" style={{ background: "#f0e6cd", color: "var(--ink)" }} title={mat ? `Status: ${mat.status}` : undefined}>📦 {mat?.item ?? m}{mat && !onHand && <span style={{ color: "var(--rust)", fontWeight: 700 }}> · {mat.status}</span>}<button onClick={() => store.setScheduleMaterialDeps(item.id, matDeps.filter((x) => x !== m))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)", marginLeft: 2 }}>✕</button></span>
+        ); })}
+        {!deps.length && !matDeps.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>None.</span>}
+        <select value="" onChange={(e) => { if (e.target.value) store.setScheduleDeps(item.id, [...deps, e.target.value]); }} style={{ fontSize: 11.5, maxWidth: 180 }}>
+          <option value="">+ task…</option>
+          {candidates.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+        <select value="" onChange={(e) => { if (e.target.value) store.setScheduleMaterialDeps(item.id, [...matDeps, e.target.value]); }} style={{ fontSize: 11.5, maxWidth: 180 }}>
+          <option value="">+ material…</option>
+          {db.materials.filter((m) => !matDeps.includes(m.id)).map((m) => <option key={m.id} value={m.id}>{m.item}{m.roomLabel ? ` · ${m.roomLabel}` : ""}</option>)}
+        </select>
       </div>
     </div>
   );

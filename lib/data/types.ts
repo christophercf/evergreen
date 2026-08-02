@@ -547,6 +547,8 @@ export interface ScheduleItem {
   status: ScheduleStatus;
   /** Critical-path predecessors: other schedule item ids this depends on. */
   deps?: string[];
+  /** Material prerequisites: material ids that must be on-hand for this task. */
+  materialDeps?: string[];
   /** Trade person responsible (for confirmation + notifications). */
   assignedUserId?: string;
   /** Dates the trade has confirmed — what the owner sees. */

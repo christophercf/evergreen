@@ -719,7 +719,7 @@ class Store {
   }
 
   // ---- Schedule: add new timeline items (owner / builder / full admin) ----
-  addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string }) {
+  addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string; deps?: string[]; materialDeps?: string[] }) {
     if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
     if (!item.label.trim() || !item.start || !item.end) return;
     this.mutate((db) => {
@@ -735,6 +735,8 @@ class Store {
         status: "not_started",
         origStart: item.start,
         origEnd: item.end,
+        deps: item.deps?.length ? item.deps : undefined,
+        materialDeps: item.materialDeps?.length ? item.materialDeps : undefined,
         assignedUserId: tradeUser?.id,
         // A trade on the hook must confirm the proposed dates, same as edits.
         confirm: tradeUser ? "pending" : "confirmed",
@@ -1291,6 +1293,12 @@ class Store {
     this.mutate((db) => {
       const s = db.schedule.find((x) => x.id === id);
       if (s) s.deps = deps;
+    });
+  }
+  setScheduleMaterialDeps(id: string, materialDeps: string[]) {
+    this.mutate((db) => {
+      const s = db.schedule.find((x) => x.id === id);
+      if (s) s.materialDeps = materialDeps;
     });
   }
 

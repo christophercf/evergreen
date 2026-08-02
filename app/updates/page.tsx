@@ -5,7 +5,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
 import { ContextChip, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
-import { tradeName } from "@/lib/data/money";
+import { tradeName, MACRO_ORDER, materialDates } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
 // Messenger — WhatsApp-style: a conversation list (per participant set, with
@@ -75,7 +75,9 @@ export default function UpdatesPage() {
   const [tradeF, setTradeF] = useState("all");
   const [personF, setPersonF] = useState("all");
   const [sortAZ, setSortAZ] = useState(false);
+  const [grouped, setGrouped] = useState(false);
   const [showNew, setShowNew] = useState(false);
+  const [showDigest, setShowDigest] = useState(false);
   const [newTo, setNewTo] = useState<Set<string>>(new Set());
   const [pendingOthers, setPendingOthers] = useState<string[] | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -159,6 +161,40 @@ export default function UpdatesPage() {
 
   const allowed = db.users.filter((u) => canMessageUser(user, role, u, db.trades));
 
+  // Which Building Costs category a conversation nests under: the category of
+  // its trade participants' trade; conversations with only owners/builders/
+  // designers land in "Project Team".
+  const convCategory = (c: Conv): string => {
+    for (const id of c.otherIds) {
+      const u = userOf(id);
+      const t = u?.tradeIds?.[0] ? db.trades.find((x) => x.id === u.tradeIds![0]) : undefined;
+      if (t) return t.category;
+    }
+    return "Project Team";
+  };
+
+  const renderConv = (c: Conv) => {
+    const others = c.otherIds.map(userOf);
+    const unread = unreadOf(c);
+    const active = sel === c.key;
+    return (
+      <button key={c.key} onClick={() => { setPendingOthers(null); setSel(c.key); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", border: "none", borderBottom: "1px solid var(--line)", background: active ? "var(--sage-tint)" : "transparent", cursor: "pointer", textAlign: "left" }}>
+        <Avatar u={others[0]} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.otherIds.map(nameOf).join(", ")}</span>
+            <span style={{ fontSize: 10.5, color: unread ? "var(--sage-2)" : "var(--muted)", flexShrink: 0, fontWeight: unread ? 700 : 400 }}>{c.lastAt ? timeShort(c.lastAt) : ""}</span>
+          </span>
+          <span style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
+            <span style={{ fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.preview}</span>
+            {unread > 0 && <span style={{ background: "var(--sage)", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 700, minWidth: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px", flexShrink: 0 }}>{unread}</span>}
+          </span>
+        </span>
+      </button>
+    );
+  };
+
   const startNew = () => {
     const ids = [...newTo];
     if (!ids.length) return;
@@ -179,7 +215,11 @@ export default function UpdatesPage() {
           <div style={{ padding: 10, borderBottom: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 7 }}>
             <div style={{ display: "flex", gap: 6 }}>
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Search people…" style={{ flex: 1, fontSize: 12.5, padding: "6px 9px", borderRadius: 99 }} />
-              <button className="btn btn-sm btn-primary" title="New conversation" onClick={() => { setShowNew((v) => !v); setSel(null); }}>＋ New</button>
+              {(role === "builder" || role === "full_admin") && (
+                <button className="btn btn-sm" title="Create a progress update (ad-hoc / weekly / monthly digest)" onClick={() => { setShowDigest((v) => !v); setShowNew(false); setSel(null); }}
+                  style={showDigest ? { background: "var(--brass)", color: "#fff", borderColor: "var(--brass)" } : undefined}>📋</button>
+              )}
+              <button className="btn btn-sm btn-primary" title="New conversation" onClick={() => { setShowNew((v) => !v); setShowDigest(false); setSel(null); }}>＋ New</button>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <select value={tradeF} onChange={(e) => { setTradeF(e.target.value); setPersonF("all"); }} style={{ flex: 1, fontSize: 11.5, minWidth: 0 }}>
@@ -191,11 +231,15 @@ export default function UpdatesPage() {
                 {people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
               <button className="btn btn-sm" title={sortAZ ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"} onClick={() => setSortAZ((v) => !v)}>{sortAZ ? "AZ" : "🕑"}</button>
+              <button className="btn btn-sm" title={grouped ? "Grouped by cost category — switch to flat list" : "Flat list — group by Building Costs category"} onClick={() => setGrouped((v) => !v)}
+                style={grouped ? { background: "var(--sage)", color: "#fff", borderColor: "var(--sage)" } : undefined}>🗂</button>
             </div>
           </div>
 
           <div style={{ overflowY: "auto", flex: 1 }}>
-            {showNew ? (
+            {showDigest ? (
+              <DigestBuilder allowed={allowed} onDone={() => setShowDigest(false)} />
+            ) : showNew ? (
               <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Start a conversation with</div>
                 {allowed.map((u) => {
@@ -220,27 +264,18 @@ export default function UpdatesPage() {
               </div>
             ) : (
               <>
-                {filtered.map((c) => {
-                  const others = c.otherIds.map(userOf);
-                  const unread = unreadOf(c);
-                  const active = sel === c.key;
-                  return (
-                    <button key={c.key} onClick={() => { setPendingOthers(null); setSel(c.key); }}
-                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 12px", border: "none", borderBottom: "1px solid var(--line)", background: active ? "var(--sage-tint)" : "transparent", cursor: "pointer", textAlign: "left" }}>
-                      <Avatar u={others[0]} />
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                          <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.otherIds.map(nameOf).join(", ")}</span>
-                          <span style={{ fontSize: 10.5, color: unread ? "var(--sage-2)" : "var(--muted)", flexShrink: 0, fontWeight: unread ? 700 : 400 }}>{c.lastAt ? timeShort(c.lastAt) : ""}</span>
-                        </span>
-                        <span style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
-                          <span style={{ fontSize: 12, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.preview}</span>
-                          {unread > 0 && <span style={{ background: "var(--sage)", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 700, minWidth: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px", flexShrink: 0 }}>{unread}</span>}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })}
+                {grouped
+                  ? [...MACRO_ORDER, "Project Team"].map((cat) => {
+                      const inCat = filtered.filter((c) => convCategory(c) === cat);
+                      if (!inCat.length) return null;
+                      return (
+                        <div key={cat}>
+                          <div style={{ padding: "7px 12px 3px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--brass-2)", background: "var(--cream)", borderBottom: "1px solid var(--line)" }}>{cat}</div>
+                          {inCat.map(renderConv)}
+                        </div>
+                      );
+                    })
+                  : filtered.map(renderConv)}
                 {!filtered.length && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--muted)" }}>No conversations{q || tradeF !== "all" || personF !== "all" ? " match the filter" : " yet — start one with ＋ New"}.</div>}
               </>
             )}
@@ -279,6 +314,153 @@ export default function UpdatesPage() {
         }
       `}</style>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Builder progress updates: ad-hoc / weekly / monthly. Rolls up everything
+// that happened in the period (timing changes, QC sign-offs, approved change
+// orders, draws) + the materials needed over the next few weeks, then lets the
+// builder add context and send it as a Messenger update + email.
+function DigestBuilder({ allowed, onDone }: { allowed: User[]; onDone: () => void }) {
+  const store = useStore();
+  const db = store.db;
+  const meId = store.session.userId;
+  const name = store.session.displayName;
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const daysAgo = (n: number) => { const d = new Date(today); d.setDate(d.getDate() - n); return iso(d); };
+
+  const [period, setPeriod] = useState<"weekly" | "monthly" | "adhoc">("weekly");
+  const [from, setFrom] = useState(daysAgo(7));
+  const [to, setTo] = useState(iso(today));
+  const [context, setContext] = useState("");
+  const [body, setBody] = useState<string | null>(null); // null = not generated yet
+  const [recips, setRecips] = useState<Set<string>>(new Set(allowed.filter((u) => u.role === "owner").map((u) => u.id)));
+  const [sent, setSent] = useState(false);
+
+  const range: [string, string] = period === "weekly" ? [daysAgo(7), iso(today)] : period === "monthly" ? [daysAgo(30), iso(today)] : [from, to];
+  const inRange = (d?: string) => !!d && d.slice(0, 10) >= range[0] && d.slice(0, 10) <= range[1];
+  const fmtR = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const generate = () => {
+    const lines: string[] = [];
+
+    // Timing changes published in the period
+    const revs = db.scheduleRevisions.filter((r) => inRange(r.at));
+    if (revs.length) {
+      lines.push("📅 SCHEDULE");
+      for (const r of revs) for (const c of r.changes) lines.push(`• ${c.label}: ${fmtR(c.fromStart)}–${fmtR(c.fromEnd)} → ${fmtR(c.toStart)}–${fmtR(c.toEnd)} (${r.reason})`);
+      lines.push("");
+    }
+    // Tasks finished in the period aren't timestamped — completed status shown live
+    const done = db.schedule.filter((s) => s.status === "done");
+    if (done.length) { lines.push(`✅ COMPLETE TO DATE: ${done.map((s) => s.label).join(", ")}`); lines.push(""); }
+
+    // QC sign-offs in the period
+    let qcCount = 0;
+    const qcByTrade = new Map<string, number>();
+    for (const cell of db.scope) for (const it of cell.items) {
+      if (inRange(it.ownerSignedAt) || inRange(it.builderSignedAt)) { qcCount++; qcByTrade.set(cell.tradeId, (qcByTrade.get(cell.tradeId) ?? 0) + 1); }
+    }
+    if (qcCount) {
+      lines.push(`🔍 QC SIGN-OFFS: ${qcCount} item${qcCount === 1 ? "" : "s"} — ${[...qcByTrade].map(([t, n]) => `${tradeName(db, t)} (${n})`).join(", ")}`);
+      lines.push("");
+    }
+
+    // Change orders approved in the period
+    const cos = db.costLines.flatMap((l) => (l.changeOrders ?? []).filter((c) => c.status === "approved" && inRange(c.date)).map((c) => ({ l, c })));
+    if (cos.length) {
+      lines.push("🧾 CHANGE ORDERS APPROVED");
+      for (const { l, c } of cos) lines.push(`• ${l.name} — ${c.title} (${c.exhibit})`);
+      lines.push("");
+    }
+
+    // Draws paid / pushed in the period
+    const draws = db.draws.filter((d) => inRange(d.paidDate) || inRange(d.pushedDate));
+    if (draws.length) {
+      lines.push("💵 DRAWS");
+      for (const d of draws) lines.push(`• ${d.name} — ${inRange(d.paidDate) ? "paid" : "issued"}`);
+      lines.push("");
+    }
+
+    // Upcoming materials (next 3 weeks) — always prompted for inclusion
+    const horizon = new Date(today); horizon.setDate(horizon.getDate() + 21);
+    const upcoming = db.materials
+      .filter((m) => m.status === "needed" || m.status === "identified")
+      .map((m) => { const d = materialDates(db, m); return { m, due: d.onHandBy ?? d.identifyBy }; })
+      .filter((x) => x.due && x.due <= iso(horizon))
+      .sort((a, b) => a.due!.localeCompare(b.due!));
+    if (upcoming.length) {
+      lines.push("📦 MATERIALS NEEDED — NEXT 3 WEEKS");
+      for (const { m, due } of upcoming.slice(0, 15)) lines.push(`• ${m.item}${m.roomLabel ? ` (${m.roomLabel})` : ""} — on hand by ${fmtR(due!)}`);
+      if (upcoming.length > 15) lines.push(`…and ${upcoming.length - 15} more in Materials`);
+      lines.push("");
+    }
+
+    if (!lines.length) lines.push("(No logged activity in this period — add your update below.)");
+    setBody(lines.join("\n").trim());
+  };
+
+  const title = `${period === "weekly" ? "Weekly" : period === "monthly" ? "Monthly" : "Progress"} Update — ${fmtR(range[0])}–${fmtR(range[1])}`;
+  const send = () => {
+    const toIds = [...recips];
+    const full = `${context.trim() ? `${context.trim()}\n\n` : ""}${body ?? ""}`;
+    store.postUpdate({ title, body: full, toUserIds: toIds });
+    pushEmail(emailsFor(db.users, toIds), `🏗 ${db.project.name} — ${title}`, full,
+      { replyUrl: conversationUrl([meId, ...toIds]), senderName: name });
+    setSent(true);
+    setTimeout(onDone, 1400);
+  };
+
+  return (
+    <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>📋 Create progress update</div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        {(["weekly", "monthly", "adhoc"] as const).map((p) => (
+          <button key={p} className="btn btn-sm" onClick={() => { setPeriod(p); setBody(null); }}
+            style={period === p ? { background: "var(--sage)", color: "#fff", borderColor: "var(--sage)" } : undefined}>
+            {p === "weekly" ? "Weekly (7d)" : p === "monthly" ? "Monthly (30d)" : "Ad-hoc"}
+          </button>
+        ))}
+      </div>
+      {period === "adhoc" && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12 }}>
+          <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setBody(null); }} /> →
+          <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setBody(null); }} />
+        </div>
+      )}
+      {body === null ? (
+        <button className="btn btn-primary btn-sm" onClick={generate}>⚙ Roll up {fmtR(range[0])}–{fmtR(range[1])}</button>
+      ) : (
+        <>
+          <label style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>Your context (goes on top)
+            <textarea value={context} onChange={(e) => setContext(e.target.value)} placeholder="How the week went, decisions needed, heads-ups…" style={{ minHeight: 56, fontSize: 12.5 }} />
+          </label>
+          <label style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>Auto-rolled-up progress (editable)
+            <textarea value={body} onChange={(e) => setBody(e.target.value)} style={{ minHeight: 170, fontSize: 12, fontFamily: "inherit" }} />
+          </label>
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 4 }}>Send to</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {allowed.map((u) => {
+                const on = recips.has(u.id);
+                return (
+                  <button key={u.id} className="btn btn-sm" onClick={() => setRecips((s) => { const n = new Set(s); on ? n.delete(u.id) : n.add(u.id); return n; })}
+                    style={{ background: on ? "var(--sage)" : undefined, color: on ? "#fff" : undefined, borderColor: on ? "var(--sage)" : undefined }}>
+                    {on ? "✓ " : ""}{u.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button className="btn btn-primary btn-sm" disabled={!recips.size || sent} onClick={send}>{sent ? "✓ Sent" : "Send update"}</button>
+            <button className="btn btn-sm" onClick={onDone}>Cancel</button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
