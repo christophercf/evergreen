@@ -28,7 +28,7 @@ export default function BudgetPage() {
 
   const t = totals(db.costLines);
   const buffer = (t.grand * db.project.bufferPct) / 100;
-  // All-in need is a RANGE, pulling the low–high cost range from Building Costs + buffer.
+  // All-in need is a RANGE, pulling the low–high cost range from Project Budget + buffer.
   const costRange = budgetRange(db.costLines);
   const bf = 1 + db.project.bufferPct / 100;
   const allInLow = costRange.low * bf;
@@ -89,8 +89,8 @@ export default function BudgetPage() {
   return (
     <>
       <PageHeader
-        title="Budget & Financing"
-        subtitle="Owner-only. Pulls the all-in cost from Building Costs, then helps you fund it for the least carrying cost — spend free cash before high-interest debt."
+        title="Owners Funding Management"
+        subtitle="Owner-only. Pulls the all-in cost from Project Budget, then helps you fund it for the least carrying cost — spend free cash before high-interest debt."
         right={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!ro && <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo the last budget change">↶ Undo</button>}
           <Pill color="#fff" bg="var(--brass)">Owner only</Pill>

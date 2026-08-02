@@ -672,6 +672,7 @@ export function buildDB(): DB {
     materials,
     artifacts,
     updates: [],
+    bidPackages: [],
   };
 }
 

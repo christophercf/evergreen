@@ -28,7 +28,7 @@ export default function CostsPage() {
   const [group, setGroup] = useState<GroupBy>("category");
   const [payFilter, setPayFilter] = useState<"all" | "paid" | "partial" | "unpaid">("all");
 
-  if (access === "none") return <NoAccess module="Building Costs" />;
+  if (access === "none") return <NoAccess module="Project Budget" />;
   const ro = access !== "edit";
 
   const t = totals(db.costLines);
@@ -49,8 +49,8 @@ export default function CostsPage() {
   return (
     <>
       <PageHeader
-        title="Building Costs"
-        subtitle="The locked baseline is your original budget. Every change flows through a change order (a numbered exhibit on that line's contract), so the owner can always see budget → current and where savings were found. All figures shown include builder markup."
+        title="Project Budget"
+        subtitle="The builder roughs out the ROM here first; winning Scope Support bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order, so the owner always sees budget → current. All figures include builder markup."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {ro && <Pill color="var(--muted)">View only</Pill>}

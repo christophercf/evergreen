@@ -28,7 +28,8 @@ export type ModuleKey =
   | "costs"
   | "budget"
   | "payments"
-  | "updates";
+  | "updates"
+  | "bids";
 
 export type AccessLevel = "none" | "view" | "edit";
 
@@ -446,6 +447,38 @@ export function materialLockedCost(m: Material): number | undefined {
   return opt?.price ?? m.budget;
 }
 
+// ---- Scope Support (pre-budget bidding) -------------------------------------
+// A bid package: one scope of work sent to multiple vendors for competing bids.
+// The winning bid is promoted into a Project Budget (ROM) line item.
+export interface VendorBid {
+  id: string;
+  vendorName: string;
+  contactId?: string;              // link to a vendor ContactSheet
+  amount?: number;                 // overall price (pre-markup / sub cost)
+  scopeText?: string;              // vendor-submitted scope (vendor-led / RFP return)
+  notes?: string;
+  receivedVia?: "email" | "text" | "phone" | "form" | "pdf";
+  attachments?: { name: string; url: string }[];  // photos / emailed docs
+  at: string;
+  status: "requested" | "received" | "declined" | "awarded";
+}
+
+export interface BidPackage {
+  id: string;
+  title: string;
+  tradeId: string;
+  roomIds: string[];
+  /** The scope-of-work text: builder-led, pulled from the scope matrix, or a
+   *  brief for RFPs the vendor fills out. */
+  scopeDetails: string;
+  status: "collecting" | "awarded";
+  createdAt: string;
+  bids: VendorBid[];
+  awardedBidId?: string;
+  /** The Project Budget line the winning bid was promoted into. */
+  lineId?: string;
+}
+
 // ---- Site updates (message board) ------------------------------------------
 // A field update: photos + title + text, posted to specific recipients who can
 // respond in-line. Built to be trivially usable from a phone on-site.
@@ -676,6 +709,7 @@ export interface DB {
   materials: Material[];
   artifacts: Artifact[];
   updates: SiteUpdate[];
+  bidPackages: BidPackage[];
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -692,24 +726,25 @@ export interface Session {
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   full_admin: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "edit",
   },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "view",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit", bids: "edit",
   },
   trade: {
+    // Competing bids are never shown to trades.
     dashboard: "view", timing: "edit", artifacts: "view", admin: "none",
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
     // The designer curates the materials list — they add & assign for all trades.
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
   },
 };
 

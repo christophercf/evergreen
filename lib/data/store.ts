@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  ScheduleStatus, ScopeStatus, Session, Trade, UpdateContext, User, Worker,
+  BidPackage, ScheduleStatus, ScopeStatus, Session, Trade, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
@@ -858,6 +858,100 @@ class Store {
       if (!m) return;
       this.notify(db, { toRole: "builder", kind: "info", message: `❓ ${by} requested details for "${m.item}".` });
     });
+  }
+
+  // ---- Scope Support (pre-budget bidding) ----
+  private get canManageBids(): boolean {
+    return ["full_admin", "builder"].includes(this.session.role);
+  }
+  addBidPackage(p: { title: string; tradeId: string; roomIds: string[]; scopeDetails: string }): string {
+    const id = newId("pkg");
+    if (!this.canManageBids || !p.title.trim()) return id;
+    this.mutate((db) => {
+      db.bidPackages.unshift({ id, title: p.title.trim(), tradeId: p.tradeId, roomIds: p.roomIds, scopeDetails: p.scopeDetails, status: "collecting", createdAt: new Date().toISOString(), bids: [] });
+    });
+    return id;
+  }
+  updateBidPackage(id: string, patch: Partial<BidPackage>) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => { const p = db.bidPackages.find((x) => x.id === id); if (p) Object.assign(p, patch); });
+  }
+  removeBidPackage(id: string) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => { db.bidPackages = db.bidPackages.filter((p) => p.id !== id); });
+  }
+  addBid(packageId: string, bid: { vendorName: string; contactId?: string; status?: VendorBid["status"] }) {
+    if (!this.canManageBids || !bid.vendorName.trim()) return;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      if (!p) return;
+      p.bids.push({ id: newId("bid"), vendorName: bid.vendorName.trim(), contactId: bid.contactId, at: new Date().toISOString(), status: bid.status ?? "requested" });
+    });
+  }
+  updateBid(packageId: string, bidId: string, patch: Partial<VendorBid>) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const b = db.bidPackages.find((x) => x.id === packageId)?.bids.find((x) => x.id === bidId);
+      if (b) Object.assign(b, patch);
+    });
+  }
+  removeBid(packageId: string, bidId: string) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      if (p) p.bids = p.bids.filter((b) => b.id !== bidId);
+    });
+  }
+  addBidAttachment(packageId: string, bidId: string, att: { name: string; url: string }) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const b = db.bidPackages.find((x) => x.id === packageId)?.bids.find((x) => x.id === bidId);
+      if (b) b.attachments = [...(b.attachments ?? []), att];
+    });
+  }
+  /** Award a bid: promote it into Project Budget — an existing ROM line for the
+   *  trade gets the awarded price and locks (ROM → BUDGET), or a new contracted
+   *  line is created. Returns the line id. */
+  awardBid(packageId: string, bidId: string): string | undefined {
+    if (!this.canManageBids) return undefined;
+    let outLineId: string | undefined;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      const b = p?.bids.find((x) => x.id === bidId);
+      if (!p || !b || b.amount == null) return;
+      const today = new Date().toISOString().slice(0, 10);
+      // Prefer the package's chosen line, else an unlocked ROM line for the trade.
+      let line = p.lineId ? db.costLines.find((l) => l.id === p.lineId) : undefined;
+      if (!line) line = db.costLines.find((l) => l.tradeId === p.tradeId && !l.locked);
+      if (!line) {
+        const trade = db.trades.find((t) => t.id === p.tradeId);
+        line = {
+          id: newId("cl"), name: p.title, tradeId: p.tradeId, category: trade?.category ?? "Soft Costs",
+          owner: trade?.managedBy === "owner" ? "owner" : "builder", roomIds: p.roomIds,
+          markupModel: "passthrough", markupPct: db.project.builderMarkupPct ?? 20,
+          history: [], status: "estimate", changeOrders: [], phases: [],
+          contractSummary: p.scopeDetails || undefined, contractMode: "appendix",
+        };
+        db.costLines.push(line);
+      }
+      // ROM → BUDGET: awarded price becomes the locked agreed cost.
+      line.history.push({ label: `Awarded bid — ${b.vendorName}`, date: today, amount: b.amount });
+      line.status = "contracted";
+      line.locked = true;
+      line.lockedCost = b.amount;
+      line.lockedAt = today;
+      line.lockedBy = this.session.displayName;
+      line.baseline = b.amount * (line.markupModel === "passthrough" ? 1 + line.markupPct / 100 : 1);
+      if (!line.desc) line.desc = p.scopeDetails.slice(0, 200) || undefined;
+      p.bids.forEach((x) => { if (x.status === "awarded") x.status = "received"; });
+      b.status = "awarded";
+      p.awardedBidId = b.id;
+      p.status = "awarded";
+      p.lineId = line.id;
+      outLineId = line.id;
+      this.notify(db, { toRole: "owner", kind: "info", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
+    });
+    return outLineId;
   }
 
   // ---- Site updates (message board) ----

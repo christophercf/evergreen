@@ -134,7 +134,7 @@ export default function VendorsPage() {
         subtitle={role === "trade"
           ? "Your contract with the project: scope, terms, your requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."
           : "Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."}
-        right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Building Costs →</Link> : undefined}
+        right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Project Budget →</Link> : undefined}
       />
       <SectionTitle>{role === "trade" ? "Your Contract" : "Vendors & Contracts"}</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

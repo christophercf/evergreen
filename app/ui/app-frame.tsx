@@ -9,7 +9,7 @@ import { ROLE_LABEL, accessFor, type ModuleKey, type Role } from "@/lib/data/typ
 import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
 import {
-  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon,
+  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon,
 } from "./icons";
 
 type NavItem = { href: string; label: string; mod: ModuleKey; Icon: (p: any) => React.ReactElement; phase2?: boolean };
@@ -18,9 +18,11 @@ type NavItem = { href: string; label: string; mod: ModuleKey; Icon: (p: any) => 
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", Icon: HomeIcon },
   { href: "/updates", label: "Messenger", mod: "updates", Icon: ChatIcon },
-  { href: "/costs", label: "Building Costs", mod: "costs", Icon: CoinsIcon },
+  // Bidding comes BEFORE the budget: scopes → competing bids → award → Project Budget.
+  { href: "/bids", label: "Scope Support", mod: "bids", Icon: ClipboardIcon },
+  { href: "/costs", label: "Project Budget", mod: "costs", Icon: CoinsIcon },
   { href: "/payments", label: "Payment & Draw Mgmt", mod: "payments", Icon: ReceiptIcon },
-  { href: "/budget", label: "Budget", mod: "budget", Icon: WalletIcon },
+  { href: "/budget", label: "Owners Funding Mgmt", mod: "budget", Icon: WalletIcon },
   { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon },
   { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon },
@@ -138,7 +140,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         {bottomNav.map(({ href, label, Icon }) => (
           <Link key={href} href={href} className={pathname === href ? "active" : undefined} onClick={() => setNavOpen(false)}>
             <Icon width={19} height={19} />
-            {href === "/" ? "Home" : href === "/costs" ? "Costs" : label}
+            {href === "/" ? "Home" : href === "/costs" ? "Budget" : label}
           </Link>
         ))}
         <button onClick={() => setNavOpen(true)} aria-label="All tabs">
