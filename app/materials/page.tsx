@@ -99,6 +99,7 @@ export default function MaterialsPage() {
   const [tieSelCell, setTieSelCell] = useState<string | null>(null);
   const [tieEditCell, setTieEditCell] = useState<string | null>(null);
   const [ai, setAi] = useState<Material | null>(null);
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -141,7 +142,13 @@ export default function MaterialsPage() {
   // except the architect, who reviews the full materials list.
   const myTradeIds = role === "trade" && !isArchitectUser(user) ? new Set(user?.tradeIds ?? []) : null;
   const filtered = useMemo(() => {
+    // Free-text search across everything a person might remember about an item.
+    const needle = q.trim().toLowerCase();
+    const matchesQ = (mt: Material) => !needle ||
+      [mt.item, mt.desc, roomLabel(mt), mt.tradeId ? tradeName(db, mt.tradeId) : "", mt.category, mt.notes, mt.specs, mt.status, ...(mt.options?.map((o) => o.label) ?? [])]
+        .some((s) => s && s.toLowerCase().includes(needle));
     const list = db.materials.filter((mt) =>
+      matchesQ(mt) &&
       (!myTradeIds || (mt.tradeId ? myTradeIds.has(mt.tradeId) : false)) &&
       (room === "all" || mt.roomId === room || mt.roomLabel === room) &&
       (trade === "all" || mt.tradeId === trade) &&
@@ -169,7 +176,7 @@ export default function MaterialsPage() {
       return a.item.localeCompare(b.item); // stable tiebreak
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [db.materials, room, trade, cat, status, sort, dir]);
+  }, [db.materials, q, room, trade, cat, status, sort, dir]);
   const catsUsed = Array.from(new Set([...CATALOG_CATEGORIES, ...db.materials.map((m) => m.category).filter(Boolean) as string[]]));
 
   const counts = { total: db.materials.length, needed: db.materials.filter((m) => m.status === "needed").length, purchased: db.materials.filter((m) => m.status === "purchased" || m.status === "delivered").length, owner: db.materials.filter((m) => m.purchaser === "owner").length };
@@ -195,8 +202,16 @@ export default function MaterialsPage() {
         {showMoney && <StatCard label="Locked Cost" value={`$${lockedTotal.toLocaleString()}`} accent="var(--brass-2)" sub={`${lockedMats.length} item${lockedMats.length === 1 ? "" : "s"} with approved product`} />}
       </div>
 
+      {/* search — always visible, filters everything live */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 Search materials — name, room, trade, notes…"
+          style={{ flex: 1, maxWidth: 420, fontSize: 13, padding: "7px 12px", borderRadius: 99 }} />
+        {q && <button className="btn btn-sm" onClick={() => setQ("")}>✕ Clear</button>}
+        {q && <span style={{ fontSize: 12, color: "var(--muted)" }}>{filtered.length} match{filtered.length === 1 ? "" : "es"}</span>}
+      </div>
+
       {/* filters — collapsed behind a toggle on phones */}
-      <button className="btn btn-sm m-filters-toggle" style={{ marginTop: 14 }} onClick={() => setShowFilters((v) => !v)}>
+      <button className="btn btn-sm m-filters-toggle" style={{ marginTop: 10 }} onClick={() => setShowFilters((v) => !v)}>
         Filters {showFilters ? "▴" : "▾"} · {filtered.length} shown
       </button>
       <div className={`card m-filters${showFilters ? " open" : ""}`} style={{ padding: 12, marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
