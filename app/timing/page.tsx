@@ -9,7 +9,7 @@ import {
 } from "@/lib/data/types";
 import { tradeName, MACRO_COLOR, MACRO_ORDER } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
-import { conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
+import { conversationKeyOf, conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
 
 const DAY = 86400000;
 const BASE_MONTH_W = 58;
@@ -503,7 +503,7 @@ function PublishModal({ changes, onClose, onDone }: { changes: { itemId: string;
     const toIds = [...to];
     store.postUpdate({ title: `Schedule change — ${changes.length} task${changes.length === 1 ? "" : "s"}`, body: msg, toUserIds: toIds });
     pushEmail(emailsFor(db.users, toIds), `📅 ${db.project.name} — schedule change`, msg,
-      { replyUrl: conversationUrl([meId, ...toIds]), senderName: store.session.displayName });
+      { replyUrl: conversationUrl([meId, ...toIds]), convKey: conversationKeyOf([meId, ...toIds]), senderName: store.session.displayName });
     onDone();
   };
 

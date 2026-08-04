@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
-import { ContextChip, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
+import { ContextChip, conversationKeyOf, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
 import { tradeName, MACRO_ORDER, materialDates } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ function DigestBuilder({ allowed, onDone }: { allowed: User[]; onDone: () => voi
     const full = `${context.trim() ? `${context.trim()}\n\n` : ""}${body ?? ""}`;
     store.postUpdate({ title, body: full, toUserIds: toIds });
     pushEmail(emailsFor(db.users, toIds), `🏗 ${db.project.name} — ${title}`, full,
-      { replyUrl: conversationUrl([meId, ...toIds]), senderName: name });
+      { replyUrl: conversationUrl([meId, ...toIds]), convKey: conversationKeyOf([meId, ...toIds]), senderName: name });
     setSent(true);
     setTimeout(onDone, 1400);
   };
@@ -493,7 +493,7 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
     }
     const emails = emailsFor(db.users, conv.otherIds);
     pushEmail(emails, `💬 ${db.project.name} — message from ${name}`, text || "(photo)",
-      { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
+      { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), convKey: conversationKeyOf([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
     setBody(""); att.clear();
   };
 

@@ -35,8 +35,9 @@ export function emailsFor(users: { id: string; email?: string; emailOptOut?: boo
 }
 
 // Fire-and-forget; delivers when RESEND_API_KEY is configured on the server.
-// `opts.replyUrl` becomes the email's "Reply in the app" button target.
-export function pushEmail(emails: string[], subject: string, text: string, opts?: { replyUrl?: string; senderName?: string; photoCount?: number }) {
+// `opts.replyUrl` becomes the email's "Reply in the app" button target;
+// `opts.convKey` enables reply-by-email threading when an inbound domain is set.
+export function pushEmail(emails: string[], subject: string, text: string, opts?: { replyUrl?: string; senderName?: string; photoCount?: number; convKey?: string }) {
   if (!emails.length) return;
   void fetch("/api/send-update-email", {
     method: "POST",
@@ -45,12 +46,16 @@ export function pushEmail(emails: string[], subject: string, text: string, opts?
   }).catch(() => { /* in-app tracking still works */ });
 }
 
+/** The canonical conversation key: the sorted participant-id set. */
+export function conversationKeyOf(participantIds: string[]): string {
+  return [...new Set(participantIds)].sort().join("+");
+}
+
 /** Deep link that opens a specific Messenger conversation (same key for every
  *  participant — the sorted participant-id set). */
 export function conversationUrl(participantIds: string[]): string {
-  const key = [...new Set(participantIds)].sort().join("+");
   const origin = typeof window !== "undefined" ? window.location.origin : "https://evergreen-rust-five.vercel.app";
-  return `${origin}/updates?conv=${encodeURIComponent(key)}`;
+  return `${origin}/updates?conv=${encodeURIComponent(conversationKeyOf(participantIds))}`;
 }
 
 // ---- dictation ----------------------------------------------------------------
@@ -202,7 +207,7 @@ export function Composer({ context, onPosted }: { context?: UpdateContext; onPos
     const ctxLine = context ? `\nAbout: ${context.label} — open it here: ${typeof window !== "undefined" ? window.location.origin : ""}${context.href}\n` : "";
     pushEmail(emails, `🏠 ${db.project.name} — ${title.trim()}`,
       `${body.trim() ? `${body.trim()}\n` : ""}${ctxLine}`,
-      { replyUrl: conversationUrl([store.session.userId, ...toIds]), senderName: name, photoCount: photos.length || undefined });
+      { replyUrl: conversationUrl([store.session.userId, ...toIds]), convKey: conversationKeyOf([store.session.userId, ...toIds]), senderName: name, photoCount: photos.length || undefined });
     setTitle(context ? context.label : ""); setBody(""); att.clear(); setTo(new Set());
     setPosted(true); setTimeout(() => setPosted(false), 3500);
     onPosted?.();
