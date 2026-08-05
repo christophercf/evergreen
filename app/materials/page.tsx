@@ -69,7 +69,7 @@ function SpecCell({ url }: { url?: string }) {
 const STATUS_ORDER = Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[];
 const PURCH: Purchaser[] = ["owner", "trade", "builder"];
 
-type SortKey = "item" | "room" | "trade" | "qty" | "status" | "buyer" | "budget" | "due" | "tied" | "approval" | "spec";
+type SortKey = "item" | "room" | "trade" | "qty" | "status" | "buyer" | "budget" | "due" | "tied" | "spec";
 type SortDir = "asc" | "desc";
 
 export default function MaterialsPage() {
@@ -85,13 +85,12 @@ export default function MaterialsPage() {
   const [sort, setSort] = useState<SortKey>("room");
   const [dir, setDir] = useState<SortDir>("asc");
   const clickSort = (k: SortKey) => { if (sort === k) setDir((d) => (d === "asc" ? "desc" : "asc")); else { setSort(k); setDir("asc"); } };
-  const sortTh = (k: SortKey, label: React.ReactNode, center?: boolean, title?: string, cls?: string) => (
+  const sortTh = (k: SortKey, label: React.ReactNode, center?: boolean, title?: string, cls?: string, extra?: React.CSSProperties) => (
     <th key={k} className={cls} onClick={() => clickSort(k)} title={`Sort by ${title ?? (typeof label === "string" ? label : k)}`}
-      style={{ ...(center ? thC : th), cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}>
+      style={{ ...(center ? thC : th), cursor: "pointer", userSelect: "none", whiteSpace: "nowrap", ...extra }}>
       {label}<span style={{ marginLeft: 4, fontSize: 9, color: sort === k ? "var(--sage-2)" : "var(--line)" }}>{sort === k ? (dir === "asc" ? "▲" : "▼") : "↕"}</span>
     </th>
   );
-  const [sel, setSel] = useState<Set<string>>(new Set());
   const [showFilters, setShowFilters] = useState(false);
   // Excel-style tied-task cells: click selects, double-click edits, Ctrl+C/Ctrl+V
   // copies and pastes across rows. tieClip holds the copied value ({v: undefined} = blank).
@@ -163,7 +162,6 @@ export default function MaterialsPage() {
         case "status": return STATUS_ORDER.indexOf(mt.status);
         case "buyer": return mt.purchaser;
         case "budget": return materialLockedCost(mt) ?? mt.budget ?? -Infinity;
-        case "approval": { const n = (mt.designerApproved ? 1 : 0) + (mt.ownerApproved ? 1 : 0); return n === 2 ? 0 : n === 1 ? 1 : mt.approvalRequested ? 2 : 3; }
         case "tied": return mt.linkedScheduleId ? schedLabel(mt.linkedScheduleId).toLowerCase() : "~~~";
         case "spec": return mt.specLink ? 0 : 1;
         case "due": default: return materialDates(db, mt).identifyBy ?? "~9999";
@@ -185,9 +183,6 @@ export default function MaterialsPage() {
   const lockedTotal = lockedMats.reduce((a, v) => a + v, 0);
   const tradesUsed = Array.from(new Set(db.materials.map((m) => m.tradeId).filter(Boolean) as string[]));
   const roomsUsed = Array.from(new Set(db.materials.map((m) => m.roomId).filter(Boolean) as string[]));
-
-  const toggleSel = (id: string) => setSel((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selIds = [...sel].filter((id) => filtered.some((m) => m.id === id));
 
   return (
     <>
@@ -229,29 +224,11 @@ export default function MaterialsPage() {
         <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>{filtered.length} shown</span>
       </div>
 
-      {/* bulk assign */}
-      {!ro && selIds.length > 0 && (
-        <div className="card" style={{ padding: 10, marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", borderLeft: "3px solid var(--sage)" }}>
-          <strong style={{ fontSize: 13 }}>{selIds.length} selected</strong>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>Assign purchaser:</span>
-          {PURCH.map((p) => <button key={p} className="btn btn-sm" onClick={() => store.bulkAssignPurchaser(selIds, p)}>{p}</button>)}
-          <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>Set status:</span>
-          {(Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[]).map((s) => <button key={s} className="btn btn-sm" onClick={() => store.bulkSetMaterialStatus(selIds, s)}>{MATERIAL_STATUS_LABEL[s]}</button>)}
-          <span style={{ fontSize: 12, color: "var(--muted)", marginLeft: 8 }}>Tie to task:</span>
-          <select defaultValue="" onChange={(e) => { if (e.target.value) { store.bulkSetMaterialTie(selIds, e.target.value); e.currentTarget.value = ""; } }} style={{ fontSize: 11, maxWidth: 170 }}>
-            <option value="">pick a timing item…</option>
-            {schedSorted.map((s) => <option key={s.id} value={s.id}>{s.label}{s.tradeId ? ` — ${tradeName(db, s.tradeId)}` : ""}</option>)}
-          </select>
-          <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setSel(new Set())}>Clear</button>
-        </div>
-      )}
-
       <div className="card" style={{ overflow: "auto", maxHeight: "64vh", marginTop: 12, padding: 0 }}>
         <table style={{ fontSize: 12.5 }}>
           <thead>
             <tr>
-              {!ro && <th style={th} className="m-hide"></th>}
-              {sortTh("item", "Item")}
+              {sortTh("item", "Item", false, undefined, undefined, { left: 0, zIndex: 3 })}
               {sortTh("room", "Room", false, undefined, "m-hide")}
               {sortTh("trade", "Trade", false, undefined, "m-hide")}
               {sortTh("qty", "Qty", true, undefined, "m-hide")}
@@ -260,7 +237,6 @@ export default function MaterialsPage() {
               {showMoney && sortTh("budget", "Budget", false, "Budget / locked cost", "m-hide")}
               {sortTh("due", "Due")}
               {sortTh("tied", "Tied task", false, undefined, "m-hide")}
-              {sortTh("approval", "Approval", false, undefined, "m-hide")}
               {sortTh("spec", "Spec", false, undefined, "m-hide")}
               {!ro && <th style={th} className="m-hide"></th>}
             </tr>
@@ -268,16 +244,16 @@ export default function MaterialsPage() {
           <tbody>
             {filtered.map((mt) => {
               const open = openId === mt.id;
-              const colSpan = (ro ? 11 : 13) + (showMoney ? 1 : 0);
+              const colSpan = 10 + (showMoney ? 1 : 0) + (ro ? 0 : 1);
               const locked = materialLockedCost(mt);
               return (
               <Fragment key={mt.id}>
-              <tr style={{ background: open ? "var(--sage-tint)" : sel.has(mt.id) ? "var(--sage-tint)" : undefined }}>
-                {!ro && <td style={td} className="m-hide"><input type="checkbox" checked={sel.has(mt.id)} onChange={() => toggleSel(mt.id)} /></td>}
-                <td style={td}>
-                  <button onClick={() => setOpenId(open ? null : mt.id)} style={{ border: "none", background: "transparent", textAlign: "left", cursor: "pointer", padding: 0 }}>
+              <tr style={{ background: open ? "var(--sage-tint)" : undefined }}>
+                {/* Item stays pinned while the table scrolls sideways. */}
+                <td style={{ ...td, position: "sticky", left: 0, zIndex: 1, background: open ? "var(--sage-tint)" : "var(--paper)", minWidth: 150, maxWidth: 230, boxShadow: "2px 0 4px -2px rgba(44,36,28,.15)" }}>
+                  <button onClick={() => setOpenId(open ? null : mt.id)} style={{ border: "none", background: "transparent", textAlign: "left", cursor: "pointer", padding: 0, maxWidth: "100%" }}>
                     <div style={{ fontWeight: 600 }}>{mt.item} <span style={{ color: "var(--muted)", fontSize: 11 }}>{open ? "▾" : "▸"}</span></div>
-                    {mt.desc && <div style={{ fontSize: 11, color: "var(--muted)" }}>{mt.desc}</div>}
+                    {mt.desc && <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mt.desc}</div>}
                   </button>
                 </td>
                 <td style={td} className="m-hide">
@@ -330,10 +306,6 @@ export default function MaterialsPage() {
                     </div>
                   )}
                 </td>
-                <td style={td} className="m-hide"><div style={{ display: "flex", gap: 4 }}>
-                  <ApprovalBadge letter="D" who="Designer" approved={!!mt.designerApproved} requested={!!mt.approvalRequested} />
-                  <ApprovalBadge letter="O" who="Owner" approved={!!mt.ownerApproved} requested={!!mt.approvalRequested} />
-                </div></td>
                 <td style={td} className="m-hide"><SpecCell url={mt.specLink} /></td>
                 {!ro && <td style={td} className="m-hide">
                   <div style={{ display: "flex", gap: 4 }}>
@@ -599,12 +571,6 @@ function ApprovalRow({ label, approved, requested, canApprove, onApprove, onRevo
   );
 }
 
-// Compact D/O sign-off badge for the list's Approval column.
-function ApprovalBadge({ letter, who, approved, requested }: { letter: string; who: string; approved: boolean; requested: boolean }) {
-  const bg = approved ? "var(--ok)" : requested ? "#f0e6cd" : "var(--cream-2)";
-  const color = approved ? "#fff" : requested ? "var(--brass-2)" : "var(--muted)";
-  return <span title={`${who}: ${approved ? "approved" : requested ? "requested" : "not approved"}`} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 20, height: 20, borderRadius: 5, fontSize: 10.5, fontWeight: 700, background: bg, color, border: "1px solid var(--line)" }}>{letter}</span>;
-}
 
 // The Due column: a single hard date, or the two trade-derived critical-path dates.
 function DueCell({ mt, ro }: { mt: Material; ro: boolean }) {
