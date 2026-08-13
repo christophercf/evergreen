@@ -6,10 +6,12 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, NumInput, TextInput } from "../ui/bits";
 import { TradeRatingChip } from "../ui/rating";
 import {
-  accessFor, BID_ORIGIN_LABEL, type BidComparison, type BidOrigin, type BidPackage, type VendorBid,
+  accessFor, BID_ORIGIN_LABEL, BID_REQ_DEFAULT, BID_REQ_HINT, BID_REQ_KEYS, BID_REQ_LABEL, MATERIALS_BASIS_LABEL,
+  bidCompleteness, packageReadiness,
+  type BidComparison, type BidOrigin, type BidPackage, type BidReqKey, type MaterialsBasis, type ScopeDoc, type VendorBid,
 } from "@/lib/data/types";
 import { tradeName, MACRO_ORDER, fmt } from "@/lib/data/money";
-import { storeFile } from "../ui/upload";
+import { storeFile, fileToBase64Payload } from "../ui/upload";
 import { jsPDF } from "jspdf";
 
 // ---------------------------------------------------------------------------
@@ -27,7 +29,7 @@ const fmtD = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "sh
 const VIA: VendorBid["receivedVia"][] = ["email", "text", "phone", "form", "pdf"];
 const toItems = (s: string) => s.split(/\r?\n/).map((x) => x.replace(/^[\s•\-*]+/, "").trim()).filter(Boolean);
 
-function downloadBidRequestPdf(opts: { projectName: string; title: string; trade: string; rooms: string[]; scope: string; items: string[]; rfp: boolean }) {
+function downloadBidRequestPdf(opts: { projectName: string; title: string; trade: string; rooms: string[]; scope: string; items: string[]; rfp: boolean; requirements?: BidReqKey[]; materialsBasis?: MaterialsBasis }) {
   const doc = new jsPDF({ unit: "pt", format: "letter" });
   const M = 48, W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
   let y = M;
@@ -47,6 +49,7 @@ function downloadBidRequestPdf(opts: { projectName: string; title: string; trade
   text("EVERGREEN AI", { size: 9, bold: true, color: [176, 138, 62] });
   text(`${opts.rfp ? "Request for Proposal" : "Bid Request"} — ${opts.title}`, { size: 18, bold: true, color: [58, 47, 37], gap: 2 });
   text(`${opts.projectName} · Trade: ${opts.trade}${opts.rooms.length ? ` · Rooms: ${opts.rooms.join(", ")}` : ""}`, { size: 10, color: [122, 111, 96] });
+  if (opts.materialsBasis) text(`Materials: ${MATERIALS_BASIS_LABEL[opts.materialsBasis]}`, { size: 10, bold: true, color: [176, 138, 62] });
   rule();
   if (opts.items.length) {
     text("Price each line below. Leave blank anything you are not including.", { size: 10, bold: true });
@@ -68,9 +71,17 @@ function downloadBidRequestPdf(opts: { projectName: string; title: string; trade
     text("VENDOR: please detail your proposed scope of work below.", { size: 10, bold: true, color: [176, 138, 62] });
     blank("Proposed scope of work", 8);
   }
-  blank("Total price (materials + labor, USD)", 1);
-  blank("Estimated schedule / lead time", 1);
-  blank("Exclusions / assumptions", 3);
+  blank("Total price (USD)", 1);
+  // Required answers — a bid missing these can't be compared fairly.
+  const reqs = opts.requirements ?? [];
+  if (reqs.length) {
+    y += 2;
+    text("REQUIRED — a bid without these can't be evaluated:", { size: 10, bold: true, color: [176, 138, 62] });
+    for (const k of reqs) {
+      if (k === "lineItemPricing") continue; // already priced line-by-line above
+      blank(BID_REQ_LABEL[k], k === "exclusions" || k === "ownerSupplied" ? 2 : 1);
+    }
+  }
   blank("Company · Contact · Phone · Email", 2);
   blank("Signature & date", 1);
   text("Return by email, text or phone — your bid will be logged in the project's Scope Support board.", { size: 8.5, color: [122, 111, 96] });
@@ -148,17 +159,24 @@ function NewPackage() {
   const [tradeId, setTradeId] = useState("");
   const [rooms, setRooms] = useState<string[]>([]);
   const [scope, setScope] = useState("");
+  const [basis, setBasis] = useState<MaterialsBasis | "">("");
+  const [reqs, setReqs] = useState<BidReqKey[]>(BID_REQ_DEFAULT);
+  const [target, setTarget] = useState("");
+  const [sendTo, setSendTo] = useState<string[]>([]);
+  // vendor_import scan state
+  const [scan, setScan] = useState<{ busy: boolean; msg: string; doc?: ScopeDoc; conf?: string }>({ busy: false, msg: "" });
 
   const tpl = tradeId ? db.scopeTemplates.find((t) => t.tradeId === tradeId) : undefined;
+  const vendorContacts = db.contacts.filter((c) => c.party === "vendor");
+  const tradeVendors = tradeId ? vendorContacts.filter((c) => c.tradeId === tradeId) : [];
+  const otherVendors = vendorContacts.filter((c) => !tradeId || c.tradeId !== tradeId);
 
-  // Option 1 — the trade's default template + in-scope rooms from the matrix.
   const loadTradeTemplate = (tid: string) => {
     const cells = db.scope.filter((c) => c.tradeId === tid && c.status === "in");
     setRooms(cells.map((c) => c.roomId));
     const fromTemplate = db.scopeTemplates.find((t) => t.tradeId === tid)?.items ?? [];
     const fromMatrix = Array.from(new Set(cells.flatMap((c) => c.items.filter((i) => i.included).map((i) => i.label))));
-    const items = fromTemplate.length ? fromTemplate : fromMatrix;
-    setScope(items.join("\n"));
+    setScope((fromTemplate.length ? fromTemplate : fromMatrix).join("\n"));
   };
 
   const pick = (o: BidOrigin) => {
@@ -167,20 +185,59 @@ function NewPackage() {
     if (o !== "trade_template") setScope("");
   };
 
+  // Scan a vendor's PDF or a phone photo into template-shaped line items.
+  const scanFile = async (files: FileList | null) => {
+    const f = files?.[0];
+    if (!f) return;
+    setScan({ busy: true, msg: `Reading ${f.name}…` });
+    try {
+      const [{ fileUrl, fileName }, payload] = await Promise.all([storeFile(f), fileToBase64Payload(f)]);
+      const doc: ScopeDoc = { name: fileName, url: fileUrl, scannedAt: new Date().toISOString() };
+      const res = await fetch("/api/scan-scope", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: payload.data, mediaType: payload.mediaType, fileName, trade: tradeId ? tradeName(db, tradeId) : undefined, templateItems: tpl?.items ?? [] }),
+      });
+      const j = await res.json();
+      if (!j.ok) { setScan({ busy: false, msg: j.error ?? "Scan failed.", doc }); return; }
+      const d = j.data ?? {};
+      if (Array.isArray(d.items) && d.items.length) setScope(d.items.join("\n"));
+      if (!title.trim() && d.vendor) setTitle(`${d.vendor} — scope`);
+      if (d.price > 0) setTarget(String(d.price));
+      if (d.materialsIncluded === "included") setBasis("vendor_supplies");
+      else if (d.materialsIncluded === "labor_only") setBasis("owner_supplies");
+      else if (d.materialsIncluded === "partial") setBasis("mixed");
+      setScan({ busy: false, doc, conf: d.confidence, msg: `Read ${(d.items ?? []).length} line item${(d.items ?? []).length === 1 ? "" : "s"}${d.price > 0 ? ` · total $${Number(d.price).toLocaleString()}` : ""}${d.confidence ? ` · ${d.confidence} confidence` : ""}${d.note ? ` — ${d.note}` : ""}` });
+    } catch {
+      setScan({ busy: false, msg: "Couldn't read that file." });
+    }
+  };
+
   const create = (issue: boolean) => {
     if (!title.trim() || !tradeId || !origin) return;
-    const id = store.addBidPackage({ title, tradeId, roomIds: rooms, scopeDetails: scope, scopeItems: toItems(scope), origin, status: "draft" });
+    const id = store.addBidPackage({
+      title, tradeId, roomIds: rooms, scopeDetails: scope, scopeItems: toItems(scope), origin,
+      status: "draft", materialsBasis: basis || undefined, requirements: reqs,
+      targetBudget: target ? Number(target.replace(/[^0-9.]/g, "")) : undefined,
+      sourceDoc: scan.doc,
+    });
+    if (sendTo.length) store.addBidsForContacts(id, sendTo);
     if (issue) store.issueBidPackage(id);
-    setTitle(""); setTradeId(""); setRooms([]); setScope(""); setOrigin(null); setOpenForm(false);
+    setTitle(""); setTradeId(""); setRooms([]); setScope(""); setOrigin(null); setBasis(""); setTarget("");
+    setSendTo([]); setReqs(BID_REQ_DEFAULT); setScan({ busy: false, msg: "" });
+    setOpenForm(false);
   };
 
   if (!openForm) return <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={() => setOpenForm(true)}>＋ New bid package</button>;
 
   const OPTIONS: { o: BidOrigin; icon: string; blurb: string }[] = [
-    { o: "trade_template", icon: "📋", blurb: "Use this trade's standard checklist and in-scope rooms. Fastest — everyone bids the same list." },
+    { o: "trade_template", icon: "📋", blurb: "Use this trade's standard checklist and in-scope rooms, then pick who to email it to." },
     { o: "builder_scope", icon: "✍️", blurb: "You write the scope; the vendor prices it and fills in any detail you leave open (RFP)." },
-    { o: "vendor_import", icon: "📥", blurb: "Paste or type a scope the vendor already sent you. It becomes the shared list others bid against." },
+    { o: "vendor_import", icon: "📥", blurb: "Scan a vendor's PDF or snap a photo of their quote — we translate it into the template format." },
   ];
+
+  // Live readiness against the same rules the package uses.
+  const draftForCheck = { title, tradeId, roomIds: rooms, scopeItems: toItems(scope), materialsBasis: basis || undefined, requirements: reqs } as BidPackage;
+  const check = packageReadiness(draftForCheck);
 
   return (
     <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--sage)", display: "flex", flexDirection: "column", gap: 10 }}>
@@ -192,7 +249,6 @@ function NewPackage() {
         </select>
       </div>
 
-      {/* Step 1: how is this scope authored? */}
       <div>
         <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 5 }}>How do you want to build this scope?</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(215px, 1fr))", gap: 8 }}>
@@ -212,6 +268,31 @@ function NewPackage() {
         )}
       </div>
 
+      {/* Import & scan */}
+      {origin === "vendor_import" && (
+        <div style={{ border: "1px dashed var(--line)", borderRadius: 10, padding: 10, background: "var(--paper)" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+              📄 Upload PDF
+              <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => { void scanFile(e.target.files); e.target.value = ""; }} />
+            </label>
+            <label className="btn btn-sm" style={{ cursor: "pointer" }}>
+              📷 Photo of a paper quote
+              <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => { void scanFile(e.target.files); e.target.value = ""; }} />
+            </label>
+            {scan.busy && <span style={{ fontSize: 12, color: "var(--muted)" }}>✨ {scan.msg}</span>}
+            {scan.doc && !scan.busy && <a className="btn btn-sm" href={scan.doc.url} target="_blank" rel="noreferrer">👁 View original</a>}
+          </div>
+          {!scan.busy && scan.msg && (
+            <div style={{ fontSize: 11.5, marginTop: 7, color: scan.conf === "low" ? "var(--rust)" : "var(--sage-2)" }}>
+              ✨ {scan.msg}
+              {scan.conf === "low" && <strong> — check the original before sending.</strong>}
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Or just paste their text below. The original file stays attached either way.</div>
+        </div>
+      )}
+
       {origin && (
         <>
           <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
@@ -227,8 +308,68 @@ function NewPackage() {
               placeholder={origin === "builder_scope" ? "Remove existing gutters\nInstall 6\" seamless aluminum gutters\nDownspouts to grade + splash blocks" : origin === "vendor_import" ? "Paste the vendor's scope here — one item per line" : ""}
               style={{ minHeight: 120, fontSize: 12.5 }} />
           </label>
+
+          {/* Guard rails */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 10, padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Bid requirements</div>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                Materials
+                <select value={basis} onChange={(e) => setBasis(e.target.value as MaterialsBasis)} style={{ fontSize: 12, borderColor: basis ? undefined : "var(--rust)" }}>
+                  <option value="">— who supplies? —</option>
+                  {(Object.keys(MATERIALS_BASIS_LABEL) as MaterialsBasis[]).map((k) => <option key={k} value={k}>{MATERIALS_BASIS_LABEL[k]}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 6, color: "var(--muted)" }}>
+                Target budget (optional)
+                <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="$" style={{ width: 92, fontSize: 12 }} />
+              </label>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "2px 12px" }}>
+              {BID_REQ_KEYS.map((k) => (
+                <label key={k} title={BID_REQ_HINT[k]} style={{ fontSize: 11.5, display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="checkbox" checked={reqs.includes(k)} onChange={() => setReqs((p) => p.includes(k) ? p.filter((x) => x !== k) : [...p, k])} />
+                  {BID_REQ_LABEL[k]}
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>These print on the bid request as required answers, and each bid shows how many came back.</div>
+          </div>
+
+          {/* Who are we sending to? */}
+          <div>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 5 }}>
+              Send to {sendTo.length > 0 && <span style={{ color: "var(--sage-2)" }}>· {sendTo.length} selected</span>}
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {[...tradeVendors, ...otherVendors].map((c) => {
+                const on = sendTo.includes(c.id);
+                const sameTrade = c.tradeId === tradeId;
+                return (
+                  <button key={c.id} className="btn btn-sm" onClick={() => setSendTo((p) => on ? p.filter((x) => x !== c.id) : [...p, c.id])}
+                    title={c.tradeId ? tradeName(db, c.tradeId) : "Vendor"}
+                    style={{ fontSize: 11.5, background: on ? "var(--sage)" : undefined, color: on ? "#fff" : undefined, borderColor: on ? "var(--sage)" : sameTrade ? "var(--brass)" : undefined }}>
+                    {on ? "✓ " : ""}{c.company}{sameTrade ? " ★" : ""}
+                  </button>
+                );
+              })}
+              {!vendorContacts.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>No vendor contacts yet — add them in Admin → Team, Access &amp; Billing.</span>}
+            </div>
+            {tradeVendors.length > 0 && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>★ = already assigned to this trade</div>}
+          </div>
+
+          {/* Readiness */}
+          {(check.blocking.length > 0 || check.warnings.length > 0) && (
+            <div style={{ fontSize: 11.5, background: check.blocking.length ? "#f7e6e0" : "#f7f1e2", border: "1px solid var(--line)", borderRadius: 8, padding: "7px 10px" }}>
+              {check.blocking.map((b) => <div key={b} style={{ color: "var(--rust)" }}>✕ {b}</div>)}
+              {check.warnings.map((w) => <div key={w} style={{ color: "var(--brass-2)" }}>⚠ {w}</div>)}
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <button className="btn btn-primary btn-sm" disabled={!title.trim() || !tradeId} onClick={() => create(true)}>Create &amp; start collecting</button>
+            <button className="btn btn-primary btn-sm" disabled={!check.ready} title={check.ready ? undefined : check.blocking.join(" · ")} onClick={() => create(true)}>
+              Create &amp; start collecting{sendTo.length ? ` (${sendTo.length} vendor${sendTo.length === 1 ? "" : "s"})` : ""}
+            </button>
             <button className="btn btn-sm" disabled={!title.trim() || !tradeId} onClick={() => create(false)}>Save as draft</button>
             <button className="btn btn-sm" onClick={() => { setOpenForm(false); setOrigin(null); }}>Cancel</button>
             <span style={{ fontSize: 11, color: "var(--muted)" }}>{toItems(scope).length} line item{toItems(scope).length === 1 ? "" : "s"}</span>
@@ -262,7 +403,7 @@ function PackageCard({ p, ro }: { p: BidPackage; ro: boolean }) {
   const low = priced.length ? Math.min(...priced.map((b) => b.amount!)) : null;
   const high = priced.length ? Math.max(...priced.map((b) => b.amount!)) : null;
 
-  const requestPdf = (rfp: boolean) => downloadBidRequestPdf({ projectName: db.project.name, title: p.title, trade, rooms: roomNames, scope: p.scopeDetails, items, rfp });
+  const requestPdf = (rfp: boolean) => downloadBidRequestPdf({ projectName: db.project.name, title: p.title, trade, rooms: roomNames, scope: p.scopeDetails, items, rfp, requirements: p.requirements ?? BID_REQ_DEFAULT, materialsBasis: p.materialsBasis });
   const mailtoFor = (b?: VendorBid) => {
     const contact = b?.contactId ? db.contacts.find((c) => c.id === b.contactId) : undefined;
     const subject = encodeURIComponent(`Bid request — ${p.title} (${db.project.name})`);
@@ -318,8 +459,11 @@ function PackageCard({ p, ro }: { p: BidPackage; ro: boolean }) {
       <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 3 }}>
         {p.origin ? BID_ORIGIN_LABEL[p.origin] : "Scope"} · {items.length} line item{items.length === 1 ? "" : "s"}
         {roomNames.length ? ` · ${roomNames.join(", ")}` : ""}
+        {p.materialsBasis && <> · {MATERIALS_BASIS_LABEL[p.materialsBasis]}</>}
+        {p.targetBudget ? <> · target <strong style={{ color: "var(--ink)" }}>{fmt(p.targetBudget)}</strong></> : null}
         {priced.length > 1 && low != null && high != null && <> · spread <strong style={{ color: "var(--ink)" }}>{fmt(low)}–{fmt(high)}</strong></>}
         {" · "}<button className="btn btn-sm" style={{ padding: "0 6px", fontSize: 11 }} onClick={() => setShowScope((v) => !v)}>{showScope ? "hide scope" : "view scope"}</button>
+        {p.sourceDoc && <> · <a href={p.sourceDoc.url} target="_blank" rel="noreferrer" style={{ color: "var(--sage-2)", fontWeight: 600 }}>👁 scanned original</a></>}
       </div>
 
       {showScope && (
@@ -388,6 +532,7 @@ function BidRow({ p, b, ro, mailto, low, high }: { p: BidPackage; b: VendorBid; 
   const isHigh = b.amount != null && high != null && b.amount === high && (low ?? high) !== high;
   const delta = b.amount != null && low != null && b.amount > low ? b.amount - low : 0;
   const cmp = b.comparison;
+  const comp = bidCompleteness(p, b);
 
   const upload = async (files: FileList | null) => {
     const f = files?.[0];
@@ -410,6 +555,13 @@ function BidRow({ p, b, ro, mailto, low, high }: { p: BidPackage; b: VendorBid; 
         {cmp && (cmp.comparable
           ? <Pill color="#fff" bg="var(--sage)" >✓ apples-to-apples</Pill>
           : <Pill color="#fff" bg="var(--rust)">⚠ scope differs</Pill>)}
+        {b.status !== "requested" && comp.total > 0 && (
+          <span title={comp.missing.length ? `Still missing: ${comp.missing.map((k) => BID_REQ_LABEL[k]).join(", ")}` : "All required answers received"}
+            style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: "1px 7px", background: comp.answered === comp.total ? "var(--sage-tint)" : "#f0e6cd", color: comp.answered === comp.total ? "var(--sage-2)" : "var(--brass-2)" }}>
+            {comp.answered}/{comp.total} answered
+          </span>
+        )}
+        {b.sourceDoc && <a href={b.sourceDoc.url} target="_blank" rel="noreferrer" title="View the original quote" style={{ fontSize: 11, color: "var(--sage-2)" }}>👁 original</a>}
         {!isWinner && !locked && (
           <select value={b.status} onChange={(e) => store.updateBid(p.id, b.id, { status: e.target.value as VendorBid["status"] })} style={{ fontSize: 10.5, padding: "1px 4px" }}>
             {(["requested", "received", "declined"] as const).map((s) => <option key={s} value={s}>{s}</option>)}
@@ -445,6 +597,26 @@ function BidRow({ p, b, ro, mailto, low, high }: { p: BidPackage; b: VendorBid; 
           <label style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>Vendor-submitted scope (paste their email / notes from the call)
             <textarea value={b.scopeText ?? ""} disabled={locked} onChange={(e) => store.updateBid(p.id, b.id, { scopeText: e.target.value, scopeItems: toItems(e.target.value) })} placeholder="What did they actually quote?" style={{ minHeight: 60, fontSize: 12 }} />
           </label>
+
+          {/* Required answers — what's still unanswered is the risk */}
+          <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", marginBottom: 5 }}>
+              Required answers · {comp.answered}/{comp.total}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "5px 10px" }}>
+              {(p.requirements ?? BID_REQ_DEFAULT).map((k) => (
+                <label key={k} title={BID_REQ_HINT[k]} style={{ fontSize: 10.5, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ color: (b.responses?.[k] ?? "").trim() ? "var(--sage-2)" : "var(--rust)" }}>
+                    {(b.responses?.[k] ?? "").trim() ? "✓" : "•"} {BID_REQ_LABEL[k]}
+                  </span>
+                  <TextInput value={b.responses?.[k] ?? ""} disabled={locked}
+                    placeholder={k === "materialsIncluded" ? "included / labor only / partial" : k === "permits" ? "included / billed at cost" : ""}
+                    onCommit={(v) => store.updateBid(p.id, b.id, { responses: { ...(b.responses ?? {}), [k]: v } })}
+                    style={{ fontSize: 12, width: "100%" }} />
+                </label>
+              ))}
+            </div>
+          </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <label style={{ fontSize: 10.5, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 5 }}>Received via
               <select value={b.receivedVia ?? ""} disabled={locked} onChange={(e) => store.updateBid(p.id, b.id, { receivedVia: (e.target.value || undefined) as VendorBid["receivedVia"] })} style={{ fontSize: 11 }}>

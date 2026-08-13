@@ -8,8 +8,9 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, ScheduleStatus, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, MaterialsBasis, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
+import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
@@ -873,7 +874,11 @@ class Store {
   private get canManageBids(): boolean {
     return ["full_admin", "builder"].includes(this.session.role);
   }
-  addBidPackage(p: { title: string; tradeId: string; roomIds: string[]; scopeDetails: string; scopeItems?: string[]; origin?: BidOrigin; status?: BidPackage["status"] }): string {
+  addBidPackage(p: {
+    title: string; tradeId: string; roomIds: string[]; scopeDetails: string; scopeItems?: string[];
+    origin?: BidOrigin; status?: BidPackage["status"]; materialsBasis?: MaterialsBasis;
+    requirements?: BidReqKey[]; targetBudget?: number; sourceDoc?: ScopeDoc;
+  }): string {
     const id = newId("pkg");
     if (!this.canManageBids || !p.title.trim()) return id;
     this.mutate((db) => {
@@ -881,10 +886,25 @@ class Store {
         id, title: p.title.trim(), tradeId: p.tradeId, roomIds: p.roomIds,
         scopeDetails: p.scopeDetails, scopeItems: p.scopeItems?.filter((s) => s.trim()),
         origin: p.origin, status: p.status ?? "draft",
+        materialsBasis: p.materialsBasis, requirements: p.requirements ?? BID_REQ_DEFAULT,
+        targetBudget: p.targetBudget, sourceDoc: p.sourceDoc,
         createdAt: new Date().toISOString(), bids: [],
       });
     });
     return id;
+  }
+  /** Invite several vendor contacts onto a package at once (template send-out). */
+  addBidsForContacts(packageId: string, contactIds: string[]) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      if (!p) return;
+      for (const cid of contactIds) {
+        const c = db.contacts.find((x) => x.id === cid);
+        if (!c || p.bids.some((b) => b.contactId === cid)) continue;
+        p.bids.push({ id: newId("bid"), vendorName: c.company, contactId: cid, at: new Date().toISOString(), status: "requested" });
+      }
+    });
   }
   /** Draft → out to vendors. */
   issueBidPackage(id: string) {

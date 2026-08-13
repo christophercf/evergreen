@@ -27,6 +27,15 @@ export async function storeFile(file: File): Promise<{ fileUrl: string; fileName
   return { fileUrl: await fileToDataURL(file), fileName: file.name };
 }
 
+/** Split a file into the base64 payload the Anthropic API expects. Images are
+ *  downscaled first; PDFs pass through untouched. */
+export async function fileToBase64Payload(file: File): Promise<{ data: string; mediaType: string }> {
+  const url = await fileToDataURL(file);
+  const m = url.match(/^data:([^;]+);base64,(.*)$/);
+  if (!m) return { data: "", mediaType: file.type || "application/octet-stream" };
+  return { mediaType: m[1], data: m[2] };
+}
+
 export async function fileToDataURL(file: File, maxDim = 1500, quality = 0.72): Promise<string> {
   if (!file.type.startsWith("image/")) return rawDataURL(file);
   const raw = await rawDataURL(file);

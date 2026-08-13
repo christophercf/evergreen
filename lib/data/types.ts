@@ -463,6 +463,44 @@ export const BID_ORIGIN_LABEL: Record<BidOrigin, string> = {
   vendor_import: "Import a trade's own template",
 };
 
+// ---- Bid guard rails --------------------------------------------------------
+// The minimum a vendor must answer for a bid to be genuinely comparable. These
+// print on the bid-request PDF / email as required fields, and each bid tracks
+// which ones came back — so "cheapest" is never judged on price alone.
+export const BID_REQ_KEYS = ["lineItemPricing", "materialsIncluded", "ownerSupplied", "exclusions", "leadTime", "permits", "warranty"] as const;
+export type BidReqKey = (typeof BID_REQ_KEYS)[number];
+
+export const BID_REQ_LABEL: Record<BidReqKey, string> = {
+  lineItemPricing: "Price per scope line",
+  materialsIncluded: "Materials included in price?",
+  ownerSupplied: "Materials the owner must supply",
+  exclusions: "Exclusions",
+  leadTime: "Lead time / availability",
+  permits: "Permits — included or at cost",
+  warranty: "Warranty",
+};
+export const BID_REQ_HINT: Record<BidReqKey, string> = {
+  lineItemPricing: "A number against each scope line, not one lump sum — the only way to see where bids really differ.",
+  materialsIncluded: "Labor-only quotes look cheapest and aren't. Force the answer.",
+  ownerSupplied: "Anything you have to buy — fixtures, appliances, tile. Catches budget that lands back on the owner.",
+  exclusions: "What the price does NOT cover. Where change orders come from.",
+  leadTime: "When they can start and how long they need — feeds the Gantt.",
+  permits: "Permits billed 'additional at cost' is a classic surprise line.",
+  warranty: "How long they stand behind the work.",
+};
+/** Sensible default: everything except warranty is required. */
+export const BID_REQ_DEFAULT: BidReqKey[] = ["lineItemPricing", "materialsIncluded", "ownerSupplied", "exclusions", "leadTime", "permits"];
+
+export type MaterialsBasis = "vendor_supplies" | "owner_supplies" | "mixed";
+export const MATERIALS_BASIS_LABEL: Record<MaterialsBasis, string> = {
+  vendor_supplies: "Vendor supplies all materials",
+  owner_supplies: "Owner supplies materials (labor only)",
+  mixed: "Mixed — see scope lines",
+};
+
+/** A stored original document (scanned quote, emailed PDF, photo of paper). */
+export interface ScopeDoc { name: string; url: string; scannedAt?: string }
+
 /** AI read on whether a bid actually covers the package scope. */
 export interface BidComparison {
   comparable: boolean;          // apples-to-apples with the package scope?
@@ -486,6 +524,32 @@ export interface VendorBid {
   at: string;
   status: "requested" | "received" | "declined" | "awarded";
   comparison?: BidComparison;
+  /** Answers to the package's required questions. */
+  responses?: Partial<Record<BidReqKey, string>>;
+  /** The vendor's original quote (scanned PDF or phone photo), viewable as filed. */
+  sourceDoc?: ScopeDoc;
+}
+
+/** How many of the package's required questions this bid actually answered. */
+export function bidCompleteness(pkg: BidPackage, bid: VendorBid): { answered: number; total: number; missing: BidReqKey[] } {
+  const req = pkg.requirements ?? BID_REQ_DEFAULT;
+  const missing = req.filter((k) => !(bid.responses?.[k] ?? "").trim());
+  return { answered: req.length - missing.length, total: req.length, missing };
+}
+
+/** Can this package go out to vendors yet? Blocking issues vs. soft warnings. */
+export function packageReadiness(p: BidPackage): { ready: boolean; blocking: string[]; warnings: string[] } {
+  const items = p.scopeItems ?? [];
+  const blocking: string[] = [];
+  const warnings: string[] = [];
+  if (!p.title.trim()) blocking.push("Give the package a title");
+  if (!p.tradeId) blocking.push("Pick a trade");
+  if (items.length < 2) blocking.push("Add at least 2 scope line items — vendors can't price a one-liner");
+  if (!p.materialsBasis) blocking.push("State who supplies materials");
+  if (!p.roomIds.length) warnings.push("No rooms selected — vendors won't know where the work is");
+  if (items.length < 4) warnings.push("Only a few scope lines — thin scopes invite change orders");
+  if (!(p.requirements ?? BID_REQ_DEFAULT).length) warnings.push("No required questions — bids may not be comparable");
+  return { ready: blocking.length === 0, blocking, warnings };
 }
 
 export interface BidPackage {
@@ -499,6 +563,14 @@ export interface BidPackage {
   /** Harmonized scope line items every bid is priced against. */
   scopeItems?: string[];
   origin?: BidOrigin;
+  /** Who buys the materials — the single biggest source of non-comparable bids. */
+  materialsBasis?: MaterialsBasis;
+  /** Questions every vendor must answer (defaults to BID_REQ_DEFAULT). */
+  requirements?: BidReqKey[];
+  /** Optional ROM target so the builder can see bids against expectation. */
+  targetBudget?: number;
+  /** Original document an imported scope was scanned from. */
+  sourceDoc?: ScopeDoc;
   /** draft = still being built; collecting = out to vendors; awarded = decided. */
   status: "draft" | "collecting" | "awarded";
   createdAt: string;
