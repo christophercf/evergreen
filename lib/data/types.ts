@@ -453,17 +453,39 @@ export function materialLockedCost(m: Material): number | undefined {
 // ---- Scope Support (pre-budget bidding) -------------------------------------
 // A bid package: one scope of work sent to multiple vendors for competing bids.
 // The winning bid is promoted into a Project Budget (ROM) line item.
+/** How a bid package's scope was authored. All three paths harmonize into the
+ *  same `scopeItems` list so competing bids stay line-for-line comparable. */
+export type BidOrigin = "trade_template" | "builder_scope" | "vendor_import";
+
+export const BID_ORIGIN_LABEL: Record<BidOrigin, string> = {
+  trade_template: "Send trade default template",
+  builder_scope: "Builder writes scope for trade to complete",
+  vendor_import: "Import a trade's own template",
+};
+
+/** AI read on whether a bid actually covers the package scope. */
+export interface BidComparison {
+  comparable: boolean;          // apples-to-apples with the package scope?
+  missing: string[];            // package items this bid appears not to cover
+  extra: string[];              // work this bid adds beyond the package
+  note?: string;
+  at: string;
+}
+
 export interface VendorBid {
   id: string;
   vendorName: string;
   contactId?: string;              // link to a vendor ContactSheet
   amount?: number;                 // overall price (pre-markup / sub cost)
   scopeText?: string;              // vendor-submitted scope (vendor-led / RFP return)
+  /** The vendor's scope broken into comparable line items. */
+  scopeItems?: string[];
   notes?: string;
   receivedVia?: "email" | "text" | "phone" | "form" | "pdf";
   attachments?: { name: string; url: string }[];  // photos / emailed docs
   at: string;
   status: "requested" | "received" | "declined" | "awarded";
+  comparison?: BidComparison;
 }
 
 export interface BidPackage {
@@ -474,12 +496,59 @@ export interface BidPackage {
   /** The scope-of-work text: builder-led, pulled from the scope matrix, or a
    *  brief for RFPs the vendor fills out. */
   scopeDetails: string;
-  status: "collecting" | "awarded";
+  /** Harmonized scope line items every bid is priced against. */
+  scopeItems?: string[];
+  origin?: BidOrigin;
+  /** draft = still being built; collecting = out to vendors; awarded = decided. */
+  status: "draft" | "collecting" | "awarded";
   createdAt: string;
   bids: VendorBid[];
   awardedBidId?: string;
   /** The Project Budget line the winning bid was promoted into. */
   lineId?: string;
+}
+
+// ---- Trade performance ratings ----------------------------------------------
+// Each builder rates each trade; the averages surface next to their bids so the
+// cheapest number isn't the only thing on screen.
+export const RATING_KEYS = ["speed", "clean", "budget", "mistakeFree"] as const;
+export type RatingKey = (typeof RATING_KEYS)[number];
+export const RATING_LABEL: Record<RatingKey, string> = {
+  speed: "Speed",
+  clean: "Clean",
+  budget: "Within budget",
+  mistakeFree: "Mistake-free",
+};
+export const RATING_HINT: Record<RatingKey, string> = {
+  speed: "Keeps pace and hits dates — 5 = always on schedule",
+  clean: "Leaves the site tidy — 5 = spotless daily",
+  budget: "Holds their number — 5 = no surprise extras",
+  mistakeFree: "Quality of work — 5 = no callbacks or rework",
+};
+
+export interface TradeRating {
+  tradeId: string;
+  raterId: string;      // the builder/admin who rated
+  raterName: string;
+  speed?: number;       // 1–5
+  clean?: number;
+  budget?: number;
+  mistakeFree?: number;
+  note?: string;
+  at: string;
+}
+
+/** Average score per category across everyone who rated this trade. */
+export function tradeRatingAvg(ratings: TradeRating[], tradeId: string): { overall: number | null; by: Partial<Record<RatingKey, number>>; raters: number } {
+  const mine = ratings.filter((r) => r.tradeId === tradeId);
+  if (!mine.length) return { overall: null, by: {}, raters: 0 };
+  const by: Partial<Record<RatingKey, number>> = {};
+  const all: number[] = [];
+  for (const k of RATING_KEYS) {
+    const vals = mine.map((r) => r[k]).filter((v): v is number => typeof v === "number" && v > 0);
+    if (vals.length) { by[k] = vals.reduce((a, b) => a + b, 0) / vals.length; all.push(...vals); }
+  }
+  return { overall: all.length ? all.reduce((a, b) => a + b, 0) / all.length : null, by, raters: mine.length };
 }
 
 // ---- Site updates (message board) ------------------------------------------
@@ -713,6 +782,7 @@ export interface DB {
   artifacts: Artifact[];
   updates: SiteUpdate[];
   bidPackages: BidPackage[];
+  tradeRatings: TradeRating[];
 }
 
 // ---- Session ----------------------------------------------------------------

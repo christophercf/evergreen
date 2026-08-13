@@ -10,6 +10,7 @@ import {
 import { MACRO_ORDER, tradeName } from "@/lib/data/money";
 import { sendInviteEmail, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
+import { TradeRatingEditor } from "../ui/rating";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
@@ -684,6 +685,7 @@ function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, ca
           <div style={{ fontSize: 11, color: "var(--muted)" }}>Flows onto this vendor’s contract, invoices &amp; draw remittance.</div>
         </div>
       )}
+      {party === "vendor" && trade && <TradeRatingEditor tradeId={trade.id} disabled={!canEdit} />}
       {party === "vendor" && canEdit && trade && (
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
           <label style={{ fontSize: 11.5, color: "var(--muted)", display: "inline-flex", gap: 5, alignItems: "center" }}>

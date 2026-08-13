@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidPackage, ScheduleStatus, ScopeStatus, Session, Trade, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, ScheduleStatus, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { buildDB } from "./seed";
 import { lineTotal, lineCurrent, phaseAmount } from "./money";
@@ -873,13 +873,27 @@ class Store {
   private get canManageBids(): boolean {
     return ["full_admin", "builder"].includes(this.session.role);
   }
-  addBidPackage(p: { title: string; tradeId: string; roomIds: string[]; scopeDetails: string }): string {
+  addBidPackage(p: { title: string; tradeId: string; roomIds: string[]; scopeDetails: string; scopeItems?: string[]; origin?: BidOrigin; status?: BidPackage["status"] }): string {
     const id = newId("pkg");
     if (!this.canManageBids || !p.title.trim()) return id;
     this.mutate((db) => {
-      db.bidPackages.unshift({ id, title: p.title.trim(), tradeId: p.tradeId, roomIds: p.roomIds, scopeDetails: p.scopeDetails, status: "collecting", createdAt: new Date().toISOString(), bids: [] });
+      db.bidPackages.unshift({
+        id, title: p.title.trim(), tradeId: p.tradeId, roomIds: p.roomIds,
+        scopeDetails: p.scopeDetails, scopeItems: p.scopeItems?.filter((s) => s.trim()),
+        origin: p.origin, status: p.status ?? "draft",
+        createdAt: new Date().toISOString(), bids: [],
+      });
     });
     return id;
+  }
+  /** Draft → out to vendors. */
+  issueBidPackage(id: string) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => { const p = db.bidPackages.find((x) => x.id === id); if (p && p.status === "draft") p.status = "collecting"; });
+  }
+  setBidScopeItems(id: string, scopeItems: string[]) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => { const p = db.bidPackages.find((x) => x.id === id); if (p) p.scopeItems = scopeItems.filter((s) => s.trim()); });
   }
   updateBidPackage(id: string, patch: Partial<BidPackage>) {
     if (!this.canManageBids) return;
@@ -961,6 +975,20 @@ class Store {
       this.notify(db, { toRole: "owner", kind: "info", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
     });
     return outLineId;
+  }
+
+  /** Builder's star rating for a trade (one row per rater per trade). */
+  setTradeRating(tradeId: string, patch: Partial<Pick<TradeRating, "speed" | "clean" | "budget" | "mistakeFree" | "note">>) {
+    if (!["full_admin", "builder", "owner"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      db.tradeRatings = db.tradeRatings ?? [];
+      let r = db.tradeRatings.find((x) => x.tradeId === tradeId && x.raterId === this.session.userId);
+      if (!r) {
+        r = { tradeId, raterId: this.session.userId, raterName: this.session.displayName, at: new Date().toISOString() };
+        db.tradeRatings.push(r);
+      }
+      Object.assign(r, patch, { at: new Date().toISOString(), raterName: this.session.displayName });
+    });
   }
 
   // ---- Site updates (message board) ----

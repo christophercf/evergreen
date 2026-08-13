@@ -673,6 +673,7 @@ export function buildDB(): DB {
     artifacts,
     updates: [],
     bidPackages: [],
+    tradeRatings: [],
   };
 }
 
