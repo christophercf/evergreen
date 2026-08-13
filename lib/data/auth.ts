@@ -79,6 +79,33 @@ export async function authSendReset(email: string): Promise<Res> {
   return { ok: true };
 }
 
+/** Passwordless sign-in: email a one-time code (and/or magic link). The best
+ *  path for trades — nothing to remember, and it also confirms an invited
+ *  account that never finished setting up. `shouldCreateUser: false` keeps the
+ *  project invite-only. */
+export async function authSendCode(email: string): Promise<Res> {
+  const s = c();
+  if (!s) return { ok: false, error: "Auth not configured." };
+  const { error } = await s.auth.signInWithOtp({
+    email: email.trim(),
+    options: { shouldCreateUser: false, emailRedirectTo: typeof window !== "undefined" ? window.location.origin : undefined },
+  });
+  if (error) return { ok: false, error: mailError(error.message) };
+  return { ok: true };
+}
+
+/** Verify the emailed code and sign in. */
+export async function authVerifyCode(email: string, code: string): Promise<Res> {
+  const s = c();
+  if (!s) return { ok: false, error: "Auth not configured." };
+  const { data, error } = await s.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "email" });
+  if (error) {
+    if (/expired|invalid/i.test(error.message)) return { ok: false, error: "That code didn't work — it may have expired. Send a new one." };
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, email: data.user?.email ?? undefined };
+}
+
 /** What state is this email in? Drives the email-first login flow. */
 export type AccountState = "not_invited" | "needs_setup" | "active";
 export async function checkAccount(email: string): Promise<{ state: AccountState; name?: string; authExists?: boolean; lastSignInAt?: string | null; degraded?: boolean }> {

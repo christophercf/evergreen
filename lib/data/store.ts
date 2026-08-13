@@ -182,6 +182,7 @@ class Store {
   login(email: string): { ok: boolean; error?: string } {
     const u = this.db.users.find((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase());
     if (!u) return { ok: false, error: "No account with that email. Ask an admin to invite you, or request access." };
+    if (u.disabled) return { ok: false, error: "This account's access has been suspended. Ask the project admin to restore it." };
     if (u.status === "invited") return { ok: false, error: "You have a pending invite — use your invite link to finish setting up." };
     this.enter(u);
     return { ok: true };
@@ -218,6 +219,8 @@ class Store {
   bindAuthEmail(email: string): boolean {
     const u = this.db.users.find((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase());
     if (!u) { this.session = { ...this.session, authed: false }; this.authNoAccess = email; this.emit(); return false; }
+    // Suspended accounts keep their history but can't get in.
+    if (u.disabled) { this.session = { ...this.session, authed: false }; this.authNoAccess = email; this.emit(); return false; }
     if (u.status === "invited") this.mutate((db) => { const x = db.users.find((y) => y.id === u.id); if (x) { x.status = "active"; x.inviteToken = undefined; } });
     const fresh = this.db.users.find((x) => x.id === u.id)!;
     this.session = { role: fresh.role, userId: fresh.id, displayName: fresh.name, authed: true };
@@ -430,6 +433,12 @@ class Store {
   /** Only a Full Admin may change access rights (roles, module permissions, managedBy). */
   private get canManageAccess(): boolean {
     return this.session.role === "full_admin";
+  }
+  /** Suspend / restore someone's access without deleting them or their history. */
+  setUserDisabled(userId: string, disabled: boolean) {
+    if (!this.canManageAccess) return;
+    if (userId === this.session.userId) return; // never lock yourself out
+    this.mutate((db) => { const u = db.users.find((x) => x.id === userId); if (u) u.disabled = disabled || undefined; });
   }
   setUserAccess(userId: string, mod: ModuleKey, level: AccessLevel) {
     if (!this.canManageAccess) return;

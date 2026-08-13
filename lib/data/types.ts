@@ -66,6 +66,9 @@ export interface User {
   signature?: string;
   /** Personal preference: opt OUT of email pushes (Messenger etc.). Default = emails on. */
   emailOptOut?: boolean;
+  /** Access suspended: they keep their history and messages, but can't sign in.
+   *  Reversible — unlike removing the user, which deletes the account. */
+  disabled?: boolean;
 }
 
 // ---- Trades & rooms ---------------------------------------------------------

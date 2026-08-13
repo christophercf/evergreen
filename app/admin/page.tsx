@@ -488,8 +488,28 @@ function AccessRow({ u, ro, expanded, onToggle, company, onRemove, health }: { u
 
 // At-a-glance: can this person actually log in? Plus the one-click fix.
 function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: boolean }) {
+  const store = useStore();
   const [sent, setSent] = useState<"idle" | "busy" | "ok" | "err">("idle");
   const [msg, setMsg] = useState("");
+  const isAdmin = store.session.role === "full_admin";
+  const isSelf = u.id === store.session.userId;
+
+  const suspendBtn = !ro && isAdmin && !isSelf ? (
+    <button className="btn btn-sm" title={u.disabled ? "Restore this person's access" : "Suspend access — keeps their history and messages, blocks sign-in"}
+      style={{ padding: "1px 6px", fontSize: 10.5, color: u.disabled ? "var(--ok)" : "var(--rust)" }}
+      onClick={() => store.setUserDisabled(u.id, !u.disabled)}>
+      {u.disabled ? "↺ Restore access" : "⏸ Suspend"}
+    </button>
+  ) : null;
+
+  if (u.disabled) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+        <span title="Access suspended — they can't sign in, but their history is intact." style={{ background: "var(--rust)", color: "#fff", borderRadius: 99, padding: "1px 8px", fontSize: 10.5, fontWeight: 700 }}>⏸ Suspended</span>
+        {suspendBtn}
+      </div>
+    );
+  }
   if (!health) return <span style={{ fontSize: 11, color: "var(--muted)" }}>—</span>;
 
   const send = async () => {
@@ -514,6 +534,7 @@ function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: b
           {sent === "busy" ? "…" : sent === "ok" ? "✓ sent" : "✉ Send set-up link"}
         </button>
       )}
+      {suspendBtn}
       {msg && <span style={{ fontSize: 10, color: sent === "err" ? "var(--rust)" : "var(--ok)", maxWidth: 150, lineHeight: 1.3 }}>{msg}</span>}
     </div>
   );

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import {
   authEnabled, authSignIn, authSignUp, authResendVerification, authSendReset, authSignOut,
-  authUrlError, checkAccount, loginErrorHelp, type AccountState,
+  authUrlError, checkAccount, loginErrorHelp, authSendCode, authVerifyCode, type AccountState,
 } from "@/lib/data/auth";
 import { LeafIcon } from "./icons";
 
@@ -15,7 +15,7 @@ import { LeafIcon } from "./icons";
 // neither "Log in" (no password yet) nor "Set up account" (already registered).
 // ---------------------------------------------------------------------------
 
-type Step = "email" | "password" | "setup" | "create" | "sent";
+type Step = "email" | "password" | "setup" | "create" | "sent" | "code";
 
 export function Landing() {
   const store = useStore();
@@ -29,9 +29,34 @@ export function Landing() {
   const [info, setInfo] = useState("");
   const [needVerify, setNeedVerify] = useState(false);
   const [who, setWho] = useState<string | undefined>();
+  const [code, setCode] = useState("");
 
   const reset = () => { setErr(""); setInfo(""); setNeedVerify(false); };
-  const backToEmail = () => { reset(); setPassword(""); setConfirm(""); setStep("email"); };
+  const backToEmail = () => { reset(); setPassword(""); setConfirm(""); setCode(""); setStep("email"); };
+
+  // Passwordless: email a one-time code, then verify it. Nothing to remember,
+  // and it activates an invited account that never finished setting up.
+  const sendCode = async () => {
+    reset(); setBusy(true);
+    try {
+      const r = await authSendCode(email);
+      if (!r.ok) { setErr(r.error ?? "Couldn't send the code."); return; }
+      setInfo("Sent. Check your email for a 6-digit code — or just click the link in it.");
+      setCode(""); setStep("code");
+    } finally { setBusy(false); }
+  };
+  const submitCode = async () => {
+    reset();
+    const clean = code.replace(/\D/g, "");
+    if (clean.length < 6) { setErr("Enter the 6-digit code from your email."); return; }
+    setBusy(true);
+    try {
+      const r = await authVerifyCode(email, clean);
+      if (!r.ok) { setErr(r.error ?? "That code didn't work."); return; }
+      const bound = store.bindAuthEmail(r.email ?? email);
+      if (!bound) { await authSignOut(); setErr("Signed in, but this email isn't on the project. Ask the admin to invite you."); }
+    } finally { setBusy(false); }
+  };
 
   // Password-recovery: user arrived from a reset / set-up link.
   const submitReset = async () => {
@@ -212,21 +237,39 @@ export function Landing() {
                 {info && <Msg tone="ok">{info}</Msg>}
                 {needVerify && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={async () => { const r = await authResendVerification(email); setInfo(r.ok ? "Verification email re-sent." : ""); setErr(r.ok ? "" : r.error ?? ""); setNeedVerify(false); }}>Resend verification email</button>}
                 <button className="btn btn-primary" disabled={busy || !password} style={btn} onClick={submitPassword}>{busy ? "…" : "Log in →"}</button>
-                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a set-up link</button>
+                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a 6-digit code instead</button>
+                <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a reset link</button>
               </>
             ) : step === "setup" ? (
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Finish setting up</div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>
-                  You&apos;re on the project{who ? ` as ${who}` : ""}, but this account doesn&apos;t have a password yet. We&apos;ll email you a link to set one — that&apos;s all it takes.
+                  You&apos;re on the project{who ? ` as ${who}` : ""}, but this account doesn&apos;t have a password yet. Easiest way in: we email you a 6-digit code — no password to create or remember.
                 </p>
                 {emailRow}
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
-                <button className="btn btn-primary" disabled={busy} style={btn} onClick={sendSetupLink}>{busy ? "Sending…" : "Email me a set-up link →"}</button>
+                <button className="btn btn-primary" disabled={busy} style={btn} onClick={sendCode}>{busy ? "Sending…" : "Email me a 6-digit code →"}</button>
+                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendSetupLink}>I&apos;d rather set a password</button>
                 <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.45 }}>
                   Not arriving? Check spam, then ask your project admin — they can send you a direct link that bypasses email entirely.
                 </div>
+              </>
+            ) : step === "code" ? (
+              <>
+                <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Enter your code</div>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>We emailed a 6-digit code. Type it below — or just click the link in that email and you&apos;re in.</p>
+                {emailRow}
+                <input inputMode="numeric" autoComplete="one-time-code" autoFocus value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(e) => e.key === "Enter" && submitCode()}
+                  placeholder="123456"
+                  style={{ width: "100%", fontSize: 26, letterSpacing: ".35em", textAlign: "center", padding: "10px 12px", fontFamily: "var(--font-serif)" }} />
+                {err && <Msg tone="err">{err}</Msg>}
+                {info && <Msg tone="ok">{info}</Msg>}
+                <button className="btn btn-primary" disabled={busy || code.length < 6} style={btn} onClick={submitCode}>{busy ? "…" : "Log in →"}</button>
+                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Send a new code</button>
+                <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} onClick={backToEmail}>← Back</button>
               </>
             ) : step === "create" ? (
               <>
