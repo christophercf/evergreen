@@ -97,9 +97,16 @@ class Store {
     const next = clone(this.db);
     fn(next);
     this.db = next;
-    void this.backend?.persistDB(next);
+    this.lastWrite = this.backend?.persistDB(next) ?? Promise.resolve();
+    void this.lastWrite;
     this.emit();
   }
+
+  private lastWrite: Promise<unknown> = Promise.resolve();
+  /** Wait for the most recent write to reach the backend. Needed before a
+   *  server route reads the project — e.g. inviting someone, where /api/invite
+   *  checks they're on the project before it will email them. */
+  async flush(): Promise<void> { try { await this.lastWrite; } catch { /* the store surfaces write errors itself */ } }
 
   // ---- Global undo (all tabs) ----
   get canUndo(): boolean {

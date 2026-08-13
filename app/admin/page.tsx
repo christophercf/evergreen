@@ -8,7 +8,7 @@ import {
   type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User,
 } from "@/lib/data/types";
 import { MACRO_ORDER, tradeName } from "@/lib/data/money";
-import { sendInviteEmail, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
+import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { TradeRatingEditor } from "../ui/rating";
 
@@ -16,6 +16,8 @@ const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
 const SCOPE_COLOR: Record<ScopeStatus, string> = { in: "var(--sc-in)", out: "var(--sc-out)", existing: "var(--sc-existing)", unset: "transparent" };
 const cellText = (s: ScopeStatus) => (s === "unset" ? "·" : s === "in" ? "IN" : s === "existing" ? "EX" : "OUT");
 const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Basement", "Exterior"];
+// Who can hand out access. Mirrors the check the /api/invite route enforces.
+const CAN_INVITE: Role[] = ["full_admin", "builder", "owner"];
 
 type Tab = "matrix" | "trade" | "team";
 
@@ -479,7 +481,7 @@ function AccessRow({ u, ro, expanded, onToggle, company, onRemove, health }: { u
       {expanded && (
         <tr>
           <td colSpan={MODULES.length + 5} style={{ padding: 0, borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
-            <UserDetail u={u} ro={ro} seeContacts={seeContacts} canManageAccess={canManageAccess} />
+            <UserDetail u={u} ro={ro} seeContacts={seeContacts} canManageAccess={canManageAccess} health={health} />
           </td>
         </tr>
       )}
@@ -490,10 +492,10 @@ function AccessRow({ u, ro, expanded, onToggle, company, onRemove, health }: { u
 // At-a-glance: can this person actually log in? Plus the one-click fix.
 function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: boolean }) {
   const store = useStore();
-  const [sent, setSent] = useState<"idle" | "busy" | "ok" | "err">("idle");
-  const [msg, setMsg] = useState("");
   const isAdmin = store.session.role === "full_admin";
   const isSelf = u.id === store.session.userId;
+  const canInvite = !ro && CAN_INVITE.includes(store.session.role);
+  const [helping, setHelping] = useState(false);
 
   const suspendBtn = !ro && isAdmin && !isSelf ? (
     <button className="btn btn-sm" title={u.disabled ? "Restore this person's access" : "Suspend access — keeps their history and messages, blocks sign-in"}
@@ -513,13 +515,6 @@ function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: b
   }
   if (!health) return <span style={{ fontSize: 11, color: "var(--muted)" }}>—</span>;
 
-  const send = async () => {
-    setSent("busy"); setMsg("");
-    const r = await authSendReset(u.email);
-    if (r.ok) { setSent("ok"); setMsg("Set-up link emailed"); }
-    else { setSent("err"); setMsg(r.error ?? "Send failed"); }
-  };
-
   const fmtLast = (s: string | null) => s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
   const cfg = health.state === "active"
     ? { bg: "var(--ok)", color: "#fff", label: `✓ Active${health.lastSignInAt ? ` · ${fmtLast(health.lastSignInAt)}` : ""}`, hint: `Last sign-in ${health.lastSignInAt ? new Date(health.lastSignInAt).toLocaleString() : "unknown"}` }
@@ -530,18 +525,17 @@ function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: b
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
       <span title={cfg.hint} style={{ background: cfg.bg, color: cfg.color, borderRadius: 99, padding: "1px 8px", fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap" }}>{cfg.label}</span>
-      {!ro && health.state !== "active" && (
-        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={sent === "busy"} onClick={send}>
-          {sent === "busy" ? "…" : sent === "ok" ? "✓ sent" : "✉ Send set-up link"}
-        </button>
-      )}
+      {/* Someone who's active can still be locked out — new phone, forgotten
+          password. Keep the row quiet, but always one click from the fix. */}
+      {canInvite && (health.state !== "active" || helping
+        ? <AccessActions email={u.email} state={health.state} compact />
+        : <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5, color: "var(--muted)" }} onClick={() => setHelping(true)} title="Re-send their sign-in link or copy a direct one">Can’t log in?</button>)}
       {suspendBtn}
-      {msg && <span style={{ fontSize: 10, color: sent === "err" ? "var(--rust)" : "var(--ok)", maxWidth: 150, lineHeight: 1.3 }}>{msg}</span>}
     </div>
   );
 }
 
-function UserDetail({ u, ro, seeContacts, canManageAccess }: { u: User; ro: boolean; seeContacts: boolean; canManageAccess: boolean }) {
+function UserDetail({ u, ro, seeContacts, canManageAccess, health }: { u: User; ro: boolean; seeContacts: boolean; canManageAccess: boolean; health?: AccountHealth }) {
   const store = useStore();
   const pending = u.status && u.status !== "active";
   return (
@@ -553,8 +547,17 @@ function UserDetail({ u, ro, seeContacts, canManageAccess }: { u: User; ro: bool
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 5, flexWrap: "wrap" }}>
             <Pill color="#fff" bg={u.status === "invited" ? "var(--brass)" : "var(--rust)"}>{u.status === "invited" ? "invited — not yet joined" : "pending approval"}</Pill>
             {canManageAccess && u.status === "pending" && <button className="btn btn-sm" onClick={() => store.approveUser(u.id)}>Approve</button>}
-            {!ro && u.status === "invited" && <RefreshInvite email={u.email} />}
-            {!ro && u.status === "invited" && u.inviteToken && <CopyInvite token={u.inviteToken} />}
+          </div>
+        </div>
+      )}
+
+      {/* Sign-in help — available for everyone, not just people who never
+          activated. "I can't log in" is the most common support request. */}
+      {!ro && CAN_INVITE.includes(store.session.role) && seeContacts && (
+        <div>
+          <Lbl>Sign-in help</Lbl>
+          <div style={{ marginTop: 5 }}>
+            <AccessActions email={u.email} state={health?.state} />
           </div>
         </div>
       )}
@@ -807,43 +810,60 @@ function RemoveDialog({ target, onClose }: { target: { id: string; name: string;
   );
 }
 
-function RefreshInvite({ email }: { email: string }) {
-  const [state, setState] = useState<"idle" | "busy">("idle");
-  const [msg, setMsg] = useState("");
-  const [review, setReview] = useState<string>("");
-  const run = async () => {
-    setState("busy"); setMsg(""); setReview("");
-    const r = await sendInviteEmail(email);
-    setState("idle");
-    // Account review (was the Supabase auth role set up?)
-    if (r.review) {
-      const v = r.review;
-      setReview(!v.userExists ? "🔍 No Supabase account yet — this invite creates one."
-        : v.confirmed ? `✅ Supabase account active${v.lastSignInAt ? ` · last sign-in ${new Date(v.lastSignInAt).toLocaleDateString()}` : " · not signed in yet"}`
-        : "⚠️ Supabase account created but email not confirmed — re-invite resent.");
-    }
-    // Email re-send result
-    if (!r.ok) setMsg(r.error ?? "Failed.");
-    else if (r.emailed) setMsg("✓ Invitation email re-sent.");
-    else if (r.link) { if (navigator.clipboard) navigator.clipboard.writeText(r.link); setMsg("✓ Fresh invite link copied (email re-send needs custom SMTP)."); }
-    else setMsg("✓ Done.");
-  };
-  return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-      <button className="btn btn-sm" disabled={state === "busy"} onClick={run} title="Re-push the invitation: review the Supabase account & re-send the email">{state === "busy" ? "…" : "↻ Re-push invite"}</button>
-      {review && <span style={{ fontSize: 11, color: review.startsWith("✅") ? "var(--sage-2)" : review.startsWith("⚠️") ? "var(--rust)" : "var(--muted)" }}>{review}</span>}
-      {msg && <span style={{ fontSize: 11, color: msg.startsWith("✓") ? "var(--sage-2)" : "var(--rust)" }}>{msg}</span>}
-    </span>
-  );
-}
-
-function CopyInvite({ token }: { token: string }) {
+// Everything needed to get one person back into the app, in one place.
+// Which email we send depends on whether they have an account yet — you can't
+// re-invite an address that already exists, so those get a set-a-password link.
+// The copy-link path works either way, and is the answer when email itself is
+// the problem (throttled sender, spam filter, wrong inbox).
+function AccessActions({ email, state, compact }: { email: string; state?: AccountHealth["state"]; compact?: boolean }) {
+  const [busy, setBusy] = useState<"" | "mail" | "link">("");
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
-  const link = (typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token;
+  const fresh = state === "no_account";
+
+  const sendMail = async () => {
+    setBusy("mail"); setMsg(null); setLink("");
+    const r = fresh ? await sendInviteEmail(email) : await authSendReset(email);
+    setBusy("");
+    if (!r.ok) { setMsg({ ok: false, text: r.error ?? "Send failed." }); return; }
+    // The invite route hands back a link when it couldn't post the email itself.
+    if ("link" in r && r.link) { setLink(r.link); setMsg({ ok: true, text: "Email couldn’t go out — send them this link instead." }); return; }
+    setMsg({ ok: true, text: fresh ? "✓ Invite emailed." : "✓ Sign-in link emailed — good for 1 hour." });
+  };
+
+  const copy = (v: string) => { if (navigator.clipboard) void navigator.clipboard.writeText(v); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+
+  const makeLink = async () => {
+    setBusy("link"); setMsg(null); setLink("");
+    const r = await inviteLink(email);
+    setBusy("");
+    if (!r.ok || !r.link) { setMsg({ ok: false, text: r.error ?? "Couldn’t generate a link." }); return; }
+    setLink(r.link); copy(r.link);
+    setMsg({ ok: true, text: "Copied — text or WhatsApp it to them." });
+  };
+
   return (
-    <button className="btn btn-sm" onClick={() => { if (navigator.clipboard) navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); }} title={link}>
-      {copied ? "✓ Copied invite link" : "Copy invite link"}
-    </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start", maxWidth: compact ? 172 : 460 }}>
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={sendMail}
+          title={fresh ? "Email them an invitation to create their account" : "Email them a fresh link to set a password and get back in"}>
+          {busy === "mail" ? "…" : fresh ? "✉ Send invite" : "✉ Re-send sign-in link"}
+        </button>
+        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={makeLink}
+          title="Generate a link you can text or WhatsApp them — skips email entirely. One click signs them straight in.">
+          {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 Copy a direct link"}
+        </button>
+      </div>
+      {msg && <span style={{ fontSize: 10, lineHeight: 1.35, color: msg.ok ? "var(--sage-2)" : "var(--rust)" }}>{msg.text}</span>}
+      {link && (
+        <div style={{ display: "flex", gap: 4, alignItems: "center", width: "100%" }}>
+          <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} style={{ flex: 1, minWidth: 0, fontSize: 10, padding: "2px 4px" }} />
+          <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} onClick={() => copy(link)}>📋</button>
+        </div>
+      )}
+      {link && <span style={{ fontSize: 9.5, color: "var(--muted)", lineHeight: 1.3 }}>Single use, expires in 1 hour. Anyone with the link gets in as {email} — send it to them directly.</span>}
+    </div>
   );
 }
 
@@ -852,7 +872,7 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
 }) {
   const store = useStore();
   const db = store.db;
-  const [lastLink, setLastLink] = useState<string | null>(null);
+  const [invited, setInvited] = useState<string | null>(null);
   const [tradeId, setTradeId] = useState("");
   const [warn, setWarn] = useState("");
   const canInviteAny = viewerRole === "full_admin";
@@ -872,12 +892,15 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
   const doInvite = async () => {
     const u = assign(); if (!u) return;
     const targetEmail = u.email;
-    const token = store.inviteUser(u);
-    setLastLink((typeof window !== "undefined" ? window.location.origin : "") + "/?invite=" + token);
+    store.inviteUser(u);
     setName(""); setEmail(""); setTradeId("");
     setEmailMsg("Sending invite email…");
+    // The invite route only emails people already on the project, so the new
+    // user has to reach the database before we ask for the email.
+    await store.flush();
     const r = await sendInviteEmail(targetEmail);
-    setEmailMsg(r.ok ? `✓ Invite emailed to ${targetEmail}.` : `Email not sent (${r.error}). Share the link below instead.`);
+    setInvited(targetEmail);
+    setEmailMsg(r.ok ? `✓ Invite emailed to ${targetEmail}.` : `Email not sent (${r.error}).`);
   };
   const doAdd = () => { const u = assign(); if (!u) return; store.addUser({ ...u, status: "active" }); setName(""); setEmail(""); setTradeId(""); };
 
@@ -907,10 +930,10 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
       </div>
       {warn && <div style={{ fontSize: 12, color: "var(--rust)", marginTop: 8 }}>{warn}</div>}
       {emailMsg && <div style={{ fontSize: 12.5, color: emailMsg.startsWith("✓") ? "var(--sage-2)" : "var(--muted)", marginTop: 8 }}>{emailMsg}</div>}
-      {lastLink && (
-        <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--sage-tint)", borderRadius: 8, fontSize: 12 }}>
-          Invite created &amp; assigned. Share this link: <code style={{ fontSize: 11.5 }}>{lastLink}</code>
-          <button className="btn btn-sm" style={{ marginLeft: 8 }} onClick={() => navigator.clipboard?.writeText(lastLink)}>Copy</button>
+      {invited && (
+        <div style={{ marginTop: 10, padding: "8px 10px", background: "var(--sage-tint)", borderRadius: 8 }}>
+          <div style={{ fontSize: 12, marginBottom: 5 }}>Didn’t arrive? Send it again, or hand <strong>{invited}</strong> a direct link.</div>
+          <AccessActions email={invited} state="no_account" />
         </div>
       )}
     </div>

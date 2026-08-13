@@ -192,21 +192,30 @@ export async function authCurrentEmail(): Promise<string | null> {
 
 /** Send an invite email to the address (server route uses the service_role key). */
 export type InviteReview = { userExists: boolean; confirmed: boolean; lastSignInAt: string | null };
-export async function sendInviteEmail(email: string): Promise<{ ok: boolean; error?: string; emailed?: boolean; link?: string; review?: InviteReview }> {
+export type InviteResult = { ok: boolean; error?: string; emailed?: boolean; link?: string; linkType?: "invite" | "magiclink"; alreadyRegistered?: boolean; review?: InviteReview };
+
+async function callInvite(email: string, mode: "email" | "link"): Promise<InviteResult> {
   let token: string | null = null;
   const s = c();
   if (s) { const { data } = await s.auth.getSession(); token = data.session?.access_token ?? null; }
+  if (!token) return { ok: false, error: "Sign in with your real account to send invites (not available in demo mode)." };
   try {
     const res = await fetch("/api/invite", {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      body: JSON.stringify({ email, redirectTo: typeof window !== "undefined" ? window.location.origin : undefined }),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email, mode, redirectTo: typeof window !== "undefined" ? window.location.origin : undefined }),
     });
     return await res.json();
   } catch {
     return { ok: false, error: "Couldn’t reach the invite service." };
   }
 }
+
+export const sendInviteEmail = (email: string) => callInvite(email, "email");
+
+/** A one-click sign-in link to hand over by text/WhatsApp — bypasses email entirely.
+ *  Existing accounts get a magic link; brand-new ones get an invite link. */
+export const inviteLink = (email: string) => callInvite(email, "link");
 
 /** Delete a user's Supabase Auth account (server route, service_role). */
 export async function removeAuthUser(email: string): Promise<{ ok: boolean; error?: string; deleted?: boolean }> {
