@@ -8,7 +8,7 @@ import {
   type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User,
 } from "@/lib/data/types";
 import { MACRO_ORDER, tradeName } from "@/lib/data/money";
-import { sendInviteEmail, removeAuthUser } from "@/lib/data/auth";
+import { sendInviteEmail, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
@@ -355,6 +355,16 @@ function AccessMatrix({ ro, onRemove }: { ro: boolean; onRemove: (t: { id: strin
     (tradeName(db, firstTrade(a) ?? "").localeCompare(tradeName(db, firstTrade(b) ?? ""))) ||
     a.name.localeCompare(b.name));
 
+  // Real login state per person (has an account? ever signed in?) so an admin
+  // can see at a glance who's stuck instead of guessing.
+  const [health, setHealth] = useState<Record<string, AccountHealth>>({});
+  useEffect(() => {
+    let dead = false;
+    void accountHealth(db.users.map((u) => u.email).filter(Boolean)).then((h) => { if (!dead) setHealth(h); });
+    return () => { dead = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [db.users.length]);
+
   const company = (u: User) =>
     u.role === "trade" ? (firstTrade(u) ? tradeName(db, firstTrade(u)) : "Unassigned")
       : u.role === "owner" ? "Owner"
@@ -367,6 +377,7 @@ function AccessMatrix({ ro, onRemove }: { ro: boolean; onRemove: (t: { id: strin
         <thead>
           <tr>
             <th style={{ ...thLeft, zIndex: 6, minWidth: 230 }}>Person</th>
+            <th style={{ ...thCell, textAlign: "left", minWidth: 128 }}>Login status</th>
             <th style={{ ...thCell, textAlign: "left", minWidth: 110 }}>Role</th>
             <th style={{ ...thCell, textAlign: "left", minWidth: 130 }}>Company / Trade</th>
             {MODULES.map((m) => <th key={m.key} style={{ ...thCell, minWidth: 64 }}>{m.label}</th>)}
@@ -381,23 +392,23 @@ function AccessMatrix({ ro, onRemove }: { ro: boolean; onRemove: (t: { id: strin
               <Fragment key={u.id}>
                 {newGroup && (
                   <tr>
-                    <td colSpan={MODULES.length + 4} style={{ padding: "8px 12px 4px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--brass-2)", background: "var(--cream)", borderBottom: "1px solid var(--line)", position: "sticky", left: 0 }}>
+                    <td colSpan={MODULES.length + 5} style={{ padding: "8px 12px 4px", fontSize: 10.5, fontWeight: 700, letterSpacing: ".07em", textTransform: "uppercase", color: "var(--brass-2)", background: "var(--cream)", borderBottom: "1px solid var(--line)", position: "sticky", left: 0 }}>
                       {GROUP_LABELS[g]}
                     </td>
                   </tr>
                 )}
-                <AccessRow u={u} ro={ro} expanded={open.has(u.id)} onToggle={() => toggle(u.id)} company={company(u)} onRemove={onRemove} />
+                <AccessRow u={u} ro={ro} expanded={open.has(u.id)} onToggle={() => toggle(u.id)} company={company(u)} onRemove={onRemove} health={health[u.email?.trim().toLowerCase() ?? ""]} />
               </Fragment>
             );
           })}
-          {!users.length && <tr><td style={{ padding: 16, color: "var(--muted)", fontSize: 13 }} colSpan={MODULES.length + 4}>No people yet — invite someone below.</td></tr>}
+          {!users.length && <tr><td style={{ padding: 16, color: "var(--muted)", fontSize: 13 }} colSpan={MODULES.length + 5}>No people yet — invite someone below.</td></tr>}
         </tbody>
       </table>
     </PersistentScroll>
   );
 }
 
-function AccessRow({ u, ro, expanded, onToggle, company, onRemove }: { u: User; ro: boolean; expanded: boolean; onToggle: () => void; company: string; onRemove: (t: { id: string; name: string; email: string }) => void }) {
+function AccessRow({ u, ro, expanded, onToggle, company, onRemove, health }: { u: User; ro: boolean; expanded: boolean; onToggle: () => void; company: string; onRemove: (t: { id: string; name: string; email: string }) => void; health?: AccountHealth }) {
   const store = useStore();
   const viewerRole = store.session.role;
   const viewer = store.currentUser;
@@ -424,6 +435,7 @@ function AccessRow({ u, ro, expanded, onToggle, company, onRemove }: { u: User; 
             </div>
           </div>
         </td>
+        <td style={{ ...td, background: rowBg }}><LoginStatus u={u} health={health} ro={ro} /></td>
         <td style={{ ...td, background: rowBg }}>
           {canManageAccess ? (
             <select value={u.role} onChange={(e) => store.updateUser(u.id, { role: e.target.value as Role })} style={{ fontSize: 11.5 }}>
@@ -465,12 +477,45 @@ function AccessRow({ u, ro, expanded, onToggle, company, onRemove }: { u: User; 
       </tr>
       {expanded && (
         <tr>
-          <td colSpan={MODULES.length + 4} style={{ padding: 0, borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
+          <td colSpan={MODULES.length + 5} style={{ padding: 0, borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
             <UserDetail u={u} ro={ro} seeContacts={seeContacts} canManageAccess={canManageAccess} />
           </td>
         </tr>
       )}
     </>
+  );
+}
+
+// At-a-glance: can this person actually log in? Plus the one-click fix.
+function LoginStatus({ u, health, ro }: { u: User; health?: AccountHealth; ro: boolean }) {
+  const [sent, setSent] = useState<"idle" | "busy" | "ok" | "err">("idle");
+  const [msg, setMsg] = useState("");
+  if (!health) return <span style={{ fontSize: 11, color: "var(--muted)" }}>—</span>;
+
+  const send = async () => {
+    setSent("busy"); setMsg("");
+    const r = await authSendReset(u.email);
+    if (r.ok) { setSent("ok"); setMsg("Set-up link emailed"); }
+    else { setSent("err"); setMsg(r.error ?? "Send failed"); }
+  };
+
+  const fmtLast = (s: string | null) => s ? new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
+  const cfg = health.state === "active"
+    ? { bg: "var(--ok)", color: "#fff", label: `✓ Active${health.lastSignInAt ? ` · ${fmtLast(health.lastSignInAt)}` : ""}`, hint: `Last sign-in ${health.lastSignInAt ? new Date(health.lastSignInAt).toLocaleString() : "unknown"}` }
+    : health.state === "no_account"
+      ? { bg: "var(--sc-unset)", color: "#fff", label: "No account yet", hint: "No Supabase Auth account — they've never been emailed an invite, or never opened it." }
+      : { bg: "var(--brass)", color: "#fff", label: "Never finished", hint: "Account exists but has no password / has never signed in — they need a set-up link." };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
+      <span title={cfg.hint} style={{ background: cfg.bg, color: cfg.color, borderRadius: 99, padding: "1px 8px", fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap" }}>{cfg.label}</span>
+      {!ro && health.state !== "active" && (
+        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={sent === "busy"} onClick={send}>
+          {sent === "busy" ? "…" : sent === "ok" ? "✓ sent" : "✉ Send set-up link"}
+        </button>
+      )}
+      {msg && <span style={{ fontSize: 10, color: sent === "err" ? "var(--rust)" : "var(--ok)", maxWidth: 150, lineHeight: 1.3 }}>{msg}</span>}
+    </div>
   );
 }
 

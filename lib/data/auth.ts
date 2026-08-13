@@ -49,12 +49,80 @@ export async function authSignOut() {
   await c()?.auth.signOut();
 }
 
-export async function authResendVerification(email: string) {
-  await c()?.auth.resend({ type: "signup", email: email.trim() });
+/** Supabase's built-in mailer is rate-limited project-wide (~2/hour). Turn the
+ *  raw error into something a person can act on instead of silently failing. */
+function mailError(msg: string): string {
+  if (/rate limit|too many|only request this after/i.test(msg)) {
+    return "Email limit reached (the project can send a couple of auth emails an hour). Wait a few minutes and try again, or ask your project admin to send you a direct setup link.";
+  }
+  return msg;
 }
 
-export async function authSendReset(email: string) {
-  await c()?.auth.resetPasswordForEmail(email.trim(), { redirectTo: typeof window !== "undefined" ? window.location.origin : undefined });
+export async function authResendVerification(email: string): Promise<Res> {
+  const s = c();
+  if (!s) return { ok: false, error: "Auth not configured." };
+  const { error } = await s.auth.resend({ type: "signup", email: email.trim() });
+  if (error) return { ok: false, error: mailError(error.message) };
+  return { ok: true };
+}
+
+/** Sends the set-a-password email. Used for both "forgot password" and
+ *  "finish setting up" — for an invited-but-never-activated account this is
+ *  the only flow that actually works. */
+export async function authSendReset(email: string): Promise<Res> {
+  const s = c();
+  if (!s) return { ok: false, error: "Auth not configured." };
+  const { error } = await s.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: typeof window !== "undefined" ? window.location.origin : undefined,
+  });
+  if (error) return { ok: false, error: mailError(error.message) };
+  return { ok: true };
+}
+
+/** What state is this email in? Drives the email-first login flow. */
+export type AccountState = "not_invited" | "needs_setup" | "active";
+export async function checkAccount(email: string): Promise<{ state: AccountState; name?: string; authExists?: boolean; lastSignInAt?: string | null; degraded?: boolean }> {
+  try {
+    const res = await fetch("/api/account-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    const j = await res.json();
+    if (!j?.ok) return { state: "active", degraded: true };
+    return j;
+  } catch {
+    // If the check fails, fall back to the plain password screen.
+    return { state: "active", degraded: true };
+  }
+}
+
+/** Account health for the whole roster (Admin → Team). Signed-in callers only. */
+export type AccountHealth = { state: "no_account" | "needs_setup" | "active"; confirmed: boolean; lastSignInAt: string | null };
+export async function accountHealth(emails: string[]): Promise<Record<string, AccountHealth>> {
+  const s = c();
+  if (!s) return {};
+  const { data } = await s.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return {};
+  try {
+    const res = await fetch("/api/account-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ emails }),
+    });
+    const j = await res.json();
+    return j?.ok ? (j.accounts ?? {}) : {};
+  } catch { return {}; }
+}
+
+/** Friendlier wording for Supabase's terse sign-in errors. */
+export function loginErrorHelp(msg: string): string {
+  if (/invalid login credentials/i.test(msg)) {
+    return "That password doesn't match — or you may never have set one. Use “Email me a set-up link” below.";
+  }
+  if (/email not confirmed|confirm/i.test(msg)) return "Your email isn't verified yet — check your inbox for the verification link.";
+  return msg;
 }
 
 // Captured the moment this module loads — BEFORE the Supabase client initializes
