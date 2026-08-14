@@ -50,7 +50,7 @@ export default function CostsPage() {
     <>
       <PageHeader
         title="Project Budget"
-        subtitle="The builder roughs out the ROM here first; winning Scope Support bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order, so the owner always sees budget → current. All figures include builder markup."
+        subtitle="The builder roughs out the ROM here first; winning Bid Management bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order, so the owner always sees budget → current. All figures include builder markup."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {ro && <Pill color="var(--muted)">View only</Pill>}

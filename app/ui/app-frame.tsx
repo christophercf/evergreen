@@ -19,7 +19,7 @@ const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", Icon: HomeIcon },
   { href: "/updates", label: "Messenger", mod: "updates", Icon: ChatIcon },
   // Bidding comes BEFORE the budget: scopes → competing bids → award → Project Budget.
-  { href: "/bids", label: "Scope Support", mod: "bids", Icon: ClipboardIcon },
+  { href: "/bids", label: "Bid Management", mod: "bids", Icon: ClipboardIcon },
   { href: "/costs", label: "Project Budget", mod: "costs", Icon: CoinsIcon },
   { href: "/payments", label: "Payment & Draw Mgmt", mod: "payments", Icon: ReceiptIcon },
   { href: "/budget", label: "Owners Funding Mgmt", mod: "budget", Icon: WalletIcon },

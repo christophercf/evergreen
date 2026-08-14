@@ -14,6 +14,10 @@ const SHAPE = `{
   "vendor": "string (company name if visible, else empty)",
   "items": ["one scope line item per entry, imperative and specific, in the same style as the template"],
   "price": 0,
+  "materialsCost": 0,
+  "laborCost": 0,
+  "workingDays": 0,
+  "crewSize": 0,
   "materialsIncluded": "included | labor_only | partial | unclear",
   "ownerSupplied": ["materials the document says the owner/client must provide"],
   "exclusions": ["anything the document explicitly excludes"],
@@ -55,6 +59,10 @@ export async function POST(req: Request) {
     `Rules:\n` +
     `- Transcribe what the document actually says. Never invent scope that isn't there.\n` +
     `- "price" = the overall total as a number (no currency symbols or commas). Use 0 if no total is shown.\n` +
+    `- "materialsCost" / "laborCost" = those lines broken out, as numbers, ONLY if the document states them. ` +
+    `"workingDays" = days on site; "crewSize" = workers on site. Use 0 for anything not stated — never estimate, ` +
+    `never derive one from another. A missing number is more useful than a guessed one, because the builder is ` +
+    `told to go and ask.\n` +
     `- If the handwriting or scan is unclear, lower "confidence" and say what to check in "note".\n` +
     `- Keep every string short and plain — this is read on a phone.\n\n` +
     `Respond with ONLY a JSON object in exactly this shape (no prose, no markdown fences):\n${SHAPE}`;

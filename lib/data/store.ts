@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, MaterialsBasis, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, MaterialsBasis, PricingBasis, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
@@ -884,7 +884,7 @@ class Store {
   addBidPackage(p: {
     title: string; tradeId: string; roomIds: string[]; scopeDetails: string; scopeItems?: string[];
     origin?: BidOrigin; status?: BidPackage["status"]; materialsBasis?: MaterialsBasis;
-    requirements?: BidReqKey[]; targetBudget?: number; sourceDoc?: ScopeDoc;
+    requirements?: BidReqKey[]; targetBudget?: number; sourceDoc?: ScopeDoc; pricingBasis?: PricingBasis;
   }): string {
     const id = newId("pkg");
     if (!this.canManageBids || !p.title.trim()) return id;
@@ -894,6 +894,10 @@ class Store {
         scopeDetails: p.scopeDetails, scopeItems: p.scopeItems?.filter((s) => s.trim()),
         origin: p.origin, status: p.status ?? "draft",
         materialsBasis: p.materialsBasis, requirements: p.requirements ?? BID_REQ_DEFAULT,
+        // Default the basis rather than leaving it blank: the setup screen shows
+        // "Lump sum" pre-selected, and an unwritten default reads as "Not stated"
+        // in the comparison, which is worse than wrong — it's silently missing.
+        pricingBasis: p.pricingBasis ?? "lump",
         targetBudget: p.targetBudget, sourceDoc: p.sourceDoc,
         createdAt: new Date().toISOString(), bids: [],
       });
@@ -901,7 +905,7 @@ class Store {
     return id;
   }
   /** Invite several vendor contacts onto a package at once (template send-out). */
-  addBidsForContacts(packageId: string, contactIds: string[]) {
+  addBidsForContacts(packageId: string, contactIds: string[], route: BidRoute = "app") {
     if (!this.canManageBids) return;
     this.mutate((db) => {
       const p = db.bidPackages.find((x) => x.id === packageId);
@@ -909,8 +913,16 @@ class Store {
       for (const cid of contactIds) {
         const c = db.contacts.find((x) => x.id === cid);
         if (!c || p.bids.some((b) => b.contactId === cid)) continue;
-        p.bids.push({ id: newId("bid"), vendorName: c.company, contactId: cid, at: new Date().toISOString(), status: "requested" });
+        p.bids.push({ id: newId("bid"), vendorName: c.company, contactId: cid, route, at: new Date().toISOString(), status: "requested" });
       }
+    });
+  }
+  /** Shortlist is a working set on the way to an award — many, then one. */
+  toggleBidShortlist(packageId: string, bidId: string) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const b = db.bidPackages.find((x) => x.id === packageId)?.bids.find((x) => x.id === bidId);
+      if (b) b.shortlisted = !b.shortlisted;
     });
   }
   /** Draft → out to vendors. */

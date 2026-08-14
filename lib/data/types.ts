@@ -491,6 +491,65 @@ export const BID_REQ_HINT: Record<BidReqKey, string> = {
 /** Sensible default: everything except warranty is required. */
 export const BID_REQ_DEFAULT: BidReqKey[] = ["lineItemPricing", "materialsIncluded", "ownerSupplied", "exclusions", "leadTime", "permits"];
 
+// ---- How the package is priced, and how each bid gets back to us ------------
+// The basis is a package-level decision taken before the request goes out. A bid
+// that comes back on the other basis is flagged in the comparison, never
+// converted — a lump sum and a T&M cap are not the same promise.
+export type PricingBasis = "lump" | "tm";
+export const PRICING_BASIS_LABEL: Record<PricingBasis, string> = {
+  lump: "Lump sum",
+  tm: "Time & materials",
+};
+export const PRICING_BASIS_HINT: Record<PricingBasis, string> = {
+  lump: "One fixed price against this scope",
+  tm: "Crew rate plus materials, to a not-to-exceed",
+};
+
+/** Three ways a bid arrives; all three land on the same fields. */
+export type BidRoute = "app" | "gc" | "upload";
+export const BID_ROUTE_LABEL: Record<BidRoute, string> = {
+  app: "They fill it in",
+  gc: "We fill it in",
+  upload: "They upload",
+};
+export const BID_ROUTE_HINT: Record<BidRoute, string> = {
+  app: "Send them the form",
+  gc: "Priced over the phone",
+  upload: "Their own quote, scanned",
+};
+export const BID_ROUTE_SHORT: Record<BidRoute, string> = {
+  app: "Filled in the app",
+  gc: "Keyed by us",
+  upload: "Uploaded + read",
+};
+
+// ---- The five fields every bid must land on ---------------------------------
+// Completeness is always DERIVED from these values, never latched by a
+// "confirmed" flag — clear a field and the bid drops out of the comparison
+// again. That invariant is what keeps "cheapest" honest.
+export const INTAKE_KEYS = ["amount", "materialsCost", "laborCost", "workingDays", "crewSize"] as const;
+export type IntakeKey = (typeof INTAKE_KEYS)[number];
+export const INTAKE_LABEL: Record<IntakeKey, string> = {
+  amount: "Total cost",
+  materialsCost: "Materials line",
+  laborCost: "Labor line",
+  workingDays: "Working days",
+  crewSize: "Crew on site",
+};
+/** Materials is excluded: a labor-only bid legitimately has no materials line. */
+export const INTAKE_REQUIRED: IntakeKey[] = ["amount", "laborCost", "workingDays", "crewSize"];
+export type Confidence = "high" | "medium" | "none";
+
+/** Which required fields this bid is still missing. */
+export function bidIntakeMissing(b: VendorBid): IntakeKey[] {
+  return INTAKE_REQUIRED.filter((k) => typeof b[k] !== "number" || Number.isNaN(b[k] as number));
+}
+export const bidIntakeComplete = (b: VendorBid) => bidIntakeMissing(b).length === 0;
+/** Only meaningful once duration is known — the honest per-day comparison. */
+export function bidCostPerDay(b: VendorBid): number | null {
+  return b.amount && b.workingDays ? Math.round(b.amount / b.workingDays) : null;
+}
+
 export type MaterialsBasis = "vendor_supplies" | "owner_supplies" | "mixed";
 export const MATERIALS_BASIS_LABEL: Record<MaterialsBasis, string> = {
   vendor_supplies: "Vendor supplies all materials",
@@ -528,6 +587,26 @@ export interface VendorBid {
   responses?: Partial<Record<BidReqKey, string>>;
   /** The vendor's original quote (scanned PDF or phone photo), viewable as filed. */
   sourceDoc?: ScopeDoc;
+
+  // ---- Bid Management ----
+  /** How this vendor is submitting. */
+  route?: BidRoute;
+  /** On the upload route: who actually filed the document. Both are first-class
+   *  — a trade may upload its own, or email it to us and we upload on their behalf. */
+  uploadedBy?: "trade" | "gc";
+  /** The five comparable fields. `amount` above is the total cost. */
+  materialsCost?: number;
+  laborCost?: number;
+  workingDays?: number;
+  crewSize?: number;
+  /** Time & materials only. */
+  crewRate?: number;
+  notToExceed?: number;
+  /** What this bid was actually priced on — flagged when it differs from the package. */
+  pricingBasis?: PricingBasis;
+  /** Per-field confidence from the document read; absent means keyed by hand. */
+  confidence?: Partial<Record<IntakeKey, Confidence>>;
+  shortlisted?: boolean;
 }
 
 /** How many of the package's required questions this bid actually answered. */
@@ -546,6 +625,7 @@ export function packageReadiness(p: BidPackage): { ready: boolean; blocking: str
   if (!p.tradeId) blocking.push("Pick a trade");
   if (items.length < 2) blocking.push("Add at least 2 scope line items — vendors can't price a one-liner");
   if (!p.materialsBasis) blocking.push("State who supplies materials");
+  if (!p.pricingBasis) blocking.push("Set the pricing basis — lump sum or time & materials");
   if (!p.roomIds.length) warnings.push("No rooms selected — vendors won't know where the work is");
   if (items.length < 4) warnings.push("Only a few scope lines — thin scopes invite change orders");
   if (!(p.requirements ?? BID_REQ_DEFAULT).length) warnings.push("No required questions — bids may not be comparable");
@@ -569,6 +649,10 @@ export interface BidPackage {
   requirements?: BidReqKey[];
   /** Optional ROM target so the builder can see bids against expectation. */
   targetBudget?: number;
+  /** Set before the request goes out; every bid is expected on this basis. */
+  pricingBasis?: PricingBasis;
+  /** Why the winning bid won — the line the team can read in six months. */
+  awardReason?: string;
   /** Original document an imported scope was scanned from. */
   sourceDoc?: ScopeDoc;
   /** draft = still being built; collecting = out to vendors; awarded = decided. */

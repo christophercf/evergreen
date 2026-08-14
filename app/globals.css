@@ -176,3 +176,13 @@ table { border-collapse: collapse; width: 100%; }
   width: 100%; border: 1px solid var(--line); background: var(--paper);
   border-radius: 6px; padding: 4px 0; font-size: 11px; font-weight: 700; cursor: pointer;
 }
+
+/* Bid Management — a step rail beside the work on desktop; on a phone the rail
+   becomes a scrolling chip row and every two-up panel stacks. */
+.ever-bidshell { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 880px) {
+  .ever-bidshell { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .ever-bidnav { flex-direction: row !important; overflow-x: auto; gap: 4px !important; padding-bottom: 4px; }
+  .ever-bidnav > button { white-space: nowrap; flex: none; }
+  .ever-intake { grid-template-columns: minmax(0, 1fr) !important; }
+}
