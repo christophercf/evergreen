@@ -8,7 +8,7 @@ import { TradeRatingChip } from "../ui/rating";
 import {
   accessFor, BID_REQ_DEFAULT, BID_REQ_HINT, BID_REQ_KEYS, BID_REQ_LABEL, BID_ROUTE_HINT, BID_ROUTE_LABEL,
   MATERIALS_BASIS_LABEL, PRICING_BASIS_HINT, PRICING_BASIS_LABEL,
-  bidIntakeComplete, packageReadiness,
+  bidIntakeComplete, packageReadiness, vendorCovers, vendorTrades,
   type BidPackage, type BidReqKey, type BidRoute, type MaterialsBasis, type PricingBasis, type ScopeDoc,
 } from "@/lib/data/types";
 import { tradeName, MACRO_ORDER, fmt } from "@/lib/data/money";
@@ -184,7 +184,7 @@ function TradesScreen({ onCreated, ro }: { onCreated: (id: string) => void; ro: 
   const store = useStore();
   const db = store.db;
   const [picked, setPicked] = useState<string[]>([]);
-  const vendorCount = (tid: string) => db.contacts.filter((c) => c.party === "vendor" && c.tradeId === tid).length;
+  const vendorCount = (tid: string) => db.contacts.filter((c) => c.party === "vendor" && vendorCovers(c, tid)).length;
 
   // Seed each new package from the trade's own template, falling back to the
   // scope matrix — so nobody starts from a blank page.
@@ -249,8 +249,10 @@ function ContactsScreen({ p, ro, onNext }: { p: BidPackage; ro: boolean; onNext:
   const store = useStore();
   const db = store.db;
   const vendors = db.contacts.filter((c) => c.party === "vendor");
-  const matched = vendors.filter((c) => c.tradeId === p.tradeId);
-  const others = vendors.filter((c) => c.tradeId !== p.tradeId);
+  // Matched on everything they can work on, not just what they're contracted
+  // for here — a mason who also does concrete belongs in both packages.
+  const matched = vendors.filter((c) => vendorCovers(c, p.tradeId));
+  const others = vendors.filter((c) => !vendorCovers(c, p.tradeId));
   const bidFor = (cid: string) => p.bids.find((b) => b.contactId === cid);
 
   const toggle = (cid: string) => {
@@ -267,7 +269,7 @@ function ContactsScreen({ p, ro, onNext }: { p: BidPackage; ro: boolean; onNext:
         <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           <span className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)", lineHeight: 1.2 }}>{c.company}</span>
           <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{[c.contactName, c.phone].filter(Boolean).join(" · ") || "No contact details"}</span>
-          <Kicker>{c.tradeId ? tradeName(db, c.tradeId) : "Vendor"}</Kicker>
+          <Kicker>{vendorTrades(c).map((t) => tradeName(db, t)).join(" · ") || "Vendor"}</Kicker>
         </span>
       </Tile>
     );

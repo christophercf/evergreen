@@ -114,15 +114,60 @@ export interface Worker {
   appAccess?: boolean;   // should be granted access to the app
 }
 // A managed contact sheet: the GC's own org, the owner's, or a vendor.
+// ---- Vendor documents -------------------------------------------------------
+// Insurance and license are recorded exactly as supplied. Deliberately there is
+// NO compliance status: nothing computes "expiring" or "expired", nothing warns,
+// and an out-of-date document never blocks a vendor from being invited to bid.
+// The builder reads the dates and judges them. Inventing a traffic light here
+// would be a liability dressed up as a feature.
+export type VendorDocKind = "gl" | "wc" | "license";
+export const VENDOR_DOC_LABEL: Record<VendorDocKind, string> = {
+  gl: "General liability",
+  wc: "Workers' compensation",
+  license: "License",
+};
+export interface VendorDoc {
+  kind: VendorDocKind;
+  /** Policy or license number, as written on the certificate. */
+  number?: string;
+  /** Carrier and limits for insurance; the registration description for a license. */
+  detail?: string;
+  /** ISO date, as supplied. Blank means nobody has told us yet — not "expired". */
+  expires?: string;
+  /** The uploaded certificate, when we hold it. */
+  url?: string;
+  name?: string;
+}
+/** Who is responsible for producing the certificates. */
+export type DocRoute = "we_hold" | "ask_vendor";
+export const DOC_ROUTE_LABEL: Record<DocRoute, string> = {
+  we_hold: "We hold them",
+  ask_vendor: "Ask the vendor",
+};
+export const DOC_ROUTE_HINT: Record<DocRoute, string> = {
+  we_hold: "You upload the COI and license",
+  ask_vendor: "They're asked to send them over",
+};
+
 export interface ContactSheet {
   id: string;
   party: "builder" | "owner" | "vendor";
-  tradeId?: string;      // for vendor sheets — the trade they cover
+  /** The trade this vendor is *engaged* for on this project — drives their
+   *  contract, cost lines and schedule. One engagement, one trade. */
+  tradeId?: string;
+  /** Everything this vendor can work on. This is the directory index: it decides
+   *  which bid packages they show up for, and a vendor legitimately covers
+   *  several. Falls back to `tradeId` for records created before it existed. */
+  tradeIds?: string[];
   company: string;
   contactName?: string;
   email?: string;
   phone?: string;
   address?: string;
+  city?: string;
+  paymentTerms?: string;
+  docs?: VendorDoc[];
+  docRoute?: DocRoute;
   billing?: BillingDetails;
   workers?: Worker[];
   /** Builder shared this contact with the whole team (otherwise builder/owner-only). */
@@ -556,6 +601,12 @@ export const MATERIALS_BASIS_LABEL: Record<MaterialsBasis, string> = {
   owner_supplies: "Owner supplies materials (labor only)",
   mixed: "Mixed — see scope lines",
 };
+
+/** Every trade a vendor can work on — the list that decides which bid packages
+ *  they appear in. Older records only carry the single engagement trade. */
+export const vendorTrades = (c: ContactSheet): string[] =>
+  c.tradeIds?.length ? c.tradeIds : c.tradeId ? [c.tradeId] : [];
+export const vendorCovers = (c: ContactSheet, tradeId: string) => vendorTrades(c).includes(tradeId);
 
 /** A stored original document (scanned quote, emailed PDF, photo of paper). */
 export interface ScopeDoc { name: string; url: string; scannedAt?: string }

@@ -5,11 +5,13 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle } from "../ui/bits";
 import {
   accessFor, canRemoveUser, canSeeContacts, isArchitectUser, isOwnerManaged, SCOPE_LABEL, ROLE_LABEL,
-  type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User,
+  VENDOR_DOC_LABEL, vendorTrades,
+  type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User, type VendorDocKind,
 } from "@/lib/data/types";
 import { MACRO_ORDER, tradeName } from "@/lib/data/money";
 import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
+import { AddVendor } from "./add-vendor";
 import { TradeRatingEditor } from "../ui/rating";
 
 const SCOPE_CYCLE: ScopeStatus[] = ["unset", "in", "existing", "out"];
@@ -688,6 +690,7 @@ function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, ca
           <div style={{ fontSize: 11, color: "var(--muted)" }}>Flows onto this vendor’s contract, invoices &amp; draw remittance.</div>
         </div>
       )}
+      {party === "vendor" && <VendorCoverage c={c} canEdit={canEdit} />}
       {party === "vendor" && trade && <TradeRatingEditor tradeId={trade.id} disabled={!canEdit} />}
       {party === "vendor" && canEdit && trade && (
         <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
@@ -698,6 +701,66 @@ function CompanyHeader({ sheet, party, tradeId, heading, ownerManaged, trade, ca
           <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => { if (confirm(`Remove company/billing for "${c.company}"? (People stay in the project.)`)) store.removeContactSheet(c.id); }}>Remove company</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** What this vendor can bid on, and the documents we hold. Dates are shown
+ *  exactly as supplied — nothing here computes a compliance status or blocks
+ *  anyone from bidding; the builder reads them and decides. */
+function VendorCoverage({ c, canEdit }: { c: ContactSheet; canEdit: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const [open, setOpen] = useState(false);
+  const covers = vendorTrades(c);
+  const docOf = (k: VendorDocKind) => c.docs?.find((d) => d.kind === k);
+  const fmtDoc = (iso?: string) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "not on file";
+
+  return (
+    <div style={{ border: "1px solid var(--line)", borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 7 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--brass-2)" }}>Can bid on</span>
+        <span style={{ fontSize: 12, color: covers.length ? "var(--ink)" : "var(--muted)" }}>
+          {covers.map((t) => tradeName(db, t)).join(" · ") || "No trades set — they won't appear in any bid package"}
+        </span>
+        {canEdit && <button className="btn btn-sm" style={{ marginLeft: "auto", fontSize: 11 }} onClick={() => setOpen((v) => !v)}>{open ? "Done" : "Edit"}</button>}
+      </div>
+
+      {open && canEdit && (
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", paddingBottom: 4 }}>
+          {db.trades.map((t) => {
+            const on = covers.includes(t.id);
+            return (
+              <button key={t.id} onClick={() => store.updateContactSheet(c.id, { tradeIds: on ? covers.filter((x) => x !== t.id) : [...covers, t.id] })}
+                style={{
+                  minHeight: 27, padding: "0 9px", borderRadius: 99, fontSize: 11.5, cursor: "pointer",
+                  background: on ? "var(--sage)" : "var(--paper)", color: on ? "#fff" : "var(--ink)",
+                  border: `1px solid ${on ? "var(--sage)" : "var(--line)"}`,
+                }}>{t.name}</button>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end", borderTop: "1px solid var(--line)", paddingTop: 7 }}>
+        {(["gl", "wc"] as VendorDocKind[]).map((k) => (
+          <label key={k} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 10, color: "var(--muted)" }}>{VENDOR_DOC_LABEL[k]} expires</span>
+            {canEdit
+              ? <input type="date" defaultValue={docOf(k)?.expires ?? ""} onBlur={(e) => store.setVendorDoc(c.id, k, { expires: e.target.value })} style={{ fontSize: 12 }} />
+              : <span style={{ fontSize: 12.5 }}>{fmtDoc(docOf(k)?.expires)}</span>}
+          </label>
+        ))}
+        <label style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          <span style={{ fontSize: 10, color: "var(--muted)" }}>License no.</span>
+          {canEdit
+            ? <input defaultValue={docOf("license")?.number ?? ""} placeholder="MI-000000" onBlur={(e) => store.setVendorDoc(c.id, "license", { number: e.target.value })} style={{ fontSize: 12, width: 110 }} />
+            : <span style={{ fontSize: 12.5 }}>{docOf("license")?.number ?? "—"}</span>}
+        </label>
+        {c.docRoute === "ask_vendor" && !docOf("gl")?.expires && (
+          <span style={{ fontSize: 11, color: "var(--brass-2)" }}>Waiting on their certificates</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -734,6 +797,7 @@ function AddVendorTrade() {
   const db = store.db;
   const isOwnerRole = store.session.role === "owner";
   const [open, setOpen] = useState(false);
+  const [addVendor, setAddVendor] = useState(false);
   const [mode, setMode] = useState<"existing" | "new">("existing");
   const [tradeId, setTradeId] = useState("");
   const [newName, setNewName] = useState("");
@@ -741,7 +805,18 @@ function AddVendorTrade() {
   const [ownerMgd, setOwnerMgd] = useState(isOwnerRole);
   const taken = new Set(db.contacts.filter((c) => c.party === "vendor").map((c) => c.tradeId));
   const trades = db.trades.filter((t) => !taken.has(t.id));
-  if (!open) return <button className="btn btn-primary btn-sm" onClick={() => setOpen(true)}>＋ Add vendor / trade</button>;
+
+  // Adding a vendor and adding a trade are different jobs. A vendor is a company
+  // you might bid across several trades; a trade is a line of work on this
+  // project that gets its own contract, costs and schedule.
+  if (addVendor) return <AddVendor onDone={() => setAddVendor(false)} />;
+  if (!open) return (
+    <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+      <button className="btn btn-primary btn-sm" onClick={() => setAddVendor(true)}>＋ Add a vendor</button>
+      <button className="btn btn-sm" onClick={() => setOpen(true)}>＋ Add a trade</button>
+      <span style={{ fontSize: 11, color: "var(--muted)" }}>A vendor can cover several trades — a trade is one line of work with its own contract.</span>
+    </div>
+  );
   return (
     <div className="card" style={{ padding: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
       <select value={mode} onChange={(e) => setMode(e.target.value as "existing" | "new")} style={{ fontSize: 12 }}><option value="existing">Existing trade</option><option value="new">New trade</option></select>
@@ -772,7 +847,7 @@ function AddVendorTrade() {
       }}>Add</button>
       <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
       <span style={{ fontSize: 11, color: "var(--muted)", width: "100%" }}>
-        Two vendors can cover the same trade — add a <em>new trade</em> per vendor (e.g. “Windows — Diverse” owner-managed and “Windows — Builder”); each gets its own contract, costs &amp; schedule. Names are renamable on each vendor card below.
+        A trade is one line of work with its own contract, costs &amp; schedule. Use a separate trade when two companies split the same category on this project (e.g. “Windows — Diverse” owner-managed and “Windows — Builder”). To let one company bid across several trades, add them as a <em>vendor</em> instead.
       </span>
     </div>
   );

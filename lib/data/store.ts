@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, BidRoute, MaterialsBasis, PricingBasis, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
@@ -1193,9 +1193,46 @@ class Store {
     if (this.canManageContacts) this.mutate((db) => { db.contacts.push({ id, ...c }); });
     return id;
   }
+  /** Add a vendor to the roster as a complete record. The first trade doubles as
+   *  the engagement trade so existing contract/cost/schedule views still resolve,
+   *  while `tradeIds` carries everything they can actually work on. */
+  addVendor(v: {
+    company: string; contactName: string; tradeIds: string[];
+    city?: string; phone?: string; email?: string; paymentTerms?: string;
+    docs?: VendorDoc[]; docRoute?: DocRoute; notes?: string;
+  }): string {
+    const id = newId("contact");
+    if (!this.canManageContacts || !v.company.trim() || !v.tradeIds.length) return id;
+    this.mutate((db) => {
+      db.contacts.push({
+        id, party: "vendor",
+        tradeId: v.tradeIds[0], tradeIds: [...v.tradeIds],
+        company: v.company.trim(), contactName: v.contactName.trim() || undefined,
+        city: v.city?.trim() || undefined, phone: v.phone?.trim() || undefined,
+        email: v.email?.trim() || undefined, paymentTerms: v.paymentTerms?.trim() || undefined,
+        // Only keep documents someone actually told us something about.
+        docs: (v.docs ?? []).filter((d) => d.expires || d.number || d.url),
+        docRoute: v.docRoute, notes: v.notes?.trim() || undefined,
+      });
+    });
+    return id;
+  }
   updateContactSheet(id: string, patch: Partial<ContactSheet>) {
     if (!this.canManageContacts) return;
     this.mutate((db) => { const c = db.contacts.find((x) => x.id === id); if (c) Object.assign(c, patch); });
+  }
+  /** Insurance and license, recorded as supplied — no status is derived. */
+  setVendorDoc(id: string, kind: VendorDocKind, patch: Partial<VendorDoc>) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => {
+      const c = db.contacts.find((x) => x.id === id);
+      if (!c) return;
+      const docs = c.docs ?? [];
+      const existing = docs.find((d) => d.kind === kind);
+      if (existing) Object.assign(existing, patch);
+      else docs.push({ kind, ...patch });
+      c.docs = docs;
+    });
   }
   updateBilling(id: string, patch: Partial<NonNullable<ContactSheet["billing"]>>) {
     if (!this.canManageContacts) return;
