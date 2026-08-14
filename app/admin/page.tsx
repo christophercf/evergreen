@@ -761,6 +761,31 @@ function VendorCoverage({ c, canEdit }: { c: ContactSheet; canEdit: boolean }) {
           <span style={{ fontSize: 11, color: "var(--brass-2)" }}>Waiting on their certificates</span>
         )}
       </div>
+
+      {/* Internal review. Rated on the company, not the trade, so two masons can
+          score differently. Shown read-only beside their bids in Bid Management. */}
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: 7, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".09em", textTransform: "uppercase", color: "var(--brass-2)" }}>Internal review</span>
+          <span style={{ display: "flex", gap: 3 }}>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} disabled={!canEdit} title={`${n} of 5`}
+                onClick={() => store.updateContactSheet(c.id, { rating: c.rating === n ? undefined : n })}
+                style={{
+                  width: 19, height: 19, padding: 0, borderRadius: 4, cursor: canEdit ? "pointer" : "default",
+                  background: (c.rating ?? 0) >= n ? "var(--sage)" : "transparent", border: "1px solid var(--sage)",
+                }} />
+            ))}
+          </span>
+          <span style={{ fontSize: 12.5, color: "var(--ink)" }}>{c.rating ? `${c.rating} / 5` : "Not rated"}</span>
+          <input type="number" min={0} disabled={!canEdit} defaultValue={c.jobsWithUs ?? ""} placeholder="jobs"
+            onBlur={(e) => store.updateContactSheet(c.id, { jobsWithUs: Number(e.target.value) || undefined })}
+            style={{ fontSize: 11.5, width: 62 }} title="Jobs completed with us" />
+        </div>
+        <textarea disabled={!canEdit} defaultValue={c.internalNote ?? ""} placeholder="Notes — internal, never shared with the vendor."
+          onBlur={(e) => store.updateContactSheet(c.id, { internalNote: e.target.value })}
+          style={{ fontSize: 12, minHeight: 44, lineHeight: 1.45, padding: "5px 7px", borderRadius: 6, border: "1px solid var(--line)", background: "var(--paper)", resize: "vertical" }} />
+      </div>
     </div>
   );
 }

@@ -168,6 +168,14 @@ export interface ContactSheet {
   paymentTerms?: string;
   docs?: VendorDoc[];
   docRoute?: DocRoute;
+  /** How this company has performed for us, 1–5. Owned by the vendor record and
+   *  shown read-only inside a bid comparison — you rate the company, not the
+   *  trade, so two masons can score differently. */
+  rating?: number;
+  /** Internal, never shared with the vendor or the other party. */
+  internalNote?: string;
+  /** Jobs completed with us — context for the rating. */
+  jobsWithUs?: number;
   billing?: BillingDetails;
   workers?: Worker[];
   /** Builder shared this contact with the whole team (otherwise builder/owner-only). */
