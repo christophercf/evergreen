@@ -120,10 +120,30 @@ export default function MaterialsPage() {
   }, [tieSelCell, tieClip, access]);
   const [openId, setOpenId] = useState<string | null>(null);
 
-  // Deep link from Messenger context chips: /materials?item=<id> opens that row.
+  // Deep link from a Messenger context chip: /materials?item=<id>.
+  //
+  // Opening the row isn't enough on its own. Whatever filter, search or trade
+  // view was last left on can exclude the item entirely, so the click reads as
+  // "nothing happened" — the row is open in state and absent from the page. So
+  // clear the filters first, then scroll it into view and mark it briefly.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("item");
-    if (id && store.db.materials.some((m) => m.id === id)) setOpenId(id);
+    if (!id || !store.db.materials.some((m) => m.id === id)) return;
+    setQ(""); setRoom("all"); setTrade("all"); setCat("all"); setStatus("all");
+    setOpenId(id);
+    // After the row has rendered under the cleared filters.
+    const t = setTimeout(() => {
+      const row = document.getElementById(`row-${id}`);
+      if (!row) return;
+      // Jump rather than glide: you asked to be taken to one specific item, and a
+      // smooth scroll over sixty rows is both slow and easy to interrupt.
+      row.scrollIntoView({ block: "center" });
+      row.animate?.(
+        [{ background: "var(--brass)" }, { background: "var(--sage-tint)" }],
+        { duration: 1400, easing: "ease-out" },
+      );
+    }, 60);
+    return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -248,7 +268,7 @@ export default function MaterialsPage() {
               const locked = materialLockedCost(mt);
               return (
               <Fragment key={mt.id}>
-              <tr style={{ background: open ? "var(--sage-tint)" : undefined }}>
+              <tr id={`row-${mt.id}`} style={{ background: open ? "var(--sage-tint)" : undefined }}>
                 {/* Item stays pinned while the table scrolls sideways. */}
                 <td style={{ ...td, position: "sticky", left: 0, zIndex: 1, background: open ? "var(--sage-tint)" : "var(--paper)", minWidth: 150, maxWidth: 230, boxShadow: "2px 0 4px -2px rgba(44,36,28,.15)" }}>
                   <button onClick={() => setOpenId(open ? null : mt.id)} style={{ border: "none", background: "transparent", textAlign: "left", cursor: "pointer", padding: 0, maxWidth: "100%" }}>

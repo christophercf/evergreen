@@ -14,6 +14,8 @@ import {
   Check, Kicker, OptionBtn, ScreenHead, Tag, Tile, Triage, contactLine, contactOf, useNarrow, type TriageRow,
 } from "./kit";
 import { IntakeScreen, CompareScreen, AwardScreen } from "./screens";
+import { ScopeScreen } from "./scope";
+import { downloadRequestDoc } from "./request-doc";
 
 // ---------------------------------------------------------------------------
 // Bid Management — competitive bidding before the budget exists.
@@ -27,7 +29,7 @@ import { IntakeScreen, CompareScreen, AwardScreen } from "./screens";
 // three have to land on the same five fields or the comparison is a fiction.
 // ---------------------------------------------------------------------------
 
-const NAV = ["Trades", "Contacts", "How they bid", "Bids in", "Compare", "Award"] as const;
+const NAV = ["Trades", "Scope", "Contacts", "How they bid", "Bids in", "Compare", "Award"] as const;
 const NEW = "__new";
 const ROUTES: BidRoute[] = ["app", "gc", "upload"];
 
@@ -117,11 +119,12 @@ export default function BidsPage() {
 
         <div style={{ minWidth: 0 }}>
           {step === 0 && <TradesScreen ro={ro} onCreated={(id) => { setPkgId(id); setStep(1); }} />}
-          {pkg && step === 1 && <ContactsScreen p={pkg} ro={ro} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
-          {pkg && step === 2 && <RoutesScreen p={pkg} ro={ro} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
-          {pkg && step === 3 && <IntakeScreen p={pkg} ro={ro} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
-          {pkg && step === 4 && <CompareScreen p={pkg} onBack={() => setStep(3)} onNext={() => setStep(5)} />}
-          {pkg && step === 5 && <AwardScreen p={pkg} ro={ro} onBack={() => setStep(4)} />}
+          {pkg && step === 1 && <ScopeScreen p={pkg} ro={ro} onBack={() => setStep(0)} onNext={() => setStep(2)} />}
+          {pkg && step === 2 && <ContactsScreen p={pkg} ro={ro} onBack={() => setStep(1)} onNext={() => setStep(3)} />}
+          {pkg && step === 3 && <RoutesScreen p={pkg} ro={ro} onBack={() => setStep(2)} onNext={() => setStep(4)} />}
+          {pkg && step === 4 && <IntakeScreen p={pkg} ro={ro} onBack={() => setStep(3)} onNext={() => setStep(5)} />}
+          {pkg && step === 5 && <CompareScreen p={pkg} onBack={() => setStep(4)} onNext={() => setStep(6)} />}
+          {pkg && step === 6 && <AwardScreen p={pkg} ro={ro} onBack={() => setStep(5)} />}
         </div>
       </div>
     </>
@@ -326,9 +329,15 @@ function RoutesScreen({ p, ro, onBack, onNext }: { p: BidPackage; ro: boolean; o
     <ScreenHead
       title="How does each one submit?"
       sub="Three routes in, one set of fields out. Pick the route each contact actually works in."
-      right={!ro && !narrow && (
-        <span title={blocked}>
-          <button className="btn btn-primary btn-sm" disabled={!invited} onClick={issue}>{label} →</button>
+      right={!narrow && (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          {/* The thing you actually send them. Everything on step 02 lands here. */}
+          <button className="btn btn-sm" onClick={() => downloadRequestDoc(db, p)}>📄 Request document</button>
+          {!ro && (
+            <span title={blocked}>
+              <button className="btn btn-primary btn-sm" disabled={!invited} onClick={issue}>{label} →</button>
+            </span>
+          )}
         </span>
       )}
     />

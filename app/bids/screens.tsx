@@ -5,7 +5,7 @@ import { useStore } from "@/lib/data/hooks";
 import { Pill } from "../ui/bits";
 import {
   BID_ROUTE_SHORT, INTAKE_KEYS, INTAKE_LABEL, INTAKE_REQUIRED, PRICING_BASIS_LABEL,
-  bidCostPerDay, bidIntakeComplete,
+  addWorkingDays, bidCostPerDay, bidIntakeComplete,
   type BidPackage, type Confidence, type IntakeKey, type VendorBid,
 } from "@/lib/data/types";
 import { tradeName } from "@/lib/data/money";
@@ -483,8 +483,54 @@ export function AwardScreen({ p, ro, onBack }: { p: BidPackage; ro: boolean; onB
               <strong style={{ color: "var(--rust)" }}>{cheapest.vendorName}</strong> is the lowest figure but is flagged: {cheapestFlags[0]} Read it against the others before awarding.
             </div>
           )}
+          {awarded && !ro && <ToTiming p={p} b={awarded} />}
         </div>
       </div>
     </>
+  );
+}
+
+/** The awarded bid already states how long it takes and who's on site — that's a
+ *  Gantt bar one field short of existing. The missing field is the start date,
+ *  which no bid states, so it's asked for rather than assumed. */
+function ToTiming({ p, b }: { p: BidPackage; b: VendorBid }) {
+  const store = useStore();
+  const db = store.db;
+  const [start, setStart] = useState(p.expectedStart ?? "");
+  const existing = db.schedule.find((s) => s.tradeId === p.tradeId);
+  const end = start && b.workingDays ? addWorkingDays(start, b.workingDays) : "";
+  const fmt = (iso: string) => iso ? new Date(iso + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—";
+
+  if (!b.workingDays) {
+    return (
+      <div style={{ borderTop: "1px solid var(--line)", paddingTop: 9, fontSize: 11, color: "var(--muted)", lineHeight: 1.5 }}>
+        No duration on this bid, so there&apos;s nothing to put on the schedule yet.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ borderTop: "1px solid var(--line)", paddingTop: 9, display: "flex", flexDirection: "column", gap: 6 }}>
+      <Kicker>Put it on the schedule</Kicker>
+      <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.45 }}>
+        {b.vendorName} quoted <strong style={{ color: "var(--ink)" }}>{b.workingDays} working days</strong>
+        {b.crewSize ? ` with ${b.crewSize} on site` : ""}.
+        {existing ? " This trade already has a task in Timing." : ""}
+      </div>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <input type="date" value={start} onChange={(e) => setStart(e.target.value)} style={{ fontSize: 12 }} />
+        <button className="btn btn-sm btn-primary" disabled={!start}
+          onClick={() => {
+            store.addScheduleItem({
+              label: `${tradeName(db, p.tradeId)} — ${b.vendorName}`,
+              kind: "work", tradeId: p.tradeId, start, end,
+            });
+            alert(`Added to Timing: ${fmt(start)} → ${fmt(end)}`);
+          }}>
+          Add {b.workingDays}-day task
+        </button>
+      </div>
+      {end && <div style={{ fontSize: 11, color: "var(--muted)" }}>{fmt(start)} → <strong style={{ color: "var(--ink)" }}>{fmt(end)}</strong> · weekends skipped</div>}
+    </div>
   );
 }

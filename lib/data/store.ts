@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
@@ -917,6 +917,35 @@ class Store {
       }
     });
   }
+  /** The materials schedule on a bid request. Each line names who buys it, so
+   *  "materials included" can never quietly mean something different to two
+   *  vendors pricing the same package. */
+  addScopeMaterial(packageId: string, m: { item: string; qty?: string; unit?: string; suppliedBy?: "vendor" | "owner" }) {
+    if (!this.canManageBids || !m.item.trim()) return;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      if (!p) return;
+      p.materialsList = [...(p.materialsList ?? []), {
+        id: newId("mat"), item: m.item.trim(), qty: m.qty?.trim() || undefined,
+        unit: m.unit?.trim() || undefined, suppliedBy: m.suppliedBy ?? "vendor",
+      }];
+    });
+  }
+  updateScopeMaterial(packageId: string, id: string, patch: Partial<ScopeMaterial>) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const m = db.bidPackages.find((x) => x.id === packageId)?.materialsList?.find((x) => x.id === id);
+      if (m) Object.assign(m, patch);
+    });
+  }
+  removeScopeMaterial(packageId: string, id: string) {
+    if (!this.canManageBids) return;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      if (p?.materialsList) p.materialsList = p.materialsList.filter((m) => m.id !== id);
+    });
+  }
+
   /** Shortlist is a working set on the way to an award — many, then one. */
   toggleBidShortlist(packageId: string, bidId: string) {
     if (!this.canManageBids) return;
@@ -1004,7 +1033,16 @@ class Store {
       line.lockedAt = today;
       line.lockedBy = this.session.displayName;
       line.baseline = b.amount * (line.markupModel === "passthrough" ? 1 + line.markupPct / 100 : 1);
-      if (!line.desc) line.desc = p.scopeDetails.slice(0, 200) || undefined;
+      if (!line.desc) line.desc = (p.overview || p.scopeDetails).slice(0, 200) || undefined;
+      // The five fields travel with the money. Without them the budget line knows
+      // the price but not what was promised for it, and every later argument
+      // about scope creep starts from scratch.
+      line.awardedBid = {
+        packageId: p.id, vendorName: b.vendorName,
+        materialsCost: b.materialsCost, laborCost: b.laborCost,
+        workingDays: b.workingDays, crewSize: b.crewSize,
+        pricingBasis: b.pricingBasis ?? p.pricingBasis, at: today,
+      };
       p.bids.forEach((x) => { if (x.status === "awarded") x.status = "received"; });
       b.status = "awarded";
       p.awardedBidId = b.id;

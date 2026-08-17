@@ -293,6 +293,19 @@ export interface CostLine {
   lockedCost?: number;
   lockedAt?: string;
   lockedBy?: string;
+  /** What the winning bid actually promised, carried across at award. The budget
+   *  line, the schedule and any later change order then argue from the same
+   *  numbers instead of only the total. */
+  awardedBid?: {
+    packageId: string;
+    vendorName: string;
+    materialsCost?: number;
+    laborCost?: number;
+    workingDays?: number;
+    crewSize?: number;
+    pricingBasis?: PricingBasis;
+    at: string;
+  };
   /** Post-baseline adjustments, tracked as contract exhibits. */
   changeOrders: ChangeOrder[];
   /** The line's own contract document. */
@@ -598,6 +611,22 @@ export function bidIntakeMissing(b: VendorBid): IntakeKey[] {
   return INTAKE_REQUIRED.filter((k) => typeof b[k] !== "number" || Number.isNaN(b[k] as number));
 }
 export const bidIntakeComplete = (b: VendorBid) => bidIntakeMissing(b).length === 0;
+/** Walk forward n working days from a start date, skipping weekends. The start
+ *  date itself counts as day one when it's a weekday. Used to turn a bid's
+ *  "N working days" into a real end date on the Gantt. */
+export function addWorkingDays(iso: string, n: number): string {
+  if (!iso || !n || n < 1) return iso;
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d.getTime())) return iso;
+  let counted = 0;
+  while (counted < n) {
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) counted++;
+    if (counted < n) d.setDate(d.getDate() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 /** Only meaningful once duration is known — the honest per-day comparison. */
 export function bidCostPerDay(b: VendorBid): number | null {
   return b.amount && b.workingDays ? Math.round(b.amount / b.workingDays) : null;
@@ -712,6 +741,21 @@ export interface BidPackage {
   pricingBasis?: PricingBasis;
   /** Why the winning bid won — the line the team can read in six months. */
   awardReason?: string;
+
+  // ---- The request itself: what a vendor is actually being asked to price ----
+  /** What's being built, where it sits in the schedule, what "done" looks like. */
+  overview?: string;
+  /** The materials the job needs, and who buys each one. The single biggest
+   *  source of two bids that look comparable and aren't. */
+  materialsList?: ScopeMaterial[];
+  /** Free text from us about supply — what's free-issued, what's on site already. */
+  supplyNote?: string;
+  /** Work the vendor should assume is NOT theirs. Where change orders come from. */
+  exclusions?: string;
+  /** When we need the bid back, and when we expect them on site. */
+  returnBy?: string;
+  expectedStart?: string;
+
   /** Original document an imported scope was scanned from. */
   sourceDoc?: ScopeDoc;
   /** draft = still being built; collecting = out to vendors; awarded = decided. */
@@ -721,6 +765,16 @@ export interface BidPackage {
   awardedBidId?: string;
   /** The Project Budget line the winning bid was promoted into. */
   lineId?: string;
+}
+
+/** One line of the materials schedule attached to a bid request. */
+export interface ScopeMaterial {
+  id: string;
+  qty?: string;
+  unit?: string;
+  item: string;
+  /** Who buys it. Stated per line so "materials included" can't hide an assumption. */
+  suppliedBy: "vendor" | "owner";
 }
 
 // ---- Trade performance ratings ----------------------------------------------

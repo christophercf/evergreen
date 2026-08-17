@@ -11,3 +11,6 @@ npm-debug.log*
 next-env.d.ts
 
 .vercel
+
+# Agent worktrees — scratch clones with their own node_modules.
+.claude/
