@@ -70,8 +70,12 @@ export function Landing() {
     } finally { setBusy(false); }
   };
 
-  // Mock mode (no Supabase): email-only sign-in.
+  // Mock mode (no Supabase): email-only sign-in — no email is ever sent, the
+  // address is just looked up in the sample data.
   const submitMock = () => { reset(); const r = store.login(email); if (!r.ok) setErr(r.error ?? "Login failed."); };
+  // The demo's front door: one click, no typing, no email. Signs in as the
+  // reviewer (full admin), from which the persona switcher reaches every role.
+  const enterDemo = () => { reset(); const r = store.login("reviewer@evergreen.demo"); if (!r.ok) setErr(r.error ?? "Couldn't open the demo."); };
 
   // Step 1 — look up what this email needs.
   const continueEmail = async () => {
@@ -203,13 +207,15 @@ export function Landing() {
               </>
             ) : !realAuth ? (
               <>
-                <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Log in</div>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Use the email your project admin invited.</p>
-                <label style={L}>Email
+                <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Explore the demo</div>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>Sample data, every screen. No sign-up, no email — nothing here touches a real project.</p>
+                {err && <Msg tone="err">{err}</Msg>}
+                <button className="btn btn-primary" style={btn} onClick={enterDemo}>Enter the demo →</button>
+                <div style={{ borderTop: "1px solid var(--line)", margin: "18px 0 12px" }} />
+                <label style={{ ...L, fontSize: 12, color: "var(--muted)" }}>Or sign in as a specific person
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" onKeyDown={(e) => e.key === "Enter" && submitMock()} style={{ width: "100%", marginTop: 4 }} />
                 </label>
-                {err && <Msg tone="err">{err}</Msg>}
-                <button className="btn btn-primary" style={btn} onClick={submitMock}>Log in →</button>
+                <button className="btn btn-sm" style={ghost} onClick={submitMock}>Sign in as this person →</button>
               </>
             ) : step === "email" ? (
               <>
@@ -301,7 +307,7 @@ export function Landing() {
           </div>
         </div>
       </div>
-      <div style={{ textAlign: "center", padding: 14, fontSize: 11.5, color: "#9a8e79" }}>Evergreen AI · end-to-end renovation project management. Secured by Supabase Auth.</div>
+      <div style={{ textAlign: "center", padding: 14, fontSize: 11.5, color: "#9a8e79" }}>Evergreen AI · end-to-end renovation project management.{realAuth ? " Secured by Supabase Auth." : " Demo — sample data, saved in this browser."}</div>
       <style>{`@media (max-width: 760px){ .ever-landing{ grid-template-columns: 1fr !important; gap: 28px !important; } }`}</style>
     </div>
   );
