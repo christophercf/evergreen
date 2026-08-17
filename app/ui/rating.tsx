@@ -16,21 +16,6 @@ export function Stars({ value, size = 13 }: { value: number | null; size?: numbe
   );
 }
 
-/** Read-only summary chip — overall stars + per-category breakdown on hover. */
-export function TradeRatingChip({ tradeId, compact }: { tradeId: string; compact?: boolean }) {
-  const db = useStore().db;
-  const { overall, by, raters } = tradeRatingAvg(db.tradeRatings ?? [], tradeId);
-  if (overall == null) return <span style={{ fontSize: 10.5, color: "var(--muted)" }}>☆ not rated</span>;
-  const detail = RATING_KEYS.filter((k) => by[k] != null).map((k) => `${RATING_LABEL[k]} ${by[k]!.toFixed(1)}`).join(" · ");
-  return (
-    <span title={`${detail} — from ${raters} rating${raters === 1 ? "" : "s"}`} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-      <Stars value={overall} size={compact ? 11.5 : 13} />
-      <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{overall.toFixed(1)}</span>
-      {!compact && <span style={{ fontSize: 10, color: "var(--muted)" }}>({raters})</span>}
-    </span>
-  );
-}
-
 /** Editable 1–5 picker for one category. */
 function StarPicker({ value, onPick, disabled }: { value?: number; onPick: (v: number) => void; disabled?: boolean }) {
   return (

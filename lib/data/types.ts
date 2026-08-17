@@ -545,15 +545,6 @@ export const BID_REQ_LABEL: Record<BidReqKey, string> = {
   permits: "Permits — included or at cost",
   warranty: "Warranty",
 };
-export const BID_REQ_HINT: Record<BidReqKey, string> = {
-  lineItemPricing: "A number against each scope line, not one lump sum — the only way to see where bids really differ.",
-  materialsIncluded: "Labor-only quotes look cheapest and aren't. Force the answer.",
-  ownerSupplied: "Anything you have to buy — fixtures, appliances, tile. Catches budget that lands back on the owner.",
-  exclusions: "What the price does NOT cover. Where change orders come from.",
-  leadTime: "When they can start and how long they need — feeds the Gantt.",
-  permits: "Permits billed 'additional at cost' is a classic surprise line.",
-  warranty: "How long they stand behind the work.",
-};
 /** Sensible default: everything except warranty is required. */
 export const BID_REQ_DEFAULT: BidReqKey[] = ["lineItemPricing", "materialsIncluded", "ownerSupplied", "exclusions", "leadTime", "permits"];
 
@@ -648,15 +639,6 @@ export const vendorCovers = (c: ContactSheet, tradeId: string) => vendorTrades(c
 /** A stored original document (scanned quote, emailed PDF, photo of paper). */
 export interface ScopeDoc { name: string; url: string; scannedAt?: string }
 
-/** AI read on whether a bid actually covers the package scope. */
-export interface BidComparison {
-  comparable: boolean;          // apples-to-apples with the package scope?
-  missing: string[];            // package items this bid appears not to cover
-  extra: string[];              // work this bid adds beyond the package
-  note?: string;
-  at: string;
-}
-
 export interface VendorBid {
   id: string;
   vendorName: string;
@@ -670,7 +652,6 @@ export interface VendorBid {
   attachments?: { name: string; url: string }[];  // photos / emailed docs
   at: string;
   status: "requested" | "received" | "declined" | "awarded";
-  comparison?: BidComparison;
   /** Answers to the package's required questions. */
   responses?: Partial<Record<BidReqKey, string>>;
   /** The vendor's original quote (scanned PDF or phone photo), viewable as filed. */
@@ -695,13 +676,6 @@ export interface VendorBid {
   /** Per-field confidence from the document read; absent means keyed by hand. */
   confidence?: Partial<Record<IntakeKey, Confidence>>;
   shortlisted?: boolean;
-}
-
-/** How many of the package's required questions this bid actually answered. */
-export function bidCompleteness(pkg: BidPackage, bid: VendorBid): { answered: number; total: number; missing: BidReqKey[] } {
-  const req = pkg.requirements ?? BID_REQ_DEFAULT;
-  const missing = req.filter((k) => !(bid.responses?.[k] ?? "").trim());
-  return { answered: req.length - missing.length, total: req.length, missing };
 }
 
 /** Can this package go out to vendors yet? Blocking issues vs. soft warnings. */
