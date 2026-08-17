@@ -26,6 +26,10 @@ const project: Project = {
 // ---- Users ------------------------------------------------------------------
 const users: User[] = [
   { id: "u-owner", name: "Chris Johnson", email: "christopher.cf@gmail.com", phone: "", role: "full_admin", status: "active" },
+  // Demo-only. Exists so a reviewer can sign in to the mock build as themselves
+  // rather than borrowing someone's real address; the mock backend never
+  // authenticates, so this is a label, not an account.
+  { id: "u-reviewer", name: "Design Reviewer", email: "reviewer@evergreen.demo", role: "full_admin", status: "active" },
   { id: "u-owner2", name: "Emily Johnson", email: "emily@johnson.family", role: "owner", status: "active" },
   { id: "u-builder", name: "Aaron — Oasis", email: "aaron@oasisbuild.example", phone: "248-555-0142", role: "builder", doorCode: "1822", status: "active",
     secondaryContacts: [{ id: "c-aaron-1", label: "Office", name: "Oasis Build LLC", phone: "248-555-0100", email: "office@oasisbuild.example" }] },
