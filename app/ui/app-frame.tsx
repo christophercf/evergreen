@@ -47,7 +47,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const role = store.session.role;
   const user = store.currentUser;
 
-  if (!store.session.authed) return <Landing />;
+  // The mock build is the public demo, and its pages prerender to static HTML.
+  // Gating on auth would bake the login screen into that HTML, leaving a
+  // fetch-only reader (no JS) stuck at the door with every module behind it.
+  // So mock renders the app straight away; the live Supabase build still gates.
+  if (!IS_MOCK && !store.session.authed) return <Landing />;
 
   const visible = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
   // Bottom tab bar (mobile): the four most-used tabs the role can see; the rest via ☰.
