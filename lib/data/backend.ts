@@ -44,10 +44,15 @@ export class MockBackend implements Backend {
   }
 
   loadSession(): Promise<Session> {
-    let s = defaultSession();
+    // The mock build IS the demo. Land straight in as the reviewer rather than
+    // behind an email login nobody can complete — there's no inbox to receive a
+    // link, and the app renders client-side so no button in the HTML helps a
+    // fetch. A real stored session (e.g. after switching persona) still wins.
+    // Only MockBackend does this; the live Supabase build is untouched.
+    let s: Session = { ...defaultSession(), userId: "u-reviewer", displayName: "Design Reviewer", authed: true };
     try {
       const raw = sessionStorage.getItem(SESSION_KEY);
-      if (raw) s = { ...defaultSession(), ...JSON.parse(raw) };
+      if (raw) s = { ...s, ...JSON.parse(raw) };
     } catch {
       /* ignore */
     }
