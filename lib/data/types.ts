@@ -843,14 +843,10 @@ export interface SiteUpdate {
  *  • viewer (designer) → owner(s) + builder(s) */
 export function canMessageUser(sender: User | undefined, senderRole: Role, target: User, trades: Trade[]): boolean {
   if (target.id === sender?.id || target.status === "invited" || target.status === "pending") return false;
-  if (senderRole === "full_admin" || senderRole === "builder") return true;
-  const targetOwnerManaged = (target.tradeIds ?? []).some((t) => isOwnerManaged(trades.find((x) => x.id === t)));
-  const isArchitect = (target.tradeIds ?? []).includes("architect");
-  if (senderRole === "owner") {
-    if (target.role === "builder" || target.role === "viewer" || target.role === "full_admin") return true;
-    if (target.role === "trade") return targetOwnerManaged || isArchitect;
-    return false;
-  }
+  // Admin, builder and owner can message anyone on the project. (The owner used
+  // to be scoped to their own trades + architect/designer/builder, but as the
+  // client paying for the job they need to reach the whole team.)
+  if (senderRole === "full_admin" || senderRole === "builder" || senderRole === "owner") return true;
   if (senderRole === "trade") {
     if (target.role === "builder" || target.role === "full_admin") return true;
     const iAmOwnerManaged = (sender?.tradeIds ?? []).some((t) => isOwnerManaged(trades.find((x) => x.id === t)));

@@ -91,7 +91,26 @@ class Store {
     this.listeners.forEach((l) => l());
   }
 
-  private mutate(fn: (db: DB) => void) {
+  // Visible confirmation that a save landed. The UI registers one handler (the
+  // <Toaster/>); the store just announces "something saved" on a short debounce
+  // so a burst of edits collapses into one toast. Label lets a send read
+  // "Message sent" instead of the generic "Saved".
+  private toastHandler: ((text: string) => void) | null = null;
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private toastLabel = "Saved";
+  setToastHandler(cb: ((text: string) => void) | null) { this.toastHandler = cb; }
+  private announceSave(label: string) {
+    if (!this.toastHandler) return; // nothing registered yet (pre-mount / SSR)
+    this.toastLabel = label;
+    if (this.toastTimer) clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => {
+      this.toastTimer = null;
+      this.toastHandler?.(this.toastLabel);
+      this.toastLabel = "Saved";
+    }, 350);
+  }
+
+  private mutate(fn: (db: DB) => void, saveLabel = "Saved") {
     this.undoStack.push(JSON.stringify(this.db));
     if (this.undoStack.length > 40) this.undoStack.shift();
     const next = clone(this.db);
@@ -99,6 +118,7 @@ class Store {
     this.db = next;
     this.lastWrite = this.backend?.persistDB(next) ?? Promise.resolve();
     void this.lastWrite;
+    this.announceSave(saveLabel);
     this.emit();
   }
 
@@ -1084,7 +1104,7 @@ class Store {
       for (const uid of u.toUserIds) {
         this.notify(db, { toUserId: uid, kind: "info", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
       }
-    });
+    }, u.toUserIds.length > 1 ? `Message sent to ${u.toUserIds.length} people` : "Message sent");
     return id;
   }
   /** In-line reply on an update — allowed for the author and any recipient. */
@@ -1101,7 +1121,7 @@ class Store {
       for (const uid of others) {
         this.notify(db, { toUserId: uid, kind: "info", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
       }
-    });
+    }, "Reply sent");
   }
 
   // ---- Vendor agreements ----

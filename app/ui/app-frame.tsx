@@ -8,6 +8,7 @@ import { IS_MOCK } from "@/lib/data/config";
 import { ROLE_LABEL, accessFor, type ModuleKey, type Role } from "@/lib/data/types";
 import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
+import { Toaster } from "./toast";
 import {
   HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon,
 } from "./icons";
@@ -60,6 +61,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
+      <Toaster />
       {/* Sidebar */}
       <aside
         style={{
