@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
-import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock } from "./money";
+import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
 
@@ -1570,6 +1570,25 @@ class Store {
     }
     return id;
   }
+  /** Remove a trade the project does not use. Refused while anything still
+   *  points at it: the alternative is cascading the delete through budget
+   *  lines, schedule bars and materials, which is a far bigger action than the
+   *  one being asked for. */
+  removeTrade(id: string): boolean {
+    if (!this.canManageContacts) return false;
+    if (tradeUsage(this.db, id).total > 0) return false;
+    let done = false;
+    this.mutate((db) => {
+      const before = db.trades.length;
+      db.trades = db.trades.filter((t) => t.id !== id);
+      db.scope = (db.scope ?? []).filter((c) => c.tradeId !== id);
+      db.scopeTemplates = (db.scopeTemplates ?? []).filter((t) => t.tradeId !== id);
+      db.rom = (db.rom ?? []).filter((r) => r.tradeId !== id);
+      done = db.trades.length < before;
+    }, "Trade removed");
+    return done;
+  }
+
   updateTrade(id: string, patch: Partial<Trade>) {
     if (!this.canManageContacts) return;
     this.mutate((db) => { const t = db.trades.find((x) => x.id === id); if (t) Object.assign(t, patch); });

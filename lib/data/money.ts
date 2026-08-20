@@ -467,6 +467,29 @@ export function romTotals(db: DB) {
   };
 }
 
+/** Everything that points at a trade. A trade can only be removed once this is
+ *  empty — nothing here is deleted on its behalf, because a budget line or a
+ *  Gantt bar with no trade behind it is worse than an unused trade. */
+export function tradeUsage(db: DB, tradeId: string) {
+  const counts: Record<string, number> = {
+    "budget lines": db.costLines.filter((l) => l.tradeId === tradeId).length,
+    "schedule tasks": db.schedule.filter((x) => x.tradeId === tradeId).length,
+    materials: db.materials.filter((m) => m.tradeId === tradeId).length,
+    "scope cells": (db.scope ?? []).filter((c) => c.tradeId === tradeId && c.status !== "unset").length,
+    vendors: db.contacts.filter((c) => c.tradeId === tradeId || c.tradeIds?.includes(tradeId)).length,
+    packages: (db.bidPackages ?? []).filter((p) => p.tradeId === tradeId).length,
+    contracts: (db.vendorAgreements ?? []).filter((a) => a.tradeId === tradeId).length,
+    people: db.users.filter((u) => u.tradeIds?.includes(tradeId)).length,
+  };
+  const used = Object.entries(counts).filter(([, n]) => n > 0);
+  return {
+    counts,
+    total: used.reduce((a, [, n]) => a + n, 0),
+    /** "3 budget lines and 1 package" — what to say when refusing. */
+    summary: used.map(([k, n]) => `${n} ${n === 1 ? k.replace(/s$/, "") : k}`).join(", "),
+  };
+}
+
 /** Every ROM line committed is the precondition for throwing the lock. */
 export function romCanLock(db: DB): boolean {
   // A removed line is not waiting on anybody, so it does not hold up the lock.
