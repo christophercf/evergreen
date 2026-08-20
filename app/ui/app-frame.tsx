@@ -29,15 +29,16 @@ type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; ba
 // then the things you look up. "Administrative" stays behind the header ⚙.
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", band: "job", Icon: HomeIcon },
-  // Budget Management leads: the ROM is the spine, and a package is bid inside
-  // a line the owner has already agreed. You read the money before you go out
-  // to price against it.
+  // The money in the order it is settled: the owner agrees a figure, the work
+  // is bid against it, the draws pay it out, and funding is where it comes
+  // from. Budget Management leads because a package is bid inside a line that
+  // has already been agreed.
   { href: "/costs", label: "Budget Management", short: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
+  { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
   // Draws are the GC's to manage; funding is the owner's own money. Two
   // audiences, so two modules, each absent for the side it does not belong to.
   { href: "/payments", label: "Draw Management", short: "Draws", mod: "payments", band: "job", Icon: ReceiptIcon },
   { href: "/budget", label: "Funding", short: "Funding", mod: "budget", band: "job", Icon: WalletIcon },
-  { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
@@ -53,10 +54,10 @@ const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference
  *  default order behind these. */
 const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   // The owner opens the app to approve one thing, then look at money.
-  owner: ["/", "/costs", "/budget", "/bids", "/materials", "/timing", "/updates"],
+  owner: ["/", "/costs", "/bids", "/budget", "/materials", "/timing", "/updates"],
   // The builder runs the job from the money out: the agreed figure first, then
   // the packages bid against it.
-  builder: ["/", "/costs", "/payments", "/bids", "/timing", "/materials", "/updates"],
+  builder: ["/", "/costs", "/bids", "/payments", "/timing", "/materials", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
   // The designer works from the drawings and the programme, not materials.
