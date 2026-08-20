@@ -14,7 +14,10 @@ import {
 } from "./icons";
 
 type Band = "job" | "reference";
-type NavItem = { href: string; label: string; mod: ModuleKey; band: Band; Icon: (p: any) => React.ReactElement; phase2?: boolean };
+// `short` is the phone's bottom-bar label. A tab strip gives each item about
+// eight characters before it truncates, so any item whose full name is longer
+// carries a one-word version of the same name — never a different word.
+type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; band: Band; Icon: (p: any) => React.ReactElement; phase2?: boolean };
 
 // Labels follow one rule: a VENDOR is a company, a PACKAGE is a scope of work on
 // this house, a CONTRACT is a vendor awarded a package. "Trade" is only ever a
@@ -26,10 +29,10 @@ type NavItem = { href: string; label: string; mod: ModuleKey; band: Band; Icon: 
 // then the things you look up. "Administrative" stays behind the header ⚙.
 const NAV: NavItem[] = [
   { href: "/", label: "Today", mod: "dashboard", band: "job", Icon: HomeIcon },
-  { href: "/bids", label: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
-  // Money is one nav item over three routes (Committed · Paid · Funded). Which
-  // one it opens is role-shaped — see MONEY_HOME.
-  { href: "/costs", label: "Money", mod: "costs", band: "job", Icon: CoinsIcon },
+  { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
+  // Budget Management is one nav item over three routes (Committed · Paid ·
+  // Funded). Which one it opens is role-shaped — see MONEY_HOME.
+  { href: "/costs", label: "Budget Management", short: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
@@ -206,10 +209,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
       {/* Bottom tab bar — thumb-reach nav on phones; ☰ opens the full drawer. */}
       <nav className="ever-bottomnav">
-        {bottomNav.map(({ href, label, Icon }) => (
-          <Link key={href} href={href} className={pathname === href ? "active" : undefined} onClick={() => setNavOpen(false)}>
+        {bottomNav.map(({ href, label, short, Icon }) => (
+          <Link key={href} href={href} className={pathname === href ? "active" : undefined} onClick={() => setNavOpen(false)} aria-label={label}>
             <Icon width={19} height={19} />
-            {label}
+            {short ?? label}
           </Link>
         ))}
         <button onClick={() => setNavOpen(true)} aria-label="All tabs">

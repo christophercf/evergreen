@@ -24,7 +24,7 @@ export default function BudgetPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "budget");
 
-  if (access === "none") return <NoAccess module="the Budget" />;
+  if (access === "none") return <NoAccess module="Budget Management" />;
   const ro = access !== "edit";
 
   const t = totals(db.costLines);
@@ -90,7 +90,7 @@ export default function BudgetPage() {
   return (
     <>
       <PageHeader
-        title="Money"
+        title="Budget Management"
         subtitle="Where the money comes from. Pulls the all-in cost from the committed budget, then helps you fund it for the least carrying cost — spend free cash before high-interest debt."
         right={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!ro && <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo the last budget change">↶ Undo</button>}
