@@ -1020,8 +1020,11 @@ export interface Project {
 // ---------------------------------------------------------------------------
 export interface RomLine {
   id: string;
-  /** One ROM line per trade. Trades with several cost lines roll up into one. */
+  /** A ROM row is one trade AND one markup treatment. A trade whose lines are
+   *  priced both ways gets a row for each, because a single row can only carry
+   *  one honest markup label. Row key is `tradeId::markupModel`. */
   tradeId: string;
+  markupModel: MarkupModel;
   /** The owner has agreed this line. For a range, that agrees its ceiling. */
   committed: boolean;
   committedOn?: string;

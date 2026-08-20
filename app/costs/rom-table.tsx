@@ -52,7 +52,9 @@ export function RomTable() {
         <StatCard label="ROM agreed, all-in" value={fmt(t.agreed)}
           sub={`${t.committedRows} of ${t.rows} lines committed`} accent="var(--brass-2)" />
         <StatCard label="Under contract" value={fmt(t.underContract)}
-          sub={t.agreed > 0 ? `${Math.round((t.underContract / t.agreed) * 100)}% of the agreed ceiling` : "nothing agreed yet"} />
+          sub={t.agreed > 0
+            ? `${Math.round((t.underContractCommitted / t.agreed) * 100)}% of the agreed ceiling, on committed lines`
+            : "nothing agreed yet"} />
         <StatCard label="Paid" value={fmt(t.paid)} accent="var(--ok)"
           sub={`${fmt(Math.max(0, t.underContract - t.paid))} still to draw`} />
         <StatCard label="Variance on priced trades" value={t.variance === 0 ? "—" : fmt(t.variance)}
@@ -75,7 +77,7 @@ export function RomTable() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Row key={r.tradeId} r={r} on={open === r.tradeId} onToggle={() => setOpen(open === r.tradeId ? null : r.tradeId)} />
+              <Row key={r.key} r={r} on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
             ))}
             <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
               <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines</td>
@@ -116,12 +118,12 @@ function Row({ r, on, onToggle }: { r: RomRow; on: boolean; onToggle: () => void
             <strong style={{ color: "var(--walnut)" }}>{r.label}</strong>
             {r.lines.length > 1 ? <span style={{ fontSize: 10.5, color: MUTED }}>{r.lines.length} lines</span> : null}
             <Pill color="#fff" bg={r.committed ? "var(--sage)" : "var(--brass)"}>
-              {r.committed ? "Committed" : "Draft — with the owner"}
+              {r.committed ? (r.autoCommitted ? "Committed — under contract" : "Committed") : "Draft — with the owner"}
             </Pill>
             {r.owner === "owner" ? <Pill color="var(--walnut)" bg="var(--cream-2)">Owner-carried</Pill> : null}
           </div>
           <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
-            {r.markupLabel}{r.mixedMarkup ? " — lines differ" : ""} · {fmt(r.markup)} markup · {r.category}
+            {r.markupLabel} · {fmt(r.markup)} markup · {r.category}
           </div>
         </td>
         <Num v={r.high} node={agreed} />
