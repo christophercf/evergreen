@@ -158,7 +158,13 @@ class Store {
     const prev = this.undoStack.pop();
     if (prev === undefined) return;
     this.db = JSON.parse(prev) as DB;
-    void this.backend?.persistDB(this.db);
+    // An undo that doesn't reach the server is as silent a loss as a save that
+    // doesn't, and it looks worse: the change appears to come back on screen.
+    this.lastWrite = (async () => {
+      await this.backend?.persistDB(this.db);
+      if (this.saveError) { this.saveError = null; this.emit(); }
+    })();
+    this.lastWrite.catch((e: unknown) => this.announceSaveFailed(e));
     this.emit();
   }
 
