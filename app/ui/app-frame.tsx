@@ -29,10 +29,11 @@ type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; ba
 // then the things you look up. "Administrative" stays behind the header ⚙.
 const NAV: NavItem[] = [
   { href: "/", label: "Dashboard", mod: "dashboard", band: "job", Icon: HomeIcon },
-  { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
-  // Budget Management is one nav item over three routes (Committed · Paid ·
-  // Funded). Which one it opens is role-shaped — see MONEY_HOME.
+  // Budget Management leads: the ROM is the spine, and a package is bid inside
+  // a line the owner has already agreed. You read the money before you go out
+  // to price against it.
   { href: "/costs", label: "Budget Management", short: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
+  { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
@@ -54,9 +55,10 @@ const MONEY_HOME: Partial<Record<Role, string>> = { owner: "/budget", builder: "
  *  default order behind these. */
 const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   // The owner opens the app to approve one thing, then look at money.
-  owner: ["/", "/costs", "/materials", "/timing", "/updates"],
-  // The builder runs the job: what needs attention, then the packages it lives in.
-  builder: ["/", "/bids", "/timing", "/materials", "/costs", "/updates"],
+  owner: ["/", "/costs", "/bids", "/materials", "/timing", "/updates"],
+  // The builder runs the job from the money out: the agreed figure first, then
+  // the packages bid against it.
+  builder: ["/", "/costs", "/bids", "/timing", "/materials", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
   // The designer works from the drawings and the programme, not materials.

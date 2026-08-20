@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { accessFor } from "@/lib/data/types";
 import { fmt, romRows, romTotals, romCanLock, type RomRow } from "@/lib/data/money";
-import { Pill, StatCard } from "../ui/bits";
+import { Pill, StatCard, TextInput } from "../ui/bits";
 
 // ---------------------------------------------------------------------------
 // The ROM table — one row per trade, richest first.
@@ -33,6 +33,8 @@ export function RomTable() {
   // does the other's job.
   const canCommit = !db.romLocked && ["full_admin", "owner"].includes(role);
   const canLock = ["full_admin", "builder"].includes(role);
+  // The builder writes the assumption; the owner reads it before agreeing.
+  const canNote = !db.romLocked && canLock;
   const ready = romCanLock(db);
 
   return (
@@ -97,7 +99,7 @@ It does not move again. From here the budget is negotiated inside the packages, 
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Row key={r.key} r={r} canCommit={canCommit} on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
+              <Row key={r.key} r={r} canCommit={canCommit} canNote={canNote} on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
             ))}
             <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
               <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines</td>
@@ -125,7 +127,7 @@ It does not move again. From here the budget is negotiated inside the packages, 
   );
 }
 
-function Row({ r, canCommit, on, onToggle }: { r: RomRow; canCommit: boolean; on: boolean; onToggle: () => void }) {
+function Row({ r, canCommit, canNote, on, onToggle }: { r: RomRow; canCommit: boolean; canNote: boolean; on: boolean; onToggle: () => void }) {
   const store = useStore();
   const agreed = r.ranged
     ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span>
@@ -173,7 +175,29 @@ function Row({ r, canCommit, on, onToggle }: { r: RomRow; canCommit: boolean; on
                 <span style={{ color: MUTED }}>{l.owner === "owner" ? "owner-carried" : "builder-carried"}</span>
               </div>
             ))}
-            {r.rom?.note ? <div style={{ fontSize: 11.5, color: MUTED, marginTop: 7 }}>Assumption: {r.rom.note}</div> : null}
+            {/* The sentence that explains the figure. The owner is agreeing a
+                number; this is where she reads what it assumes before she does. */}
+            {canNote ? (
+              <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED, marginBottom: 4 }}>
+                  What this figure assumes
+                </div>
+                <TextInput
+                  value={r.rom?.note ?? ""}
+                  placeholder="e.g. paint-grade boxes, no crown, existing layout kept"
+                  onCommit={(v) => store.setRomNote(r.tradeId, r.markupModel, v)}
+                  style={{ width: "100%", maxWidth: 560, fontSize: 12.5 }}
+                />
+              </div>
+            ) : r.rom?.note ? (
+              <div style={{ fontSize: 12, color: "var(--ink)", marginTop: 9, maxWidth: "62ch", lineHeight: 1.5 }}>
+                <span style={{ color: MUTED }}>Assumes: </span>{r.rom.note}
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: MUTED, marginTop: 9, fontStyle: "italic" }}>
+                No assumption recorded — ask the builder what this figure covers before agreeing it.
+              </div>
+            )}
             {r.committed && r.rom?.committedBy ? (
               <div style={{ fontSize: 11.5, color: "var(--sage-2)", marginTop: 7 }}>
                 Agreed by {r.rom.committedBy}{r.rom.committedOn ? ` on ${r.rom.committedOn}` : ""} at {fmt(r.rom.agreedHigh ?? r.high)}.
