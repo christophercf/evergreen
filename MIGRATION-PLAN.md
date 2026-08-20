@@ -37,12 +37,19 @@ mental reconciliation, on the one question where being wrong costs real money.
 
 They flagged three assumptions they couldn't check. Two are now settled.
 
-**Owners Funding — settled, harder than they thought.**
-`fundingSources` is **empty (0 records)**. It isn't "largely static", it's
-unused: a nav item pointing at nothing. Demote it in session 01 rather than
-carrying it into the Money merge as an equal third tab. Keep the model — the
-cost-of-capital advisory is good work — but it earns a tab only once it holds
-data.
+**Owners Funding — settled the other way. CORRECTION.**
+An earlier draft of this plan said funding was empty. That was wrong: I queried
+`db.fundingSources`, and the real key is **`db.funding`**. It holds **11 sources,
+$4.55M of committed capital, $265k already drawn** — and **6 of the 11 were
+hand-entered through the UI** (Kennoway Sale $1.95M, Purchase Loan $700k,
+Kennoway Home Loan $420k, Retirement repayment $265k, DJ Loan, HELOC).
+
+So this is live financial planning, actively maintained, and the most
+owner-specific data in the app. It does **not** get deleted or demoted. Their
+reviewer's instinct was right on the substance — folding it into Money as the
+**Funded** tab is correct, because "is this covered?" is half of the question
+"can I pay this invoice?" — but it moves as a first-class tab, not a
+deprecation.
 
 **Package → budget line — settled, and their design already handles it.**
 No package currently carries a `lineId` (nothing has been awarded yet), and
@@ -182,9 +189,11 @@ Each is shippable alone and worth having if the next never happens.
 
 1. **Start at 00 or 01?** I'd do 00 — but it ships nothing visible, and you may
    prefer to see movement first.
-2. **Owners Funding: demote to Admin, or keep a tab and populate it?** It's
-   empty today.
-3. **Duplicate packages** — delete the test residue (Cleaners ×3 → 1, Design ×2 → 1,
-   Architect ×2 → 1)? I'd want your eye before removing anything.
+2. ~~Owners Funding: demote?~~ **Resolved — keep it.** It holds $4.55M across 11
+   sources, 6 hand-entered. It becomes the **Funded** tab in Money (session 02).
+3. ~~Duplicate packages~~ **Done.** 10 → 6; four empty copies removed
+   (Architect ×1, Design ×1, Cleaners ×2), each with no scope lines and only
+   placeholder vendors. Snapshot taken first. `Test Drywall` still there —
+   say the word and it goes too.
 4. **Scope of session 01's rename** — user-facing labels only, or the code
    identifiers too? Labels are safe and fast; identifiers are a wide diff.
