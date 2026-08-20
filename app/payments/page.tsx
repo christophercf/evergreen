@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
+import { MoneyTabs } from "../ui/money-tabs";
 import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
 import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid, isLocked } from "@/lib/data/money";
 
@@ -44,10 +45,11 @@ export default function PaymentsPage() {
   return (
     <>
       <PageHeader
-        title="Draws"
-        subtitle="Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then push a draw to issue trade contracts. Completed draws collapse to the bottom; the budget on the left tracks total → drawn → remaining live."
-        right={<div style={{ display: "flex", gap: 8 }}>{ro && <Pill color="var(--muted)">View only</Pill>}<Link href="/costs" className="btn btn-sm">Budget →</Link></div>}
+        title="Money"
+        subtitle="What has actually left. Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then push a draw to issue trade contracts. Completed draws collapse to the bottom; the budget on the left tracks total → drawn → remaining live."
+        right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
+      <MoneyTabs />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Contract Value" value={<Money value={t.grand} />} sub="current, all lines" />

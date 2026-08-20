@@ -27,11 +27,9 @@ type NavItem = { href: string; label: string; mod: ModuleKey; band: Band; Icon: 
 const NAV: NavItem[] = [
   { href: "/", label: "Today", mod: "dashboard", band: "job", Icon: HomeIcon },
   { href: "/bids", label: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
-  // The three money routes sit adjacent so they can collapse into one Money
-  // module (Committed · Paid · Funded) without the nav moving again.
-  { href: "/costs", label: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
-  { href: "/payments", label: "Draws", mod: "payments", band: "job", Icon: ReceiptIcon },
-  { href: "/budget", label: "Funding", mod: "budget", band: "job", Icon: WalletIcon },
+  // Money is one nav item over three routes (Committed · Paid · Funded). Which
+  // one it opens is role-shaped — see MONEY_HOME.
+  { href: "/costs", label: "Money", mod: "costs", band: "job", Icon: CoinsIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
@@ -41,15 +39,21 @@ const NAV: NavItem[] = [
 
 const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference" };
 
+// The three routes behind the single "Money" item, and which one each role lands
+// on: the owner's question is "is it covered?", the builder's is "what has been
+// paid?", and Chris wants all three so he starts at what we promised.
+const MONEY_ROUTES = ["/costs", "/payments", "/budget"];
+const MONEY_HOME: Partial<Record<Role, string>> = { owner: "/budget", builder: "/payments" };
+
 /** What each role opens on, and the order they meet things in. A role's first
  *  item should be what that role actually does most — permission decides what is
  *  reachable, this decides what comes first. Anything not listed keeps its
  *  default order behind these. */
 const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   // Emily opens the app to approve one thing, then look at money.
-  owner: ["/", "/costs", "/budget", "/payments", "/materials", "/timing", "/updates"],
+  owner: ["/", "/costs", "/materials", "/timing", "/updates"],
   // Aaron runs the job: what needs attention, then the packages it lives in.
-  builder: ["/", "/bids", "/timing", "/materials", "/costs", "/payments", "/updates"],
+  builder: ["/", "/bids", "/timing", "/materials", "/costs", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
   // The designer works from the drawings and the programme, not materials.
@@ -133,13 +137,19 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 }}>{BAND_LABEL[band]}</div>
               )}
               {items.map((n) => {
-            const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+            // Money spans three routes, so it stays lit on all of them and opens
+            // wherever this role's question lives.
+            const isMoney = n.mod === "costs";
+            const href = isMoney ? (MONEY_HOME[role] ?? n.href) : n.href;
+            const active = isMoney
+              ? MONEY_ROUTES.some((r) => pathname.startsWith(r))
+              : n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
             // A vendor sees their own contract, not a management console.
             const label = n.mod === "vendors" && role === "trade" ? "Your contract" : n.label;
             return (
               <Link
                 key={n.href}
-                href={n.href}
+                href={href}
                 onClick={() => setNavOpen(false)}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8,

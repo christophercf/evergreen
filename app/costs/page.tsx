@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
+import { MoneyTabs } from "../ui/money-tabs";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
@@ -49,16 +50,16 @@ export default function CostsPage() {
   return (
     <>
       <PageHeader
-        title="Budget"
-        subtitle="The builder roughs out the ROM here first; winning package bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order, so the owner always sees budget → current. All figures include builder markup."
+        title="Money"
+        subtitle="What we have promised to spend. The builder roughs out the ROM here first; winning package bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order. All figures include builder markup."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {ro && <Pill color="var(--muted)">View only</Pill>}
             <Link href="/timing" className="btn btn-sm">Schedule →</Link>
-            <Link href="/payments" className="btn btn-sm">Draws →</Link>
           </div>
         }
       />
+      <MoneyTabs />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Current Cost Range" value={br.low === br.high ? <Money value={br.high} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(br.low)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(br.high)}</span>} accent="var(--brass-2)" sub="low – high" />
