@@ -7,12 +7,12 @@
 
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
-  DrawingPin, FundingSource, LinePhase, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
+  DrawingPin, FundingSource, LinePhase, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
   BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
-import { lineTotal, lineCurrent, phaseAmount } from "./money";
+import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
 
@@ -1099,6 +1099,94 @@ class Store {
       this.notify(db, { toRole: "owner", kind: "info", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
     });
     return outLineId;
+  }
+
+  // ---- The ROM ---------------------------------------------------------------
+  // The owner commits; the builder locks. Neither does the other's job — the
+  // owner's power over money is agreeing the figure, and the lock is the
+  // builder's declaration that every figure has been agreed.
+
+  /** Only the owner agrees a figure. Nobody agrees one on their behalf. */
+  private get canCommitRom(): boolean {
+    return ["full_admin", "owner"].includes(this.session.role);
+  }
+  /** Owners never lock — see the design's canLockRom. */
+  private get canLockRom(): boolean {
+    return ["full_admin", "builder"].includes(this.session.role);
+  }
+
+  /** Agree (or withdraw agreement on) one ROM row. Committing a range agrees
+   *  its ceiling, and the envelope is SNAPSHOT at that moment: what the owner
+   *  agreed cannot later drift because somebody edited an allowance. */
+  commitRomLine(tradeId: string, markupModel: MarkupModel, committed: boolean) {
+    if (!this.canCommitRom) return;
+    this.mutate((db) => {
+      if (db.romLocked) return; // a locked ROM does not move
+      db.rom = db.rom ?? [];
+      let r = db.rom.find((x) => x.tradeId === tradeId && x.markupModel === markupModel);
+      if (!r) {
+        r = { id: newId("rom"), tradeId, markupModel, committed: false };
+        db.rom.push(r);
+      }
+      r.committed = committed;
+      if (committed) {
+        r.committedOn = new Date().toISOString().slice(0, 10);
+        r.committedBy = this.session.displayName;
+        if (r.agreedLow == null || r.agreedHigh == null) {
+          const lines = db.costLines.filter((l) => l.tradeId === tradeId && l.markupModel === markupModel);
+          const env = lines.reduce((a, l) => {
+            const e = romEnvelope(l);
+            return { low: a.low + e.low, high: a.high + e.high };
+          }, { low: 0, high: 0 });
+          r.agreedLow = env.low;
+          r.agreedHigh = env.high;
+        }
+      } else {
+        // Withdrawing agreement releases the snapshot too, so re-committing
+        // agrees whatever the figure actually is thenrather than a stale one.
+        r.committedOn = undefined;
+        r.committedBy = undefined;
+        r.agreedLow = undefined;
+        r.agreedHigh = undefined;
+      }
+    }, committed ? "Line committed" : "Agreement withdrawn");
+  }
+
+  /** The assumption behind a figure — the sentence that explains it. */
+  setRomNote(tradeId: string, markupModel: MarkupModel, note: string) {
+    if (!this.canLockRom) return; // the builder writes the assumption
+    this.mutate((db) => {
+      if (db.romLocked) return;
+      db.rom = db.rom ?? [];
+      let r = db.rom.find((x) => x.tradeId === tradeId && x.markupModel === markupModel);
+      if (!r) { r = { id: newId("rom"), tradeId, markupModel, committed: false }; db.rom.push(r); }
+      r.note = note.trim() || undefined;
+    });
+  }
+
+  /** Throw the lock. Requires every row committed, and it is the one action
+   *  here that does not undo itself — see unlockRom. */
+  lockRom() {
+    if (!this.canLockRom || !romCanLock(this.db)) return;
+    this.mutate((db) => {
+      db.romLocked = true;
+      db.romLockedAt = new Date().toISOString().slice(0, 10);
+      db.romLockedBy = this.session.displayName;
+      this.notify(db, {
+        toRole: "owner", kind: "info",
+        message: `🔒 The ROM is locked by ${this.session.displayName}. The budget is now negotiated inside the packages.`,
+      });
+    }, "ROM locked");
+  }
+
+  /** Full admin only, and deliberately awkward: the ROM is meant to be final. */
+  unlockRom() {
+    if (this.session.role !== "full_admin") return;
+    this.mutate((db) => {
+      db.romLocked = false;
+      db.romLockedAt = undefined;
+      db.romLockedBy = undefined;
+    }, "ROM unlocked");
   }
 
   /** Builder's star rating for a trade (one row per rater per trade). */

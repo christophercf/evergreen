@@ -29,6 +29,12 @@ export function RomTable() {
   const t = romTotals(db);
   if (!rows.length) return null;
 
+  // The owner agrees a figure; the builder declares them all agreed. Neither
+  // does the other's job.
+  const canCommit = !db.romLocked && ["full_admin", "owner"].includes(role);
+  const canLock = ["full_admin", "builder"].includes(role);
+  const ready = romCanLock(db);
+
   return (
     <div style={{ marginTop: 26 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
@@ -41,9 +47,23 @@ export function RomTable() {
               : " Nothing here is writable yet: this is the model over your real figures, to be read before it goes live."}
           </div>
         </div>
-        <Pill color="#fff" bg={db.romLocked ? "var(--walnut)" : "var(--brass)"}>
-          {db.romLocked ? "ROM locked" : "Drafting the ROM"}
-        </Pill>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <Pill color="#fff" bg={db.romLocked ? "var(--walnut)" : "var(--brass)"}>
+            {db.romLocked ? `ROM locked ${db.romLockedAt ?? ""}`.trim() : "Drafting the ROM"}
+          </Pill>
+          {canLock && !db.romLocked ? (
+            <button
+              className={`btn btn-sm ${ready ? "btn-primary" : ""}`}
+              disabled={!ready}
+              title={ready ? undefined : `${t.rows - t.committedRows} line(s) still with the owner`}
+              onClick={() => {
+                if (confirm(`Lock the ROM at ${fmt(t.agreed)}?
+
+It does not move again. From here the budget is negotiated inside the packages, and a signed package changes only through a change order.`)) store.lockRom();
+              }}
+            >{ready ? "🔒 Lock the ROM" : `${t.rows - t.committedRows} still with the owner`}</button>
+          ) : null}
+        </div>
       </div>
 
       {/* Four cards. "Agreed" counts only committed lines — an uncommitted
@@ -77,7 +97,7 @@ export function RomTable() {
           </thead>
           <tbody>
             {rows.map((r) => (
-              <Row key={r.key} r={r} on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
+              <Row key={r.key} r={r} canCommit={canCommit} on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
             ))}
             <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
               <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines</td>
@@ -105,7 +125,8 @@ export function RomTable() {
   );
 }
 
-function Row({ r, on, onToggle }: { r: RomRow; on: boolean; onToggle: () => void }) {
+function Row({ r, canCommit, on, onToggle }: { r: RomRow; canCommit: boolean; on: boolean; onToggle: () => void }) {
+  const store = useStore();
   const agreed = r.ranged
     ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span>
     : fmt(r.high);
@@ -153,6 +174,33 @@ function Row({ r, on, onToggle }: { r: RomRow; on: boolean; onToggle: () => void
               </div>
             ))}
             {r.rom?.note ? <div style={{ fontSize: 11.5, color: MUTED, marginTop: 7 }}>Assumption: {r.rom.note}</div> : null}
+            {r.committed && r.rom?.committedBy ? (
+              <div style={{ fontSize: 11.5, color: "var(--sage-2)", marginTop: 7 }}>
+                Agreed by {r.rom.committedBy}{r.rom.committedOn ? ` on ${r.rom.committedOn}` : ""} at {fmt(r.rom.agreedHigh ?? r.high)}.
+              </div>
+            ) : null}
+            {canCommit ? (
+              <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  className={`btn btn-sm ${r.committed ? "" : "btn-primary"}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (r.committed) {
+                      if (confirm(`Withdraw agreement on ${r.label}?`)) store.commitRomLine(r.tradeId, r.markupModel, false);
+                    } else {
+                      store.commitRomLine(r.tradeId, r.markupModel, true);
+                    }
+                  }}
+                >{r.committed ? "Withdraw agreement" : r.ranged ? `Commit — agrees the ${fmt(r.high)} ceiling` : `Commit ${fmt(r.high)}`}</button>
+                <span style={{ fontSize: 11, color: MUTED, lineHeight: 1.45, maxWidth: "46ch" }}>
+                  {r.committed
+                    ? "The figure is fixed at what was agreed; editing an allowance will not move it."
+                    : r.ranged
+                      ? "Committing a range agrees its ceiling. The figure is captured now, so it cannot drift afterwards."
+                      : "Captured as agreed at this figure."}
+                </span>
+              </div>
+            ) : null}
           </td>
         </tr>
       ) : null}

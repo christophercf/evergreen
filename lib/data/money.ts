@@ -322,7 +322,7 @@ export type RomRow = {
 /** The agreed envelope for one line, with approved change orders excluded.
  *  A locked line is fixed at its locked cost; an unlocked ranged line uses its
  *  allowance ends; anything else is its live total. */
-function romEnvelope(line: CostLine): { low: number; high: number } {
+export function romEnvelope(line: CostLine): { low: number; high: number } {
   if (isLocked(line)) {
     const fixed = line.lockedCost != null ? line.lockedCost * lineMarkupFactor(line) : lineBaseline(line);
     return { low: fixed, high: fixed };
