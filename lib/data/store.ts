@@ -814,16 +814,17 @@ class Store {
   bulkSetMaterialTie(ids: string[], linkedScheduleId?: string) {
     this.mutate((db) => { db.materials.forEach((m) => { if (ids.includes(m.id)) m.linkedScheduleId = linkedScheduleId; }); });
   }
-  /** Designer signs off (or revokes) on a material selection. */
-  /** Designer or Owner sign-off (two independent approvers). */
-  setMaterialApproved(id: string, approved: boolean, by: string, kind: "designer" | "owner" = "designer") {
+  /** The owner signs off (or revokes) a material selection. The designer
+   *  signature was retired — the designer works from drawings, not the
+   *  materials list, so a second signature nobody could give left 74 of 77
+   *  materials waiting on a gate that could never close. */
+  setMaterialApproved(id: string, approved: boolean, by: string) {
     this.mutate((db) => {
       const m = db.materials.find((x) => x.id === id);
       if (!m) return;
-      if (kind === "owner") m.ownerApproved = approved;
-      else m.designerApproved = approved;
-      if (m.designerApproved && m.ownerApproved) m.approvalRequested = false;
-      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} (${kind}) approved "${m.item}".` });
+      m.ownerApproved = approved;
+      if (approved) m.approvalRequested = false;
+      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} approved "${m.item}".` });
     });
   }
   requestMaterialApproval(id: string, by: string) {
@@ -831,8 +832,6 @@ class Store {
       const m = db.materials.find((x) => x.id === id);
       if (!m) return;
       m.approvalRequested = true;
-      const designer = db.users.find((u) => u.role === "viewer");
-      this.notify(db, { toUserId: designer?.id, toRole: designer ? undefined : "viewer", kind: "info", message: `🎨 ${by} requests designer approval for "${m.item}".` });
       this.notify(db, { toRole: "owner", kind: "info", message: `🏠 ${by} requests owner approval for "${m.item}".` });
     });
   }

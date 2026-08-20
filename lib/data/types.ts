@@ -496,9 +496,12 @@ export interface Material {
   linkedScheduleId?: string; // schedule task this gates
   imageUrl?: string; // product image (pulled from the spec URL)
   specs?: string; // product specs/notes pulled from the URL
-  designerApproved?: boolean; // designer sign-off
-  ownerApproved?: boolean; // owner sign-off (independent of the designer)
-  approvalRequested?: boolean; // approval requested from the approvers
+  /** @deprecated The designer signature was retired — materials need the owner's
+   *  sign-off only. Kept so the handful of materials that carry it keep their
+   *  history; nothing reads it. */
+  designerApproved?: boolean;
+  ownerApproved?: boolean; // the sign-off that matters
+  approvalRequested?: boolean; // owner approval requested
   /** Alternate product candidates (2-3) added by owner/builder for review. */
   options?: ProductOption[];
   /** Planning budget for this item, set before a product is chosen. */
@@ -1056,10 +1059,7 @@ export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
     // The designer works from the drawings, not the materials list. Materials are
-    // curated by the owner and builder. NOTE: the material approval flow still
-    // carries a "Designer" signature row (`designerApproved`) which only
-    // full_admin can now satisfy — if the designer seat is never used for
-    // materials, that gate should be retired rather than left unfillable.
+    // curated by the owner and builder, and sign-off is the owner's alone.
     materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
   },
 };

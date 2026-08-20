@@ -364,9 +364,8 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
   const db = store.db;
   const role = store.session.role;
   const name = store.session.displayName;
-  const canApproveDesigner = role === "viewer" || role === "full_admin"; // designer / admin
-  const canApproveOwner = role === "owner" || role === "full_admin"; // owner / admin
-  const canApproveAny = canApproveDesigner || canApproveOwner;
+  // One signature: the owner's. (The designer signature was retired.)
+  const canApproveOwner = role === "owner" || role === "full_admin";
   const linked = db.schedule.find((s) => s.id === mt.linkedScheduleId);
   const { over, dropProps } = useFileDrop(async (files) => { store.updateMaterial(mt.id, { imageUrl: await fileToDataURL(files[0]) }); }, { accept: (f) => f.type.startsWith("image/"), disabled: ro });
   // Live preview scraped from the product link (used when no image is saved yet).
@@ -452,14 +451,12 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
 
         <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 700 }}>Sign-offs:</span>
-            <ApprovalRow label="Designer" approved={!!mt.designerApproved} requested={!!mt.approvalRequested} canApprove={canApproveDesigner}
-              onApprove={() => store.setMaterialApproved(mt.id, true, name, "designer")} onRevoke={() => store.setMaterialApproved(mt.id, false, name, "designer")} />
+            <span style={{ fontSize: 12, fontWeight: 700 }}>Sign-off:</span>
             <ApprovalRow label="Owner" approved={!!mt.ownerApproved} requested={!!mt.approvalRequested} canApprove={canApproveOwner}
-              onApprove={() => store.setMaterialApproved(mt.id, true, name, "owner")} onRevoke={() => store.setMaterialApproved(mt.id, false, name, "owner")} />
+              onApprove={() => store.setMaterialApproved(mt.id, true, name)} onRevoke={() => store.setMaterialApproved(mt.id, false, name)} />
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            {!canApproveAny && !(mt.designerApproved && mt.ownerApproved) && <button className="btn btn-sm" onClick={() => store.requestMaterialApproval(mt.id, name)}>Request approval</button>}
+            {!canApproveOwner && !mt.ownerApproved && <button className="btn btn-sm" onClick={() => store.requestMaterialApproval(mt.id, name)}>Request approval</button>}
             <MsgButton kind="material" refId={mt.id} label={mt.item} href={`/materials?item=${mt.id}`} />
             <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => store.requestMaterialDetails(mt.id, name)}>❓ Request details</button>
           </div>
@@ -481,7 +478,7 @@ function ProductOptions({ mt, ro }: { mt: Material; ro: boolean }) {
   const role = store.session.role;
   const name = store.session.displayName;
   const canAdd = !ro && ["full_admin", "owner", "builder"].includes(role);
-  const canApprove = ["full_admin", "owner", "viewer"].includes(role);
+  const canApprove = ["full_admin", "owner"].includes(role);
   const opts = mt.options ?? [];
   const locked = materialLockedCost(mt);
   const [adding, setAdding] = useState(false);
@@ -499,7 +496,7 @@ function ProductOptions({ mt, ro }: { mt: Material; ro: boolean }) {
     <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, fontWeight: 700 }}>Product options ({opts.length}/3):</span>
-        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>owner &amp; builder propose · owner &amp; designer approve ONE</span>
+        <span style={{ fontSize: 11.5, color: "var(--muted)" }}>owner &amp; builder propose · the owner approves ONE</span>
         <span style={{ marginLeft: "auto", fontSize: 11.5, display: "inline-flex", alignItems: "center", gap: 6 }}>
           <span style={{ color: "var(--muted)" }}>Budget</span>
           {locked != null

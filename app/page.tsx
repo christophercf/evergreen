@@ -86,7 +86,7 @@ export default function Dashboard() {
                   <strong>{m.item}</strong>{(m.qty ?? 1) > 1 ? <span style={{ color: "var(--muted)" }}> ×{m.qty}</span> : null}
                   <span style={{ color: "var(--muted)" }}> · {m.roomLabel ?? "—"}{m.tradeId ? ` · ${tradeName(db, m.tradeId)}` : ""}</span>
                 </span>
-                <span style={{ color: "var(--muted)", fontSize: 11.5 }}>{m.designerApproved && m.ownerApproved ? "✓ approved" : (m.designerApproved || m.ownerApproved) ? "partly approved" : "needs approval"}</span>
+                <span style={{ color: "var(--muted)", fontSize: 11.5 }}>{m.ownerApproved ? "✓ approved" : "needs approval"}</span>
                 <span style={{ color: "var(--sage-2)", fontSize: 11.5, fontVariantNumeric: "tabular-nums" }}>📦 {due}{lastWk && <span style={{ color: "var(--brass-2)", fontWeight: 700 }}> · last wk</span>}</span>
               </div>
             ))}
