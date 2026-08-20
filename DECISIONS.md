@@ -62,3 +62,37 @@ and this entry changes.*
   lines, so some will not map cleanly. Show the mapping before writing anything.
 - A draw spanning several trades has no home in the design's model. Find those
   in the live data and show what they would become.
+
+---
+
+## 03 — Who sees money, and who moves it
+**Decided 2026-08-20 · Chris**
+
+Three separate things, separated deliberately:
+
+**The budget is shared.** Emily, the GC and admin all see Budget Management —
+the ROM screen: agreed, committed, paid, remaining, variance. This is the
+common ground the job is run from.
+
+**Draws are the GC's to manage.** Building a draw and releasing it sits with
+the builder, on the package. The owner does not assemble draws.
+
+**The owner sees the outcome, not the machinery.** What a draw does to a line —
+paid, remaining — surfaces in the budget. That is how Chris and Emily read
+draw activity: through its effect on the money, not through a draws console.
+
+**Funding stays a tab, and stays owner-only.** Emily and Chris; the GC does not
+see it. It holds household financial position — the Kennoway sale, the purchase
+loan, the home loan, a retirement repayment, the DJ loan and the HELOC — plus
+the advisory naming which source gets tapped next. Showing a contractor exactly
+what an owner can afford weakens the owner across every later change-order
+conversation. The permission boundary therefore stays on a route, never a
+section inside a screen the GC can open.
+
+**This settles an open contradiction in the design** (unspecified item 08): the
+package Draws tab gates release on `builder || admin`, while the owner's
+approval queue exposes the same write with no role check. The rule is now:
+**the GC releases; the owner gates.** Emily's power over money is the draw
+approval and the QC counter-signature — the builder signs first, she signs
+second, and that second signature is what makes a draw releasable at all.
+Nothing is releasable until both have signed.
