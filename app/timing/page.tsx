@@ -7,7 +7,7 @@ import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import {
   accessFor, isArchitectUser, SCHEDULE_LABEL, type ScheduleItem, type ScheduleStatus, type MacroCategory,
 } from "@/lib/data/types";
-import { tradeName, MACRO_COLOR, MACRO_ORDER } from "@/lib/data/money";
+import { tradeName, MACRO_COLOR, MACRO_ORDER, romRows, fmt } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
 import { conversationKeyOf, conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
 
@@ -397,13 +397,19 @@ function AddTimelineItem() {
   const [end, setEnd] = useState("");
   const [deps, setDeps] = useState<string[]>([]);
   const [matDeps, setMatDeps] = useState<string[]>([]);
+  const [budgetKey, setBudgetKey] = useState("");
+  const [budgetNote, setBudgetNote] = useState("");
   const milestone = kind === "milestone";
-  const ready = !!label.trim() && !!start && (milestone || (!!end && end >= start));
+  // Work is spend against a line somebody agreed, so a work task has to say
+  // which one. A milestone is a date, not spend, so it does not.
+  const budgetLines = romRows(db);
+  const needsBudget = kind === "work";
+  const ready = !!label.trim() && !!start && (milestone || (!!end && end >= start)) && (!needsBudget || !!budgetKey);
 
   const add = () => {
     if (!ready) return;
-    store.addScheduleItem({ label, kind, tradeId: tradeId || undefined, start, end: milestone ? start : end, deps, materialDeps: matDeps });
-    setLabel(""); setStart(""); setEnd(""); setDeps([]); setMatDeps([]); setOpen(false);
+    store.addScheduleItem({ label, kind, tradeId: tradeId || undefined, start, end: milestone ? start : end, deps, materialDeps: matDeps, budgetKey: budgetKey || undefined, budgetNote });
+    setLabel(""); setStart(""); setEnd(""); setDeps([]); setMatDeps([]); setBudgetKey(""); setBudgetNote(""); setOpen(false);
   };
   const cell = (l: string, node: React.ReactNode) => (
     <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
@@ -432,9 +438,30 @@ function AddTimelineItem() {
           {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
         </select>
       ))}
+      {needsBudget && cell("Budget line", (
+        <select value={budgetKey}
+          onChange={(e) => {
+            setBudgetKey(e.target.value);
+            // Picking the line names the trade too — they cannot disagree.
+            const row = budgetLines.find((b) => b.key === e.target.value);
+            if (row) setTradeId(row.tradeId);
+          }}
+          style={{ minWidth: 200, borderColor: budgetKey ? undefined : "var(--brass)" }}>
+          <option value="">Choose the line this spends…</option>
+          {budgetLines.map((b) => (
+            <option key={b.key} value={b.key}>{b.label} — {fmt(b.total || b.romFigure)}</option>
+          ))}
+        </select>
+      ))}
+      {needsBudget && cell("On that line, this is", (
+        <input placeholder="e.g. Finish electric" value={budgetNote}
+          onChange={(e) => setBudgetNote(e.target.value)} style={{ minWidth: 170 }} />
+      ))}
       {cell(milestone ? "Date" : "Start", <input type="date" value={start} onChange={(e) => setStart(e.target.value)} />)}
       {!milestone && cell("Finish", <input type="date" value={end} min={start || undefined} onChange={(e) => setEnd(e.target.value)} />)}
-      <button className="btn btn-primary btn-sm" disabled={!ready} onClick={add}>Add to timeline</button>
+      <button className="btn btn-primary btn-sm" disabled={!ready} onClick={add}>
+        {needsBudget && !budgetKey && label.trim() ? "Pick a budget line" : "Add to timeline"}
+      </button>
       <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
 
       {/* Dependencies: other timeline items and/or materials this waits on. */}
@@ -610,6 +637,20 @@ function Drilldown({ item, editing, canEdit, onJump, onCascade }: { item: Schedu
         {item.assignedUserId && <ConfirmBadge item={item} />}
         <MsgButton kind="timing" refId={item.id} label={item.label} href={`/timing?task=${item.id}`} small />
       </div>
+
+      {/* Which money this task spends, and what it is within that line. */}
+      {item.budgetKey ? (() => {
+        const row = romRows(db).find((b) => b.key === item.budgetKey);
+        if (!row) return null;
+        return (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginTop: 6, fontSize: 12 }}>
+            <span style={{ fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>Budget line</span>
+            <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>{row.label}</Link>
+            {item.budgetNote ? <span style={{ color: "var(--muted)" }}>· {item.budgetNote}</span> : null}
+            <span style={{ color: "var(--muted)" }}>· {fmt(row.total || row.romFigure)} total, {fmt(row.paid)} paid</span>
+          </div>
+        );
+      })() : null}
 
       {canEdit && editing ? (
         <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap", marginTop: 12 }}>

@@ -784,7 +784,7 @@ class Store {
   }
 
   // ---- Schedule: add new timeline items (owner / builder / full admin) ----
-  addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string; deps?: string[]; materialDeps?: string[] }) {
+  addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string; deps?: string[]; materialDeps?: string[]; budgetKey?: string; budgetNote?: string }) {
     if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
     if (!item.label.trim() || !item.start || !item.end) return;
     this.mutate((db) => {
@@ -802,6 +802,9 @@ class Store {
         origEnd: item.end,
         deps: item.deps?.length ? item.deps : undefined,
         materialDeps: item.materialDeps?.length ? item.materialDeps : undefined,
+        // Work is spend against a line that was agreed, so the task names it.
+        budgetKey: item.budgetKey || undefined,
+        budgetNote: item.budgetNote?.trim() || undefined,
         assignedUserId: tradeUser?.id,
         // A trade on the hook must confirm the proposed dates, same as edits.
         confirm: tradeUser ? "pending" : "confirmed",

@@ -898,6 +898,14 @@ export interface ScheduleItem {
   materialDeps?: string[];
   /** Trade person responsible (for confirmation + notifications). */
   assignedUserId?: string;
+  /** The budget line this task belongs to, as `tradeId::markupModel`. A task is
+   *  work against money that was agreed, so it names the line it draws on
+   *  rather than leaving the connection to be inferred from the trade. */
+  budgetKey?: string;
+  /** What this task is, within that line — "Finish electric", "Rough-in". A
+   *  budget line usually takes several visits, and this is what tells them
+   *  apart on the schedule. */
+  budgetNote?: string;
   /** Dates the trade has confirmed — what the owner sees. */
   confirmedStart?: string;
   confirmedEnd?: string;
