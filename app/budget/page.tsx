@@ -89,7 +89,7 @@ export default function BudgetPage() {
   return (
     <>
       <PageHeader
-        title="Owners Funding Management"
+        title="Funding"
         subtitle="Owner-only. Pulls the all-in cost from Project Budget, then helps you fund it for the least carrying cost — spend free cash before high-interest debt."
         right={<div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {!ro && <button className="btn btn-sm" disabled={!store.canUndo} onClick={() => store.undo()} title="Undo the last budget change">↶ Undo</button>}

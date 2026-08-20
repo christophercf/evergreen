@@ -13,22 +13,48 @@ import {
   HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon,
 } from "./icons";
 
-type NavItem = { href: string; label: string; mod: ModuleKey; Icon: (p: any) => React.ReactElement; phase2?: boolean };
+type Band = "job" | "reference";
+type NavItem = { href: string; label: string; mod: ModuleKey; band: Band; Icon: (p: any) => React.ReactElement; phase2?: boolean };
 
-// "Administrative" lives behind the header ⚙ gear now, not in the main nav.
+// Labels follow one rule: a VENDOR is a company, a PACKAGE is a scope of work on
+// this house, a CONTRACT is a vendor awarded a package. "Trade" is only ever a
+// category on a vendor — never a container, never a nav item. That confusion is
+// what made people invent duplicate trades ("Windows — Diverse") to hold a
+// second vendor.
+//
+// The bands sort by frequency of use, not by domain: the job you are doing,
+// then the things you look up. "Administrative" stays behind the header ⚙.
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", mod: "dashboard", Icon: HomeIcon },
-  { href: "/updates", label: "Messenger", mod: "updates", Icon: ChatIcon },
-  // Bidding comes BEFORE the budget: scopes → competing bids → award → Project Budget.
-  { href: "/bids", label: "Bid Management", mod: "bids", Icon: ClipboardIcon },
-  { href: "/costs", label: "Project Budget", mod: "costs", Icon: CoinsIcon },
-  { href: "/payments", label: "Payment & Draw Mgmt", mod: "payments", Icon: ReceiptIcon },
-  { href: "/budget", label: "Owners Funding Mgmt", mod: "budget", Icon: WalletIcon },
-  { href: "/timing", label: "Timing", mod: "timing", Icon: CalendarIcon },
-  { href: "/materials", label: "Materials", mod: "materials", Icon: BoxIcon },
-  { href: "/vendors", label: "Vendor Mgmt", mod: "vendors", Icon: UsersIcon },
-  { href: "/artifacts", label: "Artifacts", mod: "artifacts", Icon: FolderIcon },
+  { href: "/", label: "Today", mod: "dashboard", band: "job", Icon: HomeIcon },
+  { href: "/bids", label: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
+  // The three money routes sit adjacent so they can collapse into one Money
+  // module (Committed · Paid · Funded) without the nav moving again.
+  { href: "/costs", label: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
+  { href: "/payments", label: "Draws", mod: "payments", band: "job", Icon: ReceiptIcon },
+  { href: "/budget", label: "Funding", mod: "budget", band: "job", Icon: WalletIcon },
+  { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
+  { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
+  { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
+  { href: "/vendors", label: "Vendors", mod: "vendors", band: "reference", Icon: UsersIcon },
+  { href: "/artifacts", label: "Artifacts", mod: "artifacts", band: "reference", Icon: FolderIcon },
 ];
+
+const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference" };
+
+/** What each role opens on, and the order they meet things in. A role's first
+ *  item should be what that role actually does most — permission decides what is
+ *  reachable, this decides what comes first. Anything not listed keeps its
+ *  default order behind these. */
+const ROLE_ORDER: Partial<Record<Role, string[]>> = {
+  // Emily opens the app to approve one thing, then look at money.
+  owner: ["/", "/costs", "/budget", "/payments", "/materials", "/timing", "/updates"],
+  // Aaron runs the job: what needs attention, then the packages it lives in.
+  builder: ["/", "/bids", "/timing", "/materials", "/costs", "/payments", "/updates"],
+  // A vendor's world is their own contract, their dates and their materials.
+  trade: ["/vendors", "/timing", "/materials", "/updates"],
+  // The designer's real job is choosing materials.
+  viewer: ["/materials", "/bids", "/timing", "/artifacts"],
+};
 
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
 
@@ -54,10 +80,27 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   // So mock renders the app straight away; the live Supabase build still gates.
   if (!IS_MOCK && !store.session.authed) return <Landing />;
 
-  const visible = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
-  // Bottom tab bar (mobile): the four most-used tabs the role can see; the rest via ☰.
-  const BOTTOM = ["/", "/updates", "/costs", "/materials"];
-  const bottomNav = visible.filter((n) => BOTTOM.includes(n.href)).slice(0, 4);
+  // Absent, never greyed out: a role should not see a control it cannot use.
+  const permitted = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
+  // Role-shaped order — what this role does most comes first.
+  const order = ROLE_ORDER[role];
+  const rank = (n: NavItem) => {
+    const i = order?.indexOf(n.href) ?? -1;
+    return i === -1 ? 500 + NAV.indexOf(n) : i;
+  };
+  const visible = order ? [...permitted].sort((a, b) => rank(a) - rank(b)) : permitted;
+  // If a role's order names an item, it IS their job — whatever its default
+  // band. Otherwise a vendor's own contract sits under "Reference", which is the
+  // one screen they actually came for.
+  const bandOf = (n: NavItem): Band => (order?.includes(n.href) ? "job" : n.band);
+  // Band headings only earn their space once there is enough nav to organise.
+  const showBands = visible.length > 3;
+  const bands: { band: Band; items: NavItem[] }[] = (["job", "reference"] as Band[])
+    .map((band) => ({ band, items: visible.filter((n) => bandOf(n) === band) }))
+    .filter((g) => g.items.length > 0);
+
+  // Bottom tab bar (mobile): the first four this role can use, in their order.
+  const bottomNav = visible.slice(0, 4);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -81,10 +124,18 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <nav style={{ padding: 10, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto" }}>
-          {visible.map((n) => {
+          {bands.map(({ band, items }) => (
+            <div key={band} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {showBands && (
+                <div style={{
+                  fontSize: 9.5, fontWeight: 700, letterSpacing: ".13em", textTransform: "uppercase",
+                  color: "#8f7f68", padding: "10px 11px 4px",
+                }}>{BAND_LABEL[band]}</div>
+              )}
+              {items.map((n) => {
             const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
-            // Vendors see their single contract, not a management console.
-            const label = n.mod === "vendors" && role === "trade" ? "Current Contract" : n.label;
+            // A vendor sees their own contract, not a management console.
+            const label = n.mod === "vendors" && role === "trade" ? "Your contract" : n.label;
             return (
               <Link
                 key={n.href}
@@ -103,7 +154,9 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 {n.phase2 && <span style={{ fontSize: 9, color: "#9a8e79", border: "1px solid #5a4d3c", borderRadius: 4, padding: "0 4px" }}>soon</span>}
               </Link>
             );
-          })}
+              })}
+            </div>
+          ))}
         </nav>
         <div style={{ marginTop: "auto", padding: 12, fontSize: 10.5, color: "#9a8e79", borderTop: "1px solid rgba(255,255,255,.08)" }}>
           {IS_MOCK ? "Mock mode · saved in this browser" : "Supabase · live"}
@@ -146,7 +199,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         {bottomNav.map(({ href, label, Icon }) => (
           <Link key={href} href={href} className={pathname === href ? "active" : undefined} onClick={() => setNavOpen(false)}>
             <Icon width={19} height={19} />
-            {href === "/" ? "Home" : href === "/costs" ? "Budget" : label}
+            {label}
           </Link>
         ))}
         <button onClick={() => setNavOpen(true)} aria-label="All tabs">

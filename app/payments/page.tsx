@@ -26,7 +26,7 @@ export default function PaymentsPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "payments");
   const [dragLine, setDragLine] = useState<string | null>(null);
-  if (access === "none") return <NoAccess module="Payment & Draw Management" />;
+  if (access === "none") return <NoAccess module="Draws" />;
   const ro = access !== "edit";
 
   const t = totals(db.costLines);
@@ -44,9 +44,9 @@ export default function PaymentsPage() {
   return (
     <>
       <PageHeader
-        title="Payment & Draw Management"
+        title="Draws"
         subtitle="Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then push a draw to issue trade contracts. Completed draws collapse to the bottom; the budget on the left tracks total → drawn → remaining live."
-        right={<div style={{ display: "flex", gap: 8 }}>{ro && <Pill color="var(--muted)">View only</Pill>}<Link href="/costs" className="btn btn-sm">Project Budget →</Link></div>}
+        right={<div style={{ display: "flex", gap: 8 }}>{ro && <Pill color="var(--muted)">View only</Pill>}<Link href="/costs" className="btn btn-sm">Budget →</Link></div>}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(155px,1fr))", gap: 12, marginTop: 16 }}>

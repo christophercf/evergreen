@@ -191,7 +191,7 @@ export default function TimingPage() {
     .map((s) => { const o = editSnapshot.current.get(s.id); return o && (o.start !== s.start || o.end !== s.end) ? { itemId: s.id, label: s.label, fromStart: o.start, fromEnd: o.end, toStart: s.start, toEnd: s.end } : null; })
     .filter(Boolean) as { itemId: string; label: string; fromStart: string; fromEnd: string; toStart: string; toEnd: string }[];
 
-  if (access === "none") return <NoAccess module="Timing" />;
+  if (access === "none") return <NoAccess module="the Schedule" />;
 
   const pending = visible.filter((s) => s.confirm === "pending");
   const notifs = store.notificationsFor(user, role).filter((n) => !n.read);
@@ -199,7 +199,7 @@ export default function TimingPage() {
   return (
     <>
       <PageHeader
-        title="Timing"
+        title="Schedule"
         subtitle={
           canEdit ? "Enter Edit mode to drag bars (move) or their right edge (length). Tick several rows to move them together. Publish to log the change with a reason, notify trades, and email the client."
           : ownerView ? "The approved construction schedule. You see dates once the trade has confirmed them."

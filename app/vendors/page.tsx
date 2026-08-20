@@ -106,7 +106,7 @@ export default function VendorsPage() {
   const role = store.session.role;
   const user = store.currentUser;
   const access = accessFor(user, role, "vendors");
-  if (access === "none") return <NoAccess module="Vendor Management" />;
+  if (access === "none") return <NoAccess module="Vendors" />;
 
   // Trades and designers/viewers are scoped to their own assigned trades —
   // they only see contracts for work assigned to them, never the whole roster.
@@ -134,7 +134,7 @@ export default function VendorsPage() {
         subtitle={role === "trade"
           ? "Your contract with the project: scope, terms, your requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."
           : "Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."}
-        right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Project Budget →</Link> : undefined}
+        right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Budget →</Link> : undefined}
       />
       <SectionTitle>{role === "trade" ? "Your Contract" : "Vendors & Contracts"}</SectionTitle>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>

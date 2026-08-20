@@ -133,7 +133,7 @@ export default function Dashboard() {
           </div>
         </div>
         {canSeeCosts && <div>
-          <SectionTitle right={<Link href="/payments" className="btn btn-sm">Payments →</Link>}>Draws &amp; Payments</SectionTitle>
+          <SectionTitle right={<Link href="/payments" className="btn btn-sm">Draws →</Link>}>Draws &amp; Payments</SectionTitle>
           <div className="card" style={{ padding: 16 }}>
             <Row label="Paid to date" value={fmt(paidTotal)} />
             <Row label="Remaining to fund" value={fmt(remaining)} />
@@ -196,7 +196,7 @@ function TradeDashboard() {
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 8 }} className="ever-two">
         <div>
-          <SectionTitle right={<Link href="/timing" className="btn btn-sm">Timing →</Link>}>My Schedule</SectionTitle>
+          <SectionTitle right={<Link href="/timing" className="btn btn-sm">Schedule →</Link>}>My Schedule</SectionTitle>
           <div className="card" style={{ padding: 12 }}>
             {tasks.length ? tasks.slice(0, 8).map((s) => (
               <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: 12.5 }}>

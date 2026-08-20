@@ -45,7 +45,7 @@ export default function BidsPage() {
   const [pkgId, setPkgId] = useState<string | null>(null);
   const [step, setStep] = useState(0);
 
-  if (access === "none") return <NoAccess module="Bid Management" />;
+  if (access === "none") return <NoAccess module="Packages" />;
   const ro = access !== "edit";
   const packages = db.bidPackages ?? [];
   const pkg = packages.find((p) => p.id === pkgId);
@@ -59,9 +59,9 @@ export default function BidsPage() {
   return (
     <>
       <PageHeader
-        title="Bid Management"
+        title="Packages"
         subtitle="Competitive bids gathered and compared before a number goes into the budget."
-        right={<Link href="/costs" className="btn btn-sm">Project Budget →</Link>}
+        right={<Link href="/costs" className="btn btn-sm">Budget →</Link>}
       />
 
       <div className="ever-bidshell" style={{ marginTop: 16 }}>

@@ -143,7 +143,7 @@ export default function UpdatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selConv?.key, selConv?.lastAt]);
 
-  if (access === "none") return <NoAccess module="Messenger" />;
+  if (access === "none") return <NoAccess module="Messages" />;
 
   // ---- filters ----
   const tradesUsed = db.trades.filter((t) => db.users.some((u) => u.tradeIds?.includes(t.id)));
@@ -207,7 +207,7 @@ export default function UpdatesPage() {
 
   return (
     <>
-      <PageHeader title="Messenger" subtitle="Chat with the people on your project — photos, voice-to-text, and messages linked to materials, costs, tasks & documents." />
+      <PageHeader title="Messages" subtitle="Chat with the people on your project — photos, voice-to-text, and messages linked to materials, costs, tasks & documents." />
 
       <div className="msgr card" data-pane={sel ? "chat" : "list"} style={{ marginTop: 14, padding: 0, display: "grid", gridTemplateColumns: "330px 1fr", overflow: "hidden", height: "calc(100dvh - 235px)", minHeight: 420 }}>
         {/* ---------------- list pane ---------------- */}
