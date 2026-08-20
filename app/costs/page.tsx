@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { MoneyTabs } from "../ui/money-tabs";
+import { RomTable } from "./rom-table";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
@@ -60,6 +61,7 @@ export default function CostsPage() {
         }
       />
       <MoneyTabs />
+      <RomTable />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Current Cost Range" value={br.low === br.high ? <Money value={br.high} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(br.low)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(br.high)}</span>} accent="var(--brass-2)" sub="low – high" />

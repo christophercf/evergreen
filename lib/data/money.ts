@@ -3,7 +3,7 @@
 // number, so Building Costs, the Budget, and the dashboard all agree.
 // ----------------------------------------------------------------------------
 
-import type { CostLine, DB, Draw, DrawAllocation, LinePhase, MacroCategory, Material, ScheduleItem } from "./types";
+import type { CostLine, CostOwner, DB, Draw, DrawAllocation, LinePhase, MacroCategory, Material, RomLine, ScheduleItem } from "./types";
 
 export function fmt(n: number, opts: { cents?: boolean } = {}): string {
   return n.toLocaleString("en-US", {
@@ -275,3 +275,120 @@ export const MACRO_COLOR: Record<MacroCategory, string> = {
   Exterior: "#7d8a4f",
   "Owner Items": "#b08a3e",
 };
+
+// ---------------------------------------------------------------------------
+// The ROM — derived, never stored twice.
+//
+// A ROM row is one trade. Its figures come from that trade's cost lines, so
+// the ROM cannot drift from the money it describes: the only thing the RomLine
+// itself holds is the owner's agreement and the assumption behind the figure.
+// ---------------------------------------------------------------------------
+
+export type RomRow = {
+  tradeId: string;
+  label: string;
+  lines: CostLine[];
+  /** Owner agreement — absent until a ROM line exists for this trade. */
+  rom?: RomLine;
+  committed: boolean;
+  /** The agreed envelope. A range agrees its ceiling. */
+  low: number;
+  high: number;
+  ranged: boolean;
+  /** Pre-markup cost to the trades, and what the owner ultimately carries. */
+  base: number;
+  markup: number;
+  allIn: number;
+  /** True when the trade's lines do not share one markup treatment, so no
+   *  single label ("20% on top" / "in fee") tells the truth about the row. */
+  mixedMarkup: boolean;
+  markupLabel: string;
+  owner: CostOwner | "mixed";
+  category: MacroCategory;
+  /** Under contract: the locked lines, plus approved change orders. */
+  underContract: number;
+  changeOrders: number;
+  paid: number;
+  remaining: number;
+  lockedCount: number;
+  /** Only meaningful once committed — nothing is measured against a figure the
+   *  owner has not agreed to. Positive means above the agreed ceiling. */
+  variance: number | null;
+};
+
+/** One row per trade that has cost lines, richest first. */
+export function romRows(db: DB): RomRow[] {
+  const byTrade = new Map<string, CostLine[]>();
+  for (const l of db.costLines) {
+    const k = l.tradeId || "__none";
+    if (!byTrade.has(k)) byTrade.set(k, []);
+    byTrade.get(k)!.push(l);
+  }
+
+  const rows: RomRow[] = [];
+  for (const [tradeId, lines] of byTrade) {
+    const rom = (db.rom ?? []).find((r) => r.tradeId === tradeId);
+    const models = new Set(lines.map((l) => l.markupModel));
+    const owners = new Set(lines.map((l) => l.owner));
+    const mixedMarkup = models.size > 1;
+
+    const base = lines.reduce((a, l) => a + lineBase(l), 0);
+    const allIn = lines.reduce((a, l) => a + lineTotal(l), 0);
+    const low = rom?.agreedLow ?? lines.reduce((a, l) => a + lineLow(l), 0);
+    const high = rom?.agreedHigh ?? lines.reduce((a, l) => a + lineHigh(l), 0);
+
+    const locked = lines.filter((l) => isLocked(l));
+    const changeOrders = lines.reduce((a, l) => a + approvedNetChange(l), 0);
+    const underContract = locked.reduce((a, l) => a + lineTotal(l), 0) + changeOrders;
+    const paid = lines.reduce((a, l) => a + linePaid(db, l), 0);
+
+    const pct = lines.find((l) => l.markupModel === "passthrough")?.markupPct;
+    const markupLabel = mixedMarkup
+      ? "mixed"
+      : models.has("passthrough") ? `${pct ?? 0}% on top` : "in fee";
+
+    rows.push({
+      tradeId, label: tradeName(db, tradeId), lines, rom,
+      committed: !!rom?.committed,
+      low, high, ranged: low !== high,
+      base, markup: allIn - base, allIn,
+      mixedMarkup, markupLabel,
+      owner: owners.size > 1 ? "mixed" : (lines[0]?.owner ?? "builder"),
+      category: lines[0]?.category ?? "Soft Costs",
+      underContract, changeOrders, paid,
+      remaining: Math.max(0, underContract - paid),
+      lockedCount: locked.length,
+      // A draft line carries no variance at all: nothing is being measured
+      // against a number the owner has not agreed to.
+      variance: rom?.committed ? (allIn > high ? allIn - high : allIn < low ? allIn - low : 0) : null,
+    });
+  }
+  return rows.sort((a, b) => b.allIn - a.allIn);
+}
+
+export function romTotals(db: DB) {
+  const rows = romRows(db);
+  const sum = (f: (r: RomRow) => number) => rows.reduce((a, r) => a + f(r), 0);
+  const committed = rows.filter((r) => r.committed);
+  return {
+    rows: rows.length,
+    committedRows: committed.length,
+    /** The agreed ceiling across committed lines — what the owner has signed up to. */
+    agreed: committed.reduce((a, r) => a + r.high, 0),
+    allIn: sum((r) => r.allIn),
+    base: sum((r) => r.base),
+    markup: sum((r) => r.markup),
+    underContract: sum((r) => r.underContract),
+    changeOrders: sum((r) => r.changeOrders),
+    paid: sum((r) => r.paid),
+    remaining: sum((r) => r.remaining),
+    /** Only across priced, committed trades — the rest is not being measured. */
+    variance: committed.reduce((a, r) => a + (r.variance ?? 0), 0),
+  };
+}
+
+/** Every ROM line committed is the precondition for throwing the lock. */
+export function romCanLock(db: DB): boolean {
+  const rows = romRows(db);
+  return !db.romLocked && rows.length > 0 && rows.every((r) => r.committed);
+}

@@ -1003,6 +1003,36 @@ export interface Project {
   builderMarkupPct: number;
 }
 
+// ---------------------------------------------------------------------------
+// The ROM — rough order of magnitude.
+//
+// Three phases, in order: the builder drafts a figure per trade, the OWNER
+// commits each line (committing a range agrees its ceiling), and once every
+// line is committed the ROM locks and does not move again. From there the
+// budget is negotiated inside the packages — which may land above or below
+// their line — and a signed package changes only through a change order.
+//
+// A RomLine deliberately stores ONLY what cannot be derived: the owner's
+// agreement, and the assumption behind the figure. Every number — low, high,
+// base, markup, all-in, committed, paid — is computed from that trade's cost
+// lines, so the ROM is an agreement layer over the real money rather than a
+// second copy of it that can drift.
+// ---------------------------------------------------------------------------
+export interface RomLine {
+  id: string;
+  /** One ROM line per trade. Trades with several cost lines roll up into one. */
+  tradeId: string;
+  /** The owner has agreed this line. For a range, that agrees its ceiling. */
+  committed: boolean;
+  committedOn?: string;
+  committedBy?: string;
+  /** What the estimate assumes — the sentence that explains the figure. */
+  note?: string;
+  /** Set only when the owner agrees a figure different from the derived one. */
+  agreedLow?: number;
+  agreedHigh?: number;
+}
+
 export interface DB {
   project: Project;
   users: User[];
@@ -1025,6 +1055,14 @@ export interface DB {
   updates: SiteUpdate[];
   bidPackages: BidPackage[];
   tradeRatings: TradeRating[];
+  /** The ROM: one agreement row per trade. Absent on databases saved before it
+   *  existed, so every reader must tolerate undefined. */
+  rom?: RomLine[];
+  /** Thrown once every ROM line is committed. After this the ROM does not move
+   *  and the budget is argued inside the packages. */
+  romLocked?: boolean;
+  romLockedAt?: string;
+  romLockedBy?: string;
 }
 
 // ---- Session ----------------------------------------------------------------
