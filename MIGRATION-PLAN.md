@@ -5,6 +5,25 @@ Reviewed: `README.md`, `github.md`, the UX review, and the prototype
 
 **Verdict: adopt it, in their order, with three changes and one thing done first.**
 
+---
+
+## 0. The rule this plan runs under
+
+Set by Chris on 2026-08-20, and it overrides anything below that conflicts:
+
+1. **The design document defines the workflow.** Build the flow the design
+   specifies, not the flow the current app happens to have.
+2. **Use the existing app's data.** The prototype's seed is fake and is never
+   imported; live data is preserved.
+3. **Gaps are approved one at a time.** Where the current app has a feature the
+   design document does not cover, it is neither carried forward silently nor
+   dropped silently — it is raised as a single keep/drop decision.
+
+The design document is knowingly incomplete ("a lot of the design details are
+totally missing"), so its silence is not an instruction. Every silence that
+collides with a working feature is a question, and `GAP-REGISTER.md` is where
+those questions live.
+
 The review is unusually well grounded — they read the actual tree, and their
 model of `money.ts`, the lock semantics and the timing behaviour is accurate.
 I verified every file and claim they cite; all check out. Two of their open
