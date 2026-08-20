@@ -138,3 +138,48 @@ was re-read for concurrent writes before writing.
 
 Verified after: 39 cost lines, 77 materials, 19 messages, 11 funding sources,
 6 packages, no Test Drywall.
+
+---
+
+## 06 — Design for the persona "owner", never for a named person
+**Decided 2026-08-20 · Chris**
+
+Chris and Emily are **both owners**. Chris additionally holds `full_admin`
+because he is the developer, which is why he sees everything — that is a
+developer privilege, not an owner one. Emily is referred to as *the owner* from
+here on.
+
+**The rule:** design and write for the **role**, not the individual. There may
+be two owners today and a different set tomorrow; nothing in the product should
+assume otherwise.
+
+**Why this needs saying now.** The design document writes its copy in person
+names throughout — *"Draft — with Emily"*, *"Send to Emily"*, *"Waiting on
+Emily"*, *"Ask Emily"*, *"$X with Emily"*. Building from it verbatim would
+import a named individual into UI strings. The app's own copy currently has
+none of that (checked: only three code comments, since de-personalised, and a
+default session name in data).
+
+**How to build it:** copy is role-shaped, and where a name genuinely reads
+better it is **resolved from the user record at render time**, never written
+into the string. So the design's "Waiting on Emily" becomes "Waiting on the
+owner" — or the actual owner's name, pulled from data. Both owners see the
+right thing, and a change of owner does not require a copy change.
+
+---
+
+## 07 — The owner's home is the Dashboard. Approvals are a link, not a panel.
+**Decided 2026-08-20 · Chris**
+
+Settles the question left open by decision 04. The design makes the approval
+queue the owner's home screen; it is not. **Every role lands on the Dashboard**,
+and the current dashboard functionality is kept.
+
+**Approvals stay a real screen, reached from the dashboard by a link** — a count
+and a way through ("N items need your approval →"), not the approval cards
+themselves rendered inline. The queue is where a decision gets made; the
+dashboard only says one is waiting.
+
+**Why it is not simply the design's Today.** Today is an action queue whose goal
+is to empty. The dashboard is a standing view of the job. Chris wants the
+standing view, with the action queue one click away rather than in place of it.

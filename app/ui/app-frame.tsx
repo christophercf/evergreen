@@ -44,7 +44,7 @@ const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference
 
 // The three routes behind the single "Money" item, and which one each role lands
 // on: the owner's question is "is it covered?", the builder's is "what has been
-// paid?", and Chris wants all three so he starts at what we promised.
+// paid?", and a full admin wants all three, so they start at what we promised.
 const MONEY_ROUTES = ["/costs", "/payments", "/budget"];
 const MONEY_HOME: Partial<Record<Role, string>> = { owner: "/budget", builder: "/payments" };
 
@@ -53,9 +53,9 @@ const MONEY_HOME: Partial<Record<Role, string>> = { owner: "/budget", builder: "
  *  reachable, this decides what comes first. Anything not listed keeps its
  *  default order behind these. */
 const ROLE_ORDER: Partial<Record<Role, string[]>> = {
-  // Emily opens the app to approve one thing, then look at money.
+  // The owner opens the app to approve one thing, then look at money.
   owner: ["/", "/costs", "/materials", "/timing", "/updates"],
-  // Aaron runs the job: what needs attention, then the packages it lives in.
+  // The builder runs the job: what needs attention, then the packages it lives in.
   builder: ["/", "/bids", "/timing", "/materials", "/costs", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
