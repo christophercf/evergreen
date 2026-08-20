@@ -183,3 +183,79 @@ dashboard only says one is waiting.
 **Why it is not simply the design's Today.** Today is an action queue whose goal
 is to empty. The dashboard is a standing view of the job. Chris wants the
 standing view, with the action queue one click away rather than in place of it.
+
+---
+
+## 08 — Keep both markup models
+**Decided 2026-08-20 · Chris**
+
+Per-line markup survives in full: **pass-through + markup** (base × markup%,
+disclosed to the owner) and **black-box / in-fee** (the margin sits inside the
+number and contributes 0 to the visible markup), plus the global builder-markup
+control and the per-line override for owner-carried lines.
+
+The design's ROM carries markup but only one model — its `markupModel` field
+exists, its screen shows a single `markup label` per row, and `blackbox` is
+handled as "In fee" text rather than as a real second mode. The app's two-model
+version is richer and stays.
+
+**Blocks nothing now:** this was the gap holding up the ROM table, since a
+ROM row has to show base, markup and all-in separately, and it can only do that
+if it knows which model a line uses. Answered — the ROM table carries both.
+
+---
+
+## 09 — Terms become their own admin module, managed by whoever manages the trade
+**Decided 2026-08-20 · Chris**
+
+The terms engine is promoted out of the Trade Scope tab into a **module of its
+own, alongside the other administrative modules** (Rooms & Scope Matrix, Trade
+Scope, Team/Access/Billing).
+
+**The GC manages terms for their own trades.**
+
+*My reading, stated so it can be corrected:* terms follow trade management, the
+same way contracts already do in this app — a builder-managed trade signs
+builder↔trade, an owner-managed trade signs owner↔trade. So the GC edits terms
+for builder-managed trades, the owner for owner-managed ones, and full_admin
+for all. Today the gate is a flat admin/owner/builder with no per-trade scoping.
+
+**Against the design:** the design document has no terms engine at all — one
+README sentence describing clause sets, per-trade exclusions and additions,
+with nothing behind it. The app's working version is kept and given a better
+home.
+
+---
+
+## 10 — Keep AI price sourcing on materials
+**Decided 2026-08-20 · Chris**
+
+The ✨ sourcing flow stays: `/api/price` runs a live web search and returns real
+current US prices — vendor, product, price, direct link, plus rebates and
+incentives and a one-line recommendation — which can be written straight to a
+material's spec link or added as one of its three comparison options.
+
+Absent from the design document entirely. Kept because nothing in the re-cut
+replaces it and it does work no other part of the app does.
+
+---
+
+## 11 — Keep the drawing viewer. Drop markup. Add pan.
+**Decided 2026-08-20 · Chris**
+
+**Dropped:** the markup layer — comment / question / photo pins, the pin editor
+and its notes, resolve-and-reopen, the pin list, and the freehand scribble
+overlay. This is a deliberate removal of something the design *does* specify;
+the design's version is thinner than the app's, and neither is wanted.
+
+**Kept:** the viewer itself — opening a drawing full-size and reading it.
+
+**Added:** pan within the viewer, so a large drawing can be moved around rather
+than only fitted to the frame. Zoom comes with it; a pan control on a drawing
+that cannot be enlarged does not do anything useful.
+
+*Open, and asked rather than assumed:* the viewer also carries **scope view**
+(a trade's rooms shaded on the plan, with their scope and materials beside it)
+and **map rooms** (dragging a box to tie a room to an area of the drawing).
+Neither is annotation, and the design dropped both independently of this
+decision. Whether they go with the markup layer or stay is not settled here.
