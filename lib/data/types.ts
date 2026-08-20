@@ -1045,6 +1045,10 @@ export interface RomLine {
   committedBy?: string;
   /** What the estimate assumes — the sentence that explains the figure. */
   note?: string;
+  /** What to call this budget line. Defaults to the trade's name; overriding it
+   *  renames the line only, because the trade is still the trade everywhere
+   *  else — on the schedule, the materials list and the vendor roster. */
+  label?: string;
   /** Set only when the owner agrees a figure different from the derived one. */
   agreedLow?: number;
   agreedHigh?: number;

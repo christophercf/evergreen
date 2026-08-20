@@ -1228,6 +1228,17 @@ class Store {
     }, manager === "owner" ? "Now owner managed" : "Now GC managed");
   }
 
+  /** Rename a budget line. Clearing it falls back to the trade's own name. */
+  setBudgetLineLabel(tradeId: string, markupModel: MarkupModel, label: string) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      db.rom = db.rom ?? [];
+      let r = db.rom.find((x) => x.tradeId === tradeId && x.markupModel === markupModel);
+      if (!r) { r = { id: newId("rom"), tradeId, markupModel, committed: false }; db.rom.push(r); }
+      r.label = label.trim() || undefined;
+    }, "Name saved");
+  }
+
   /** Kill a budget line, put it on hold, or bring it back. A killed line is kept
    *  rather than deleted — the figure stops counting, but the record of it
    *  having existed does not disappear. */
