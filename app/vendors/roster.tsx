@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { vendorTrades, vendorCovers, VENDOR_DOC_LABEL, type ContactSheet, type VendorDoc } from "@/lib/data/types";
 import { fmt, tradeName } from "@/lib/data/money";
-import { PageHeader, Pill, StatCard } from "../ui/bits";
+import { PageHeader, Pill, StatCard, NumInput } from "../ui/bits";
 import { AddVendor } from "../admin/add-vendor";
 
 // ---------------------------------------------------------------------------
@@ -223,13 +223,15 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
   const db = store.db;
   const h = historyOf(db, c);
   const docs: VendorDoc[] = c.docs ?? [];
+  const covers = vendorTrades(c);
+  const set = (patch: Partial<ContactSheet>) => store.updateContactSheet(c.id, patch);
 
   return (
     <>
       <button className="btn btn-sm" style={{ marginBottom: 10 }} onClick={onBack}>← Back to the roster</button>
       <PageHeader
         title={c.company}
-        subtitle={vendorTrades(c).map((t) => tradeName(db, t)).join(" · ") || "No trades set — they will not appear for any bid package."}
+        subtitle={covers.map((t) => tradeName(db, t)).join(" · ") || "No trades set — they will not appear for any bid package."}
       />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 14 }}>
@@ -240,11 +242,14 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 16, marginTop: 18 }}>
         <div className="card" style={{ padding: 16 }}>
-          <Kick>Contact</Kick>
-          <Row k="Primary" v={c.contactName} />
-          <Row k="Phone" v={c.phone} />
-          <Row k="Email" v={c.email} />
-          <Row k="Office" v={[c.address, c.city].filter(Boolean).join(", ")} />
+          <Kick>Company &amp; contact</Kick>
+          <Field k="Company" v={c.company} ro={ro} onCommit={(v) => v.trim() && set({ company: v.trim() })} />
+          <Field k="Primary contact" v={c.contactName} ro={ro} onCommit={(v) => set({ contactName: v.trim() || undefined })} />
+          <Field k="Phone" v={c.phone} ro={ro} onCommit={(v) => set({ phone: v.trim() || undefined })} />
+          <Field k="Email" v={c.email} ro={ro} onCommit={(v) => set({ email: v.trim() || undefined })} />
+          <Field k="City" v={c.city} ro={ro} onCommit={(v) => set({ city: v.trim() || undefined })} />
+          <Field k="Address" v={c.address} ro={ro} onCommit={(v) => set({ address: v.trim() || undefined })} />
+          <Field k="Payment terms" v={c.paymentTerms} ro={ro} placeholder="Net 30" onCommit={(v) => set({ paymentTerms: v.trim() || undefined })} />
 
           <Kick style={{ marginTop: 16 }}>Insurance &amp; licence on file</Kick>
           <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "3px 0 6px" }}>
@@ -254,15 +259,38 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
             const d = docs.find((x) => x.kind === kind);
             const lapsed = expired(d?.expires);
             return (
-              <div key={kind} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--line)", fontSize: 12 }}>
-                <span>{VENDOR_DOC_LABEL[kind]}{d?.number ? ` · ${d.number}` : ""}</span>
-                <span style={{ color: lapsed ? "var(--rust)" : d?.expires ? "var(--ink)" : MUTED, fontWeight: lapsed ? 700 : 400 }}>
-                  {d?.expires ? `${lapsed ? "Lapsed " : "Expires "}${d.expires}` : "Not on file"}
-                </span>
+              <div key={kind} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "5px 0", borderBottom: "1px solid var(--line)", fontSize: 12, flexWrap: "wrap" }}>
+                <span style={{ minWidth: 140 }}>{VENDOR_DOC_LABEL[kind]}</span>
+                {ro ? (
+                  <span style={{ color: lapsed ? "var(--rust)" : d?.expires ? "var(--ink)" : MUTED, fontWeight: lapsed ? 700 : 400 }}>
+                    {d?.number ? `${d.number} · ` : ""}{d?.expires ? `${lapsed ? "Lapsed " : "Expires "}${d.expires}` : "Not on file"}
+                  </span>
+                ) : (
+                  <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    {kind === "license" ? (
+                      <input className="input" defaultValue={d?.number ?? ""} placeholder="Number"
+                        onBlur={(e) => store.setVendorDoc(c.id, kind, { number: e.target.value.trim() || undefined })}
+                        style={{ width: 110, fontSize: 12 }} />
+                    ) : null}
+                    <input className="input" type="date" defaultValue={d?.expires ?? ""}
+                      onBlur={(e) => store.setVendorDoc(c.id, kind, { expires: e.target.value || undefined })}
+                      style={{ fontSize: 12, borderColor: lapsed ? "var(--rust)" : undefined }} />
+                  </span>
+                )}
               </div>
             );
           })}
-          {c.docRoute ? (
+          {!ro ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+              {([["we_hold", "We hold them"], ["ask_vendor", "Vendor sends them"]] as const).map(([k, label]) => (
+                <button key={k} className="btn btn-sm" onClick={() => set({ docRoute: k })}
+                  style={{
+                    background: c.docRoute === k ? "var(--sage)" : undefined,
+                    color: c.docRoute === k ? "#fff" : undefined, fontWeight: c.docRoute === k ? 700 : 400,
+                  }}>{label}</button>
+              ))}
+            </div>
+          ) : c.docRoute ? (
             <div style={{ fontSize: 11.5, color: MUTED, marginTop: 7 }}>
               {c.docRoute === "we_hold" ? "We hold the certificates." : "The vendor sends the certificates."}
             </div>
@@ -270,26 +298,79 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
         </div>
 
         <div className="card" style={{ padding: 16 }}>
-          <Kick>Who holds this relationship</Kick>
+          <Kick>What they can work on</Kick>
+          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, margin: "3px 0 6px" }}>
+            This is the directory index — it decides which bid packages they appear for.
+          </div>
+          {ro ? (
+            <div style={{ fontSize: 12 }}>{covers.map((t) => tradeName(db, t)).join(" · ") || "—"}</div>
+          ) : (
+            <>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", maxHeight: 190, overflowY: "auto" }}>
+                {db.trades.map((t) => {
+                  const on = covers.includes(t.id);
+                  return (
+                    <button key={t.id} className="btn btn-sm"
+                      onClick={() => {
+                        const next = on ? covers.filter((x) => x !== t.id) : [...covers, t.id];
+                        set({ tradeIds: next, tradeId: next[0] });
+                      }}
+                      style={{
+                        background: on ? "var(--sage)" : undefined, color: on ? "#fff" : undefined,
+                        fontWeight: on ? 700 : 400, fontSize: 11.5,
+                      }}>{t.name}</button>
+                  );
+                })}
+              </div>
+              {!covers.length ? (
+                <div style={{ fontSize: 11.5, color: "var(--rust)", marginTop: 6 }}>
+                  No trades set — they will not appear for any bid package.
+                </div>
+              ) : null}
+            </>
+          )}
+
+          <Kick style={{ marginTop: 16 }}>Internal review</Kick>
+          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 5 }}>Never shared with the vendor.</div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <span style={{ display: "inline-flex", gap: 3 }}>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button key={n} disabled={ro} onClick={() => set({ rating: c.rating === n ? undefined : n })}
+                  title={`${n} of 5`}
+                  style={{
+                    width: 22, height: 22, borderRadius: 5, cursor: ro ? "default" : "pointer",
+                    border: `1px solid ${(c.rating ?? 0) >= n ? "var(--sage)" : "var(--line)"}`,
+                    background: (c.rating ?? 0) >= n ? "var(--sage)" : "var(--paper)",
+                    color: "#fff", fontSize: 11,
+                  }}>{(c.rating ?? 0) >= n ? "★" : ""}</button>
+              ))}
+            </span>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, color: MUTED }}>
+              jobs with us
+              {ro ? <strong style={{ color: "var(--ink)" }}>{c.jobsWithUs ?? 0}</strong>
+                : <NumInput value={c.jobsWithUs ?? 0} onCommit={(v) => set({ jobsWithUs: v || undefined })} width={64} />}
+            </label>
+          </div>
+
+          <Kick style={{ marginTop: 14 }}>Notes</Kick>
+          {ro ? (
+            <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 3 }}>{c.internalNote || <em style={{ color: MUTED }}>Nothing recorded.</em>}</div>
+          ) : (
+            <textarea className="input" defaultValue={c.internalNote ?? ""}
+              placeholder="How they actually work out — never shared"
+              onBlur={(e) => set({ internalNote: e.target.value.trim() || undefined })}
+              style={{ width: "100%", minHeight: 72, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }} />
+          )}
+
+          <Kick style={{ marginTop: 16 }}>Who holds this relationship</Kick>
           <div style={{ fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
             {c.tradeId && db.trades.find((t) => t.id === c.tradeId)?.managedBy === "owner"
               ? "Owner-managed. The owner contracts and pays them direct, and the builder takes no fee on their work."
               : "Builder-managed. The GC carries the contract and the fee."}
           </div>
-          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 6 }}>
-            They see their own contract, dates and materials. They never see another vendor&rsquo;s costs.
+          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 5 }}>
+            Set on the budget line, so the money and the relationship cannot disagree.
           </div>
-
-          <Kick style={{ marginTop: 16 }}>Internal notes</Kick>
-          <div style={{ fontSize: 11.5, color: MUTED, marginBottom: 4 }}>Never shared with the vendor.</div>
-          {ro ? (
-            <div style={{ fontSize: 12, lineHeight: 1.5 }}>{c.internalNote || <em style={{ color: MUTED }}>Nothing recorded.</em>}</div>
-          ) : (
-            <textarea className="input" defaultValue={c.internalNote ?? ""}
-              placeholder="How they actually work out — never shared"
-              onBlur={(e) => store.updateContactSheet(c.id, { internalNote: e.target.value })}
-              style={{ width: "100%", minHeight: 78, fontSize: 12.5, lineHeight: 1.5 }} />
-          )}
         </div>
       </div>
 
@@ -325,6 +406,22 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
         )}
       </div>
     </>
+  );
+}
+
+/** One labelled field, editable in place unless read-only. */
+function Field({ k, v, ro, placeholder, onCommit }: {
+  k: string; v?: string; ro: boolean; placeholder?: string; onCommit: (v: string) => void;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--line)", fontSize: 12 }}>
+      <span style={{ color: MUTED, minWidth: 110 }}>{k}</span>
+      {ro
+        ? <span style={{ textAlign: "right" }}>{v || "—"}</span>
+        : <input className="input" defaultValue={v ?? ""} placeholder={placeholder}
+            onBlur={(e) => onCommit(e.target.value)}
+            style={{ flex: 1, maxWidth: 230, fontSize: 12, textAlign: "right" }} />}
+    </div>
   );
 }
 
