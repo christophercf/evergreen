@@ -7,7 +7,7 @@
 
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
-  DrawingPin, FundingSource, LinePhase, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
+  CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
   BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
@@ -1150,6 +1150,50 @@ class Store {
         r.agreedHigh = undefined;
       }
     }, committed ? "Line committed" : "Agreement withdrawn");
+  }
+
+  /** Add a budget line. Before the ROM is locked it joins as a draft the owner
+   *  still has to agree. Once locked the ROM does not re-open, so the line goes
+   *  in already contracted and the owner is asked to approve it instead — the
+   *  work is real either way, and pretending otherwise just hides it. */
+  addBudgetLine(p: { tradeId: string; amount: number; note?: string; category?: MacroCategory }) {
+    if (!["full_admin", "builder", "owner"].includes(this.session.role)) return;
+    if (!p.tradeId || !(p.amount > 0)) return;
+    this.mutate((db) => {
+      const trade = db.trades.find((t) => t.id === p.tradeId);
+      const owner: CostOwner = trade?.managedBy === "owner" ? "owner" : "builder";
+      const locked = !!db.romLocked;
+      const today = new Date().toISOString().slice(0, 10);
+      const markupModel: MarkupModel = "passthrough";
+      const line: CostLine = {
+        id: newId("cl"), name: trade?.name ?? "New line", tradeId: p.tradeId,
+        category: p.category ?? trade?.category ?? "Soft Costs",
+        owner, roomIds: [], markupModel,
+        markupPct: owner === "owner" ? 0 : (db.project.builderMarkupPct ?? 20),
+        history: [{ label: locked ? "Added after ROM lock" : "Added to the ROM", date: today, amount: p.amount }],
+        status: locked ? "contracted" : "estimate",
+        changeOrders: [], phases: [],
+        desc: p.note?.trim() || undefined,
+        // A line added after the lock is contracted from the start.
+        locked, lockedCost: locked ? p.amount : undefined,
+        lockedAt: locked ? today : undefined,
+        lockedBy: locked ? this.session.displayName : undefined,
+        baseline: locked ? p.amount * (owner === "owner" ? 1 : 1 + (db.project.builderMarkupPct ?? 20) / 100) : undefined,
+      };
+      db.costLines.push(line);
+
+      db.rom = db.rom ?? [];
+      if (!db.rom.find((r) => r.tradeId === p.tradeId && r.markupModel === markupModel)) {
+        db.rom.push({ id: newId("rom"), tradeId: p.tradeId, markupModel, committed: false, note: p.note?.trim() || undefined });
+      }
+
+      if (locked) {
+        this.notify(db, {
+          toRole: "owner", kind: "info",
+          message: `Approval needed: "${line.name}" was added after the ROM was locked, contracted at $${p.amount.toLocaleString()}.`,
+        });
+      }
+    }, this.db.romLocked ? "Added — sent for approval" : "Line added to the ROM");
   }
 
   /** The assumption behind a figure — the sentence that explains it. */

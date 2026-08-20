@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { MoneyTabs } from "../ui/money-tabs";
-import { RomTable } from "./rom-table";
+import { BudgetLines } from "./budget-lines";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import {
@@ -52,7 +52,7 @@ export default function CostsPage() {
     <>
       <PageHeader
         title="Budget Management"
-        subtitle="What we have promised to spend. The builder roughs out the ROM here first; winning package bids promote in as locked lines. The locked baseline is your original budget — every change after that flows through a change order. All figures include builder markup."
+        subtitle="The money, one line per trade. The builder drafts a rough figure, the owner agrees it, and from there the price is settled inside the packages. A signed line moves only through a change order, and a line paid in full closes."
         right={
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {ro && <Pill color="var(--muted)">View only</Pill>}
@@ -61,78 +61,13 @@ export default function CostsPage() {
         }
       />
       <MoneyTabs />
-      <RomTable />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
-        <StatCard label="Current Cost Range" value={br.low === br.high ? <Money value={br.high} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(br.low)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(br.high)}</span>} accent="var(--brass-2)" sub="low – high" />
-        <StatCard label="Paid" value={<Money value={paidToDate} />} accent="var(--ok)" sub={`${Math.round((paidToDate / (br.high || 1)) * 100)}% of high`} />
-        <StatCard label="Remaining" value={remLow === remHigh ? <Money value={remHigh} /> : <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(remLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(remHigh)}</span>} sub="cost − paid" />
-        <StatCard label="Change Orders" value={<Money value={db.costLines.reduce((a, l) => a + approvedChanges(l), 0)} />} accent="var(--rust)" sub="approved adds" />
-        <StatCard label="Savings Found" value={<Money value={db.costLines.reduce((a, l) => a + approvedSavings(l), 0)} />} accent="var(--ok)" sub="approved credits" />
-        <StatCard label="Baseline" value={<Money value={t.baseline} />} sub={netChange ? `${netChange > 0 ? "▲" : "▼"} ${fmt(Math.abs(netChange))} vs current` : "on budget"} />
-      </div>
-
-      {br.low !== br.high && (
-        <div className="card" style={{ padding: "9px 14px", marginTop: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 12, color: "var(--muted)", borderLeft: "3px solid var(--sage)" }}>
-          🔒 Locked lines are fixed (counted in both ends of the range); unlocked estimates contribute their low–high spread. Lock a line to pin it.
-        </div>
-      )}
-
-      {/* Cumulative cost-over-time, building to the budget; change orders show their impact */}
+      {/* The time series leads: how the budget got to where it is, before the
+          lines that make it up. */}
       <SectionTitle>Cost Over Time</SectionTitle>
       <CostChart />
 
-      <SectionTitle>Project Mix</SectionTitle>
-      <div className="card" style={{ padding: 16 }}>
-        <StackBar height={13} segments={MACRO_ORDER.map((c) => ({ value: byCategory(db.costLines).find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 12, fontSize: 12 }}>
-          {MACRO_ORDER.map((c) => {
-            const v = byCategory(db.costLines).find((x) => x.key === c)?.total ?? 0;
-            if (!v) return null;
-            return <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: MACRO_COLOR[c] }} />{c} · <strong><Money value={v} /></strong></span>;
-          })}
-        </div>
-      </div>
-
-      {!ro && <BuilderMarkupControl />}
-      {!ro && <AddCostLine />}
-
-      <SectionTitle right={
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-          {([["all", "All"], ["paid", "✓ Paid"], ["partial", "◐ Part"], ["unpaid", "Unpaid"]] as const).map(([k, lbl]) => (
-            <button key={k} className="btn btn-sm" onClick={() => setPayFilter(k)} style={{ background: payFilter === k ? "var(--sage-tint)" : undefined, fontWeight: payFilter === k ? 700 : 400 }}>{lbl}</button>
-          ))}
-          <span style={{ width: 1, height: 16, background: "var(--line)" }} />
-          <button className="btn btn-sm" onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</button>
-          {(["category", "trade", "owner"] as GroupBy[]).map((g) => (
-            <button key={g} className="btn btn-sm" onClick={() => setGroup(g)} style={{ background: group === g ? "var(--sage-tint)" : undefined, fontWeight: 700 }}>by {g}</button>
-          ))}
-        </div>
-      }>
-        Cost Lines{payFilter !== "all" && <span style={{ fontSize: 12, fontWeight: 400, color: "var(--muted)" }}> · {shownLines.length} {payFilter}</span>}
-      </SectionTitle>
-
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {groups.map((grp) => {
-          const isCollapsed = collapsed.has(grp.key);
-          return (
-            <div key={grp.key}>
-              <div onClick={() => toggleGroup(grp.key)} style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 7px", cursor: "pointer" }}>
-                <span style={{ fontSize: 11, color: "var(--muted)", width: 12 }}>{isCollapsed ? "▸" : "▾"}</span>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: grp.color }} />
-                <h3 className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)" }}>{grp.label}</h3>
-                <span style={{ fontSize: 12, color: "var(--muted)" }}>{grp.lines.length} line{grp.lines.length === 1 ? "" : "s"}</span>
-                <span style={{ marginLeft: "auto", fontWeight: 700 }}><Money value={grp.lines.reduce((a, l) => a + lineCurrent(l), 0)} /></span>
-              </div>
-              {!isCollapsed && (
-                <div className="card" style={{ overflow: "hidden" }}>
-                  {grp.lines.map((l, i) => (<CostRow key={l.id} line={l} ro={ro} first={i === 0} />))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <BudgetLines />
 
     </>
   );

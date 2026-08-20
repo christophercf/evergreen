@@ -306,6 +306,21 @@ export type RomRow = {
   allIn: number;
   /** Actual cost now — the agreed envelope plus approved change orders. */
   current: number;
+  // ---- the columns, in the order they are read ----------------------------
+  /** What the owner agreed. Snapshot at commitment; does not drift. */
+  romFigure: number;
+  /** What we agreed with the builder for the work itself, before any fee. */
+  contracted: number;
+  /** The builder's fee on the contracted work. Zero on an owner-managed line. */
+  builderFee: number;
+  /** contracted + change orders + builder fee. */
+  total: number;
+  /** Released against this line. Comes from the draw module. */
+  draw: number;
+  /** Paid in full, so nothing moves until a change order re-opens it. */
+  complete: boolean;
+  /** No builder fee applies — the owner carries and pays this one directly. */
+  ownerManagedDirect: boolean;
   markupLabel: string;
   owner: CostOwner | "mixed";
   category: MacroCategory;
@@ -314,9 +329,8 @@ export type RomRow = {
   paid: number;
   remaining: number;
   lockedCount: number;
-  /** Only meaningful once committed — nothing is measured against a figure the
-   *  owner has not agreed to. Positive means above the agreed ceiling. */
-  variance: number | null;
+  /** Total − contracted: everything added since the contract was signed. */
+  variance: number;
 };
 
 /** The agreed envelope for one line, with approved change orders excluded.
@@ -370,6 +384,19 @@ export function romRows(db: DB): RomRow[] {
     const underContract = locked.reduce((a, l) => a + lineTotal(l), 0) + changeOrders;
     const paid = lines.reduce((a, l) => a + linePaid(db, l), 0);
 
+    // Contracted is the work itself, before any fee: what we agreed the builder
+    // would do it for. The fee is its own figure beside it, so the owner can see
+    // what she is paying for work and what she is paying for management.
+    const contracted = locked.reduce((a, l) => a + lineBase(l), 0);
+    const builderFee = locked.reduce((a, l) => a + (lineTotal(l) - lineBase(l)), 0);
+    const total = contracted + changeOrders + builderFee;
+    const draw = lines.reduce((a, l) => a + lineDrawn(db, l.id), 0);
+    // Paid in full closes the line. Nothing moves again until a change order
+    // re-opens it — which is the only thing that should be able to.
+    const complete = total > 0 && paid >= total - 0.5;
+    // No fee applies when the owner carries the line and pays the trade direct.
+    const ownerManagedDirect = lines.every((l) => l.owner === "owner");
+
     // Work already under contract is work the owner has already agreed to, so a
     // row whose every line is locked starts committed. A part-locked row does
     // not: the unlocked half is still a figure nobody has signed up to.
@@ -392,10 +419,14 @@ export function romRows(db: DB): RomRow[] {
       owner: owners.size > 1 ? "mixed" : (lines[0]?.owner ?? "builder"),
       category: lines[0]?.category ?? "Soft Costs",
       underContract, changeOrders, paid,
-      remaining: Math.max(0, underContract - paid),
+      remaining: Math.max(0, total - paid),
       lockedCount: locked.length,
       current,
-      variance: committed ? (current > high ? current - high : current < low ? current - low : 0) : null,
+      romFigure: high,
+      contracted, builderFee, total, draw, complete, ownerManagedDirect,
+      // The difference between what we contracted and what it now totals — i.e.
+      // everything added since the contract was signed.
+      variance: total - contracted,
     });
   }
   return rows.sort((a, b) => b.allIn - a.allIn);
@@ -414,14 +445,18 @@ export function romTotals(db: DB) {
     base: sum((r) => r.base),
     markup: sum((r) => r.markup),
     underContract: sum((r) => r.underContract),
+    contracted: sum((r) => r.contracted),
+    builderFee: sum((r) => r.builderFee),
+    total: sum((r) => r.total),
+    draw: sum((r) => r.draw),
+    romFigure: sum((r) => r.romFigure),
     /** Under contract across committed rows only, so it can be read against
      *  `agreed` without comparing two different sets of rows. */
     underContractCommitted: committed.reduce((a, r) => a + r.underContract, 0),
     changeOrders: sum((r) => r.changeOrders),
     paid: sum((r) => r.paid),
     remaining: sum((r) => r.remaining),
-    /** Only across priced, committed trades — the rest is not being measured. */
-    variance: committed.reduce((a, r) => a + (r.variance ?? 0), 0),
+    variance: rows.reduce((a, r) => a + r.variance, 0),
   };
 }
 
