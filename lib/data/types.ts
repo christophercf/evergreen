@@ -1055,8 +1055,12 @@ export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
-    // The designer curates the materials list — they add & assign for all trades.
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
+    // The designer works from the drawings, not the materials list. Materials are
+    // curated by the owner and builder. NOTE: the material approval flow still
+    // carries a "Designer" signature row (`designerApproved`) which only
+    // full_admin can now satisfy — if the designer seat is never used for
+    // materials, that gate should be retired rather than left unfillable.
+    materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
   },
 };
 

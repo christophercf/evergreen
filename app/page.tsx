@@ -15,6 +15,9 @@ export default function Dashboard() {
   // Cost visibility keys off the costs-module permission, not the role name —
   // the Designer is a "viewer" (not a trade) but still must never see money.
   const canSeeCosts = accessFor(user, role, "costs") !== "none";
+  // Today summarises other modules, so it has to respect their permissions —
+  // otherwise a role that can't open Materials still reads the whole queue here.
+  const canSeeMaterials = accessFor(user, role, "materials") !== "none";
   const [qPage, setQPage] = useState(0);
 
   const t = totals(db.costLines);
@@ -64,7 +67,7 @@ export default function Dashboard() {
         <StatCard label="QC Sign-offs" value={`${signed}/${items.length}`} sub="Owner + builder dual sign-off" />
       </div>
 
-      {queue.length > 0 && (() => {
+      {canSeeMaterials && queue.length > 0 && (() => {
         const PAGE = 8;
         const pages = Math.ceil(queue.length / PAGE);
         const page = Math.min(qPage, pages - 1);
@@ -163,6 +166,7 @@ function TradeDashboard() {
   const store = useStore();
   const db = store.db;
   const user = store.currentUser;
+  const canSeeMaterials = accessFor(user, store.session.role, "materials") !== "none";
   const mine = new Set(user?.tradeIds ?? []);
   const tradeNames = [...mine].map((t) => db.trades.find((x) => x.id === t)?.name ?? t).join(", ");
   const tasks = db.schedule.filter((s) => s.tradeId && mine.has(s.tradeId));
@@ -207,7 +211,7 @@ function TradeDashboard() {
             )) : <div style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>No tasks assigned to your trade yet.</div>}
           </div>
         </div>
-        <div>
+        {canSeeMaterials && <div>
           <SectionTitle right={<Link href="/materials" className="btn btn-sm">Materials →</Link>}>My Materials Due</SectionTitle>
           <div className="card" style={{ padding: 12 }}>
             {matsDue.length ? matsDue.slice(0, 8).map(({ m, days }) => (
@@ -218,7 +222,7 @@ function TradeDashboard() {
               </div>
             )) : <div style={{ fontSize: 13, color: "var(--muted)", padding: 8 }}>Nothing due — you’re clear.</div>}
           </div>
-        </div>
+        </div>}
       </div>
       <style>{`@media (max-width: 760px){ .ever-two{ grid-template-columns: 1fr !important; } }`}</style>
     </>

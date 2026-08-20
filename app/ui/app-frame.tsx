@@ -52,8 +52,8 @@ const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   builder: ["/", "/bids", "/timing", "/materials", "/costs", "/payments", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
-  // The designer's real job is choosing materials.
-  viewer: ["/materials", "/bids", "/timing", "/artifacts"],
+  // The designer works from the drawings and the programme, not materials.
+  viewer: ["/artifacts", "/timing", "/updates"],
 };
 
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
