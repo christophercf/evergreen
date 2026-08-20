@@ -3,7 +3,7 @@
 // number, so Building Costs, the Budget, and the dashboard all agree.
 // ----------------------------------------------------------------------------
 
-import type { CostLine, CostOwner, DB, Draw, DrawAllocation, LinePhase, MacroCategory, MarkupModel, Material, RomLine, ScheduleItem } from "./types";
+import type { BudgetLineState, CostLine, CostOwner, DB, Draw, DrawAllocation, LinePhase, MacroCategory, MarkupModel, Material, RomLine, ScheduleItem } from "./types";
 
 export function fmt(n: number, opts: { cents?: boolean } = {}): string {
   return n.toLocaleString("en-US", {
@@ -329,8 +329,10 @@ export type RomRow = {
   paid: number;
   remaining: number;
   lockedCount: number;
-  /** Total − contracted: everything added since the contract was signed. */
-  variance: number;
+  /** active / hold / removed. A removed line counts towards nothing. */
+  state: BudgetLineState;
+  /** Who fills in the contract figure, the change orders and the payments. */
+  manager: CostOwner;
 };
 
 /** The agreed envelope for one line, with approved change orders excluded.
@@ -396,6 +398,8 @@ export function romRows(db: DB): RomRow[] {
     const complete = total > 0 && paid >= total - 0.5;
     // No fee applies when the owner carries the line and pays the trade direct.
     const ownerManagedDirect = lines.every((l) => l.owner === "owner");
+    const state: BudgetLineState = rom?.state ?? "active";
+    const manager: CostOwner = ownerManagedDirect ? "owner" : "builder";
 
     // Work already under contract is work the owner has already agreed to, so a
     // row whose every line is locked starts committed. A part-locked row does
@@ -424,16 +428,16 @@ export function romRows(db: DB): RomRow[] {
       current,
       romFigure: high,
       contracted, builderFee, total, draw, complete, ownerManagedDirect,
-      // The difference between what we contracted and what it now totals — i.e.
-      // everything added since the contract was signed.
-      variance: total - contracted,
+      state, manager,
     });
   }
   return rows.sort((a, b) => b.allIn - a.allIn);
 }
 
 export function romTotals(db: DB) {
-  const rows = romRows(db);
+  const all = romRows(db);
+  // A removed line is kept on the record and counted in nothing.
+  const rows = all.filter((r) => r.state !== "removed");
   const sum = (f: (r: RomRow) => number) => rows.reduce((a, r) => a + f(r), 0);
   const committed = rows.filter((r) => r.committed);
   return {
@@ -456,12 +460,13 @@ export function romTotals(db: DB) {
     changeOrders: sum((r) => r.changeOrders),
     paid: sum((r) => r.paid),
     remaining: sum((r) => r.remaining),
-    variance: rows.reduce((a, r) => a + r.variance, 0),
+    removedRows: all.length - rows.length,
   };
 }
 
 /** Every ROM line committed is the precondition for throwing the lock. */
 export function romCanLock(db: DB): boolean {
-  const rows = romRows(db);
+  // A removed line is not waiting on anybody, so it does not hold up the lock.
+  const rows = romRows(db).filter((r) => r.state !== "removed");
   return !db.romLocked && rows.length > 0 && rows.every((r) => r.committed);
 }

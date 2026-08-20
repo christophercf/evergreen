@@ -7,7 +7,7 @@
 
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
-  CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
+  BudgetLineState, CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
   BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
@@ -1209,6 +1209,66 @@ class Store {
       if (!r) { r = { id: newId("rom"), tradeId, markupModel, committed: false }; db.rom.push(r); }
       r.note = note.trim() || undefined;
     });
+  }
+
+  /** Who manages this budget line. The manager is the one who fills in what it
+   *  is contracted at, raises its change orders and records what has been paid —
+   *  so this is the switch that decides who does all of that. An owner-managed
+   *  line carries no builder fee. */
+  setBudgetLineManager(tradeId: string, markupModel: MarkupModel, manager: CostOwner) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const lines = db.costLines.filter((l) => l.tradeId === tradeId && l.markupModel === markupModel);
+      for (const l of lines) {
+        l.owner = manager;
+        // The fee follows the manager: the builder does not take a fee on work
+        // the owner contracts and pays direct.
+        l.markupPct = manager === "owner" ? 0 : (db.project.builderMarkupPct ?? 20);
+      }
+    }, manager === "owner" ? "Now owner managed" : "Now GC managed");
+  }
+
+  /** Kill a budget line, put it on hold, or bring it back. A killed line is kept
+   *  rather than deleted — the figure stops counting, but the record of it
+   *  having existed does not disappear. */
+  setBudgetLineState(tradeId: string, markupModel: MarkupModel, state: BudgetLineState) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      db.rom = db.rom ?? [];
+      let r = db.rom.find((x) => x.tradeId === tradeId && x.markupModel === markupModel);
+      if (!r) { r = { id: newId("rom"), tradeId, markupModel, committed: false }; db.rom.push(r); }
+      r.state = state === "active" ? undefined : state;
+    }, state === "removed" ? "Line removed" : state === "hold" ? "Line on hold" : "Line restored");
+  }
+
+  /** Set what a line is contracted at — the pre-fee figure agreed with whoever
+   *  is doing the work. Only the line's manager may set it, which is the point
+   *  of setBudgetLineManager. */
+  setLineContracted(lineId: string, baseCost: number) {
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (!l) return;
+      const role = this.session.role;
+      const mayEdit = role === "full_admin"
+        || (role === "builder" && l.owner === "builder")
+        || (role === "owner" && l.owner === "owner");
+      if (!mayEdit) return;
+      const today = new Date().toISOString().slice(0, 10);
+      if (baseCost > 0) {
+        const factor = l.markupModel === "passthrough" ? 1 + l.markupPct / 100 : 1;
+        l.lockedCost = baseCost;
+        l.baseline = baseCost * factor;
+        l.locked = true;
+        l.lockedAt = today;
+        l.lockedBy = this.session.displayName;
+        if (l.status === "estimate" || l.status === "allowance") l.status = "contracted";
+      } else {
+        // Clearing the figure takes the line back out of contract.
+        l.locked = false; l.lockedCost = undefined; l.baseline = undefined;
+        l.lockedAt = undefined; l.lockedBy = undefined;
+        if (l.status === "contracted") l.status = "estimate";
+      }
+    }, "Contract figure saved");
   }
 
   /** Throw the lock. Requires every row committed, and it is the one action

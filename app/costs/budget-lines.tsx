@@ -21,8 +21,17 @@ const MUTED = "var(--muted)";
 
 const COLS = [
   "Budget line", "ROM", "Contracted", "Change orders", "Builder fee",
-  "Total", "Draw", "Paid", "Variance",
+  "Total", "Drawn / Paid",
 ] as const;
+
+// The contract cell carries the line's standing, so the state is read where
+// the money is rather than as a badge beside the name.
+const CELL_BG: Record<string, string | undefined> = {
+  active: undefined, hold: "#f7f1e2", removed: "var(--cream-2)",
+};
+
+const REMOVE_MSG = (label: string) =>
+  `Remove ${label}?\n\nIt stops counting towards the budget but stays on the record, and can be brought back.`;
 
 export function BudgetLines() {
   const store = useStore();
@@ -74,8 +83,7 @@ export function BudgetLines() {
         <StatCard label="ROM agreed" value={fmt(t.agreed)} sub={`${t.committedRows} of ${t.rows} lines committed`} accent="var(--brass-2)" />
         <StatCard label="Contracted" value={fmt(t.contracted)} sub="agreed with the builder, before fee" />
         <StatCard label="Total" value={fmt(t.total)} sub="contracted + change orders + fee" accent="var(--walnut)" />
-        <StatCard label="Paid" value={fmt(t.paid)} accent="var(--ok)" sub={`${fmt(Math.max(0, t.total - t.paid))} outstanding`} />
-        <StatCard label="Variance" value={t.variance === 0 ? "—" : fmt(t.variance)} accent={t.variance > 0 ? "var(--rust)" : "var(--ok)"} sub="added since contract" />
+        <StatCard label="Drawn / Paid" value={fmt(t.paid)} accent="var(--ok)" sub={`${fmt(Math.max(0, t.total - t.paid))} outstanding`} />
       </div>
 
       {rows.length === 0 ? (
@@ -102,12 +110,9 @@ export function BudgetLines() {
                   on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
               ))}
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
-                <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines</td>
+                <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines{t.removedRows ? ` · ${t.removedRows} removed` : ""}</td>
                 <Num v={t.romFigure} bold /><Num v={t.contracted} bold /><Num v={t.changeOrders} bold />
-                <Num v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.draw} bold /><Num v={t.paid} bold />
-                <td style={{ padding: "9px 10px", textAlign: "right", color: t.variance > 0 ? "var(--rust)" : "var(--ok)" }}>
-                  {t.variance === 0 ? "—" : fmt(t.variance)}
-                </td>
+                <Num v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.paid} bold />
               </tr>
             </tbody>
           </table>
@@ -115,10 +120,10 @@ export function BudgetLines() {
       )}
 
       <div style={{ fontSize: 11.5, lineHeight: 1.55, color: MUTED, marginTop: 10, maxWidth: "80ch" }}>
-        Contracted is the work itself, before fee — what we agreed the builder would do it for.
-        Total is that plus approved change orders and the builder&rsquo;s fee, and variance is the gap
-        between the two: everything added since the contract was signed. A line paid in full closes,
-        and only a change order re-opens it.
+        Contracted is the work itself, before fee — what was agreed with whoever is doing it —
+        and its cell turns green once that is in place, amber on hold, grey once removed.
+        Total is contracted plus approved change orders and the builder&rsquo;s fee. Whoever manages a
+        line fills in its contract figure, its change orders and its payments.
       </div>
 
       {canAdd ? <AddBudgetLine /> : null}
@@ -131,6 +136,12 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
 }) {
   const store = useStore();
   const db = store.db;
+  const role = store.session.role;
+  // Either party may say who manages a line; only its manager fills it in.
+  const canManage = canEditLine || ["full_admin", "owner", "builder"].includes(role);
+  const iManage = role === "full_admin"
+    || (role === "builder" && r.manager === "builder")
+    || (role === "owner" && r.manager === "owner");
   const rooms = [...new Set(r.lines.flatMap((l) => l.roomIds ?? []))]
     .map((id) => db.rooms.find((x) => x.id === id)?.name).filter(Boolean) as string[];
   const scope = r.lines.map((l) => l.desc || l.contractSummary).filter(Boolean) as string[];
@@ -139,37 +150,34 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
     <>
       <tr onClick={onToggle} style={{
         cursor: "pointer", borderBottom: "1px solid var(--line)",
-        background: on ? "var(--cream)" : r.complete ? "var(--sage-tint)" : undefined,
+        background: on ? "var(--cream)" : undefined,
+        opacity: r.state === "removed" ? 0.55 : 1,
       }}>
         <td style={{ padding: "9px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, color: MUTED }}>{on ? "▾" : "▸"}</span>
             <strong style={{ color: "var(--walnut)" }}>{r.label}</strong>
             {r.lines.length > 1 ? <span style={{ fontSize: 10.5, color: MUTED }}>{r.lines.length} lines</span> : null}
-            {r.complete
-              ? <Pill color="#fff" bg="var(--sage)">✓ Complete — locked</Pill>
-              : <Pill color="#fff" bg={r.committed ? "var(--sage)" : "var(--brass)"}>
-                  {r.committed ? (r.autoCommitted ? "Committed — under contract" : "Committed") : "Draft — with the owner"}
-                </Pill>}
-            {r.ownerManagedDirect ? <Pill color="var(--walnut)" bg="var(--cream-2)">Owner managed direct</Pill> : null}
-            {r.lockedCount > 0 && !r.complete
-              ? <Pill color="var(--walnut)" bg="var(--cream-2)">🔒 {r.lockedCount === r.lines.length ? "Locked" : `${r.lockedCount}/${r.lines.length} locked`}</Pill>
-              : null}
+            {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
           </div>
           <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
-            {r.ownerManagedDirect ? "no builder fee" : r.markupLabel} · {r.category}
+            {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}
           </div>
         </td>
         <Num v={r.romFigure} node={r.ranged ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span> : undefined} />
-        <Num v={r.contracted} />
+        {/* Green once the line is actually under contract, amber on hold,
+            grey once removed. */}
+        <Num v={r.contracted}
+          bg={r.state === "active" ? (r.lockedCount > 0 ? "var(--sage-tint)" : undefined) : CELL_BG[r.state]}
+          title={r.state === "removed" ? "Removed — counts towards nothing"
+            : r.state === "hold" ? "On hold"
+            : r.lockedCount > 0 ? `Under contract${r.lockedCount < r.lines.length ? ` — ${r.lockedCount} of ${r.lines.length} lines` : ""}` : "Not yet contracted"} />
         <Num v={r.changeOrders} />
         <Num v={r.builderFee} />
         <Num v={r.total} bold />
-        <Num v={r.draw} />
-        <Num v={r.paid} />
-        <td style={{ padding: "9px 10px", textAlign: "right", whiteSpace: "nowrap", color: r.variance > 0 ? "var(--rust)" : MUTED }}>
-          {r.variance === 0 ? "—" : fmt(r.variance)}
-        </td>
+        <Num v={r.paid} node={r.draw !== r.paid
+          ? <span>{fmt(r.paid)}<span style={{ color: MUTED, fontSize: 11 }}> of {fmt(r.draw)} drawn</span></span>
+          : undefined} />
       </tr>
 
       {on ? (
@@ -187,19 +195,51 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                   {rooms.length ? rooms.join(" · ") : <span style={{ color: MUTED, fontStyle: "italic" }}>Whole project — no rooms marked.</span>}
                 </div>
 
-                <Kick style={{ marginTop: 12 }}>Fee treatment</Kick>
-                <div style={{ fontSize: 12, lineHeight: 1.5, marginTop: 3 }}>
-                  {r.ownerManagedDirect
-                    ? "Owner managed direct — the owner contracts and pays this trade, and no builder fee applies."
-                    : `Builder fee applies: ${r.markupLabel}, ${fmt(r.builderFee)} on the contracted work.`}
+                <Kick style={{ marginTop: 12 }}>Who manages this line</Kick>
+                <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
+                  {([["builder", "GC managed"], ["owner", "Owner managed"]] as const).map(([k, label]) => (
+                    <button key={k} className="btn btn-sm" disabled={!canManage}
+                      onClick={() => store.setBudgetLineManager(r.tradeId, r.markupModel, k)}
+                      style={{
+                        background: r.manager === k ? "var(--sage)" : undefined,
+                        color: r.manager === k ? "#fff" : undefined,
+                        fontWeight: r.manager === k ? 700 : 400,
+                      }}>{label}</button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 5 }}>
+                  {r.manager === "owner"
+                    ? "The owner contracts and pays this trade direct, and no builder fee applies."
+                    : `The GC carries this line. Builder fee: ${r.markupLabel}, ${fmt(r.builderFee)} on the contracted work.`}
+                  {" "}The manager fills in the contract figure, the change orders and the payments.
                 </div>
 
-                <Kick style={{ marginTop: 12 }}>The cost lines behind this row</Kick>
+                <Kick style={{ marginTop: 12 }}>Under contract, and paid</Kick>
+                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, margin: "3px 0 6px" }}>
+                  {iManage
+                    ? "Enter the figure agreed with the trade, before fee. Clearing it takes the line back out of contract."
+                    : `Read-only — ${r.manager === "owner" ? "the owner" : "the GC"} manages this line.`}
+                </div>
                 {r.lines.map((l) => (
-                  <div key={l.id} style={{ display: "flex", gap: 9, alignItems: "baseline", flexWrap: "wrap", padding: "3px 0", fontSize: 12 }}>
-                    <span style={{ minWidth: 170 }}>{l.name}</span>
-                    <Pill color="#fff" bg={l.locked ? "var(--sage)" : "var(--cream-2)"}>{l.locked ? "🔒 locked" : "estimate"}</Pill>
-                    <span style={{ color: MUTED }}>{l.owner === "owner" ? "owner-carried" : "builder-carried"}</span>
+                  <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "4px 0", fontSize: 12 }}>
+                    <span style={{ minWidth: 150 }}>{l.name}</span>
+                    {iManage ? (
+                      <>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: MUTED, fontSize: 11 }}>
+                          contract
+                          <NumInput value={l.lockedCost ?? 0} onCommit={(v) => store.setLineContracted(l.id, v)} width={96} />
+                        </label>
+                        <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: MUTED, fontSize: 11 }}>
+                          paid
+                          <NumInput value={l.directPaid ?? 0} onCommit={(v) => store.setLineDirectPaid(l.id, v)} width={96} />
+                        </label>
+                      </>
+                    ) : (
+                      <>
+                        <Pill color="#fff" bg={l.locked ? "var(--sage)" : "var(--cream-2)"}>{l.locked ? "under contract" : "not contracted"}</Pill>
+                        <span style={{ color: MUTED }}>{l.lockedCost ? fmt(l.lockedCost) : "—"}</span>
+                      </>
+                    )}
                   </div>
                 ))}
               </div>
@@ -233,7 +273,34 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
 
                 {/* A change order is the only thing that re-opens a closed line,
                     so it stays available once the line is complete. */}
-                {canEditLine ? (
+                {canManage ? (
+                  <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 10 }}>
+                    <Kick>This line</Kick>
+                    <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                      {r.state === "removed" ? (
+                        <button className="btn btn-sm btn-primary"
+                          onClick={() => store.setBudgetLineState(r.tradeId, r.markupModel, "active")}>Bring it back</button>
+                      ) : (
+                        <>
+                          <button className="btn btn-sm"
+                            onClick={() => store.setBudgetLineState(r.tradeId, r.markupModel, r.state === "hold" ? "active" : "hold")}
+                            style={{ background: r.state === "hold" ? "#f7f1e2" : undefined }}>
+                            {r.state === "hold" ? "Take off hold" : "Put on hold"}
+                          </button>
+                          <button className="btn btn-sm" style={{ color: "var(--rust)" }}
+                            onClick={() => { if (confirm(REMOVE_MSG(r.label))) store.setBudgetLineState(r.tradeId, r.markupModel, "removed"); }}>
+                            Remove this line
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: MUTED, marginTop: 5, lineHeight: 1.45 }}>
+                      A removed line counts towards nothing and stops holding up the ROM lock, but it is kept rather than deleted.
+                    </div>
+                  </div>
+                ) : null}
+
+                {iManage ? (
                   <div style={{ marginTop: 14 }}>
                     <Kick>Change orders</Kick>
                     {r.complete ? (
@@ -335,11 +402,12 @@ function Kick({ children, style }: { children: React.ReactNode; style?: React.CS
   return <div style={{ fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED, ...style }}>{children}</div>;
 }
 
-function Num({ v, bold, node }: { v: number; bold?: boolean; node?: React.ReactNode }) {
+function Num({ v, bold, node, bg, title }: { v: number; bold?: boolean; node?: React.ReactNode; bg?: string; title?: string }) {
   return (
-    <td style={{
+    <td title={title} style={{
       padding: "9px 10px", textAlign: "right", whiteSpace: "nowrap",
       fontVariantNumeric: "tabular-nums", fontWeight: bold ? 700 : 400,
+      background: bg,
       color: v === 0 && !bold ? MUTED : "var(--ink)",
     }}>{node ?? (v === 0 && !bold ? "—" : fmt(v))}</td>
   );

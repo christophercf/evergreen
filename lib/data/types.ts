@@ -1026,6 +1026,8 @@ export interface Project {
 // lines, so the ROM is an agreement layer over the real money rather than a
 // second copy of it that can drift.
 // ---------------------------------------------------------------------------
+export type BudgetLineState = "active" | "hold" | "removed";
+
 export interface RomLine {
   id: string;
   /** A ROM row is one trade AND one markup treatment. A trade whose lines are
@@ -1035,6 +1037,10 @@ export interface RomLine {
   markupModel: MarkupModel;
   /** The owner has agreed this line. For a range, that agrees its ceiling. */
   committed: boolean;
+  /** Where the line stands. "removed" is a kill: the line stays on the record
+   *  so the history of the decision survives, but it counts towards nothing and
+   *  can be resurrected. */
+  state?: BudgetLineState;
   committedOn?: string;
   committedBy?: string;
   /** What the estimate assumes — the sentence that explains the figure. */
