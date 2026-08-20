@@ -68,11 +68,9 @@ export class MockBackend implements Backend {
   }
 
   persistDB(db: DB): void {
-    try {
-      localStorage.setItem(DB_KEY, JSON.stringify(db));
-    } catch {
-      /* ignore quota */
-    }
+    // A quota failure loses the change just as completely as a network one, so
+    // it is reported rather than swallowed.
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
     this.channel?.postMessage({ type: "db", db });
   }
 

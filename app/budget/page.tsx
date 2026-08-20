@@ -29,7 +29,7 @@ export default function BudgetPage() {
 
   const t = totals(db.costLines);
   const buffer = (t.grand * db.project.bufferPct) / 100;
-  // All-in need is a RANGE, pulling the low–high cost range from Project Budget + buffer.
+  // All-in need is a RANGE, pulling the low–high cost range from Budget Management + buffer.
   const costRange = budgetRange(db.costLines);
   const bf = 1 + db.project.bufferPct / 100;
   const allInLow = costRange.low * bf;

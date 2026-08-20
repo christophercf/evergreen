@@ -103,7 +103,7 @@ export default function Dashboard() {
       })()}
 
       {canSeeCosts && <>
-        <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Project Budget →</Link>}>Cost by Category</SectionTitle>
+        <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Budget Management →</Link>}>Cost by Category</SectionTitle>
         <div className="card" style={{ padding: 16 }}>
           <StackBar height={14} segments={MACRO_ORDER.map((c) => ({ value: cats.find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px,1fr))", gap: "8px 18px", marginTop: 14 }}>

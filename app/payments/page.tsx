@@ -107,7 +107,7 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
       onDragEnd={() => setDragLine(null)}
       onMouseEnter={() => !locked && setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={!locked && !ro ? "🔒 Lock in pricing with this vendor before assigning a draw (Project Budget → Lock cost)." : undefined}
+      title={!locked && !ro ? "🔒 Lock in pricing with this vendor before assigning a draw (Budget Management → Lock cost)." : undefined}
       className="card"
       style={{ position: "relative", padding: "8px 10px", cursor: canDrag ? "grab" : (locked ? "default" : "not-allowed"), opacity: dragLine === line.id ? 0.5 : locked ? 1 : 0.62, background: "var(--paper)", borderLeft: locked ? "3px solid var(--ok)" : "3px solid var(--line)" }}>
       {/* floating note for non-locked lines */}
@@ -188,7 +188,7 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
               {!locked && <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => store.removeDraw(draw.id)}>Delete</button>}
             </div>
           )}
-          {locked && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — locked. If costs increase, raise a change order in <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>Project Budget</Link> (a paid draw can’t be edited).</div>}
+          {locked && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — locked. If costs increase, raise a change order in <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>Budget Management</Link> (a paid draw can’t be edited).</div>}
           {draw.status === "pushed" && <div style={{ fontSize: 11.5, color: "var(--brass-2)", marginTop: 8 }}>📄 Contracts issued — see Vendor Management for signatures.</div>}
         </>
       )}

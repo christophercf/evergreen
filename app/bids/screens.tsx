@@ -407,7 +407,7 @@ export function AwardScreen({ p, ro, onBack }: { p: BidPackage; ro: boolean; onB
   const cheapestFlags = cheapest ? flagsFor(p, cheapest) : [];
 
   const award = (b: VendorBid) => {
-    if (confirm(`Award ${b.vendorName} at ${money(b.amount)}? This locks the price into Project Budget.`)) store.awardBid(p.id, b.id);
+    if (confirm(`Award ${b.vendorName} at ${money(b.amount)}? This locks the price into Budget Management.`)) store.awardBid(p.id, b.id);
   };
 
   const head = (
@@ -467,7 +467,7 @@ export function AwardScreen({ p, ro, onBack }: { p: BidPackage; ro: boolean; onB
           <div className="serif" style={{ fontSize: 19, fontWeight: 700, color: "var(--walnut)", lineHeight: 1.15 }}>{awarded?.vendorName ?? "No award yet"}</div>
           <div style={{ fontSize: 12, lineHeight: 1.5, color: "var(--muted)" }}>
             {awarded
-              ? `${money(awarded.amount)} · ${awarded.route ? BID_ROUTE_SHORT[awarded.route] : "—"}${p.lineId ? " · promoted into Project Budget" : ""}`
+              ? `${money(awarded.amount)} · ${awarded.route ? BID_ROUTE_SHORT[awarded.route] : "—"}${p.lineId ? " · promoted into Budget Management" : ""}`
               : "Pick a bid on the left. The reason travels with the package."}
           </div>
           <div>

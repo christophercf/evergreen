@@ -22,7 +22,7 @@ import { downloadRequestDoc } from "./request-doc";
 //
 // Six steps against one package: pick the trades, pick who bids, set how each
 // one submits, read what came back, compare it like-for-like, award. The award
-// promotes the price into Project Budget as a locked line.
+// promotes the price into Budget Management as a locked line.
 //
 // The through-line is that bids arrive three different ways — the vendor fills
 // our form, we key it off a phone call, or they send their own quote — and all
@@ -61,7 +61,7 @@ export default function BidsPage() {
       <PageHeader
         title="Bid and Package Management"
         subtitle="Competitive bids gathered and compared before a number goes into the budget."
-        right={<Link href="/costs" className="btn btn-sm">Budget →</Link>}
+        right={<Link href="/costs" className="btn btn-sm">Budget Management →</Link>}
       />
 
       <div className="ever-bidshell" style={{ marginTop: 16 }}>

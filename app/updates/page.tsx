@@ -161,7 +161,7 @@ export default function UpdatesPage() {
 
   const allowed = db.users.filter((u) => canMessageUser(user, role, u, db.trades));
 
-  // Which Project Budget category a conversation nests under: the category of
+  // Which Budget Management category a conversation nests under: the category of
   // its trade participants' trade; conversations with only owners/builders/
   // designers land in "Project Team".
   const convCategory = (c: Conv): string => {
@@ -231,7 +231,7 @@ export default function UpdatesPage() {
                 {people.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
               <button className="btn btn-sm" title={sortAZ ? "Sorted A–Z — switch to recent" : "Sorted by recent — switch to A–Z"} onClick={() => setSortAZ((v) => !v)}>{sortAZ ? "AZ" : "🕑"}</button>
-              <button className="btn btn-sm" title={grouped ? "Grouped by cost category — switch to flat list" : "Flat list — group by Project Budget category"} onClick={() => setGrouped((v) => !v)}
+              <button className="btn btn-sm" title={grouped ? "Grouped by cost category — switch to flat list" : "Flat list — group by Budget Management category"} onClick={() => setGrouped((v) => !v)}
                 style={grouped ? { background: "var(--sage)", color: "#fff", borderColor: "var(--sage)" } : undefined}>🗂</button>
             </div>
           </div>

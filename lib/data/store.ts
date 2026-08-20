@@ -18,6 +18,9 @@ import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePasswo
 
 type Listener = () => void;
 
+/** "ok" is a save landing; "error" is a save that did not. */
+export type ToastTone = "ok" | "error";
+
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 let uid = 0;
 const newId = (p: string) => `${p}-${Date.now().toString(36)}-${uid++}`;
@@ -95,10 +98,10 @@ class Store {
   // <Toaster/>); the store just announces "something saved" on a short debounce
   // so a burst of edits collapses into one toast. Label lets a send read
   // "Message sent" instead of the generic "Saved".
-  private toastHandler: ((text: string) => void) | null = null;
+  private toastHandler: ((text: string, tone?: ToastTone) => void) | null = null;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private toastLabel = "Saved";
-  setToastHandler(cb: ((text: string) => void) | null) { this.toastHandler = cb; }
+  setToastHandler(cb: ((text: string, tone?: ToastTone) => void) | null) { this.toastHandler = cb; }
   private announceSave(label: string) {
     if (!this.toastHandler) return; // nothing registered yet (pre-mount / SSR)
     this.toastLabel = label;
@@ -110,14 +113,33 @@ class Store {
     }, 350);
   }
 
+  /** A write that never landed. The change is still on screen and still in
+   *  memory, but it is not on the server — so this cancels the pending "Saved"
+   *  rather than letting it contradict the truth. */
+  private announceSaveFailed(err: unknown) {
+    if (this.toastTimer) { clearTimeout(this.toastTimer); this.toastTimer = null; }
+    this.toastLabel = "Saved";
+    this.saveError = err instanceof Error ? err.message : String(err);
+    this.toastHandler?.("Not saved — you're offline or the server refused. Keep this tab open and try again.", "error");
+    this.emit();
+  }
+
+  /** Message from the last failed write, or null. Cleared by the next success. */
+  saveError: string | null = null;
+
   private mutate(fn: (db: DB) => void, saveLabel = "Saved") {
     this.undoStack.push(JSON.stringify(this.db));
     if (this.undoStack.length > 40) this.undoStack.shift();
     const next = clone(this.db);
     fn(next);
     this.db = next;
-    this.lastWrite = this.backend?.persistDB(next) ?? Promise.resolve();
-    void this.lastWrite;
+    // persistDB may be sync (mock) or async (Supabase); either can fail, and a
+    // failure must reach the person who just typed something.
+    this.lastWrite = (async () => {
+      await this.backend?.persistDB(next);
+      if (this.saveError) { this.saveError = null; this.emit(); }
+    })();
+    this.lastWrite.catch((e: unknown) => this.announceSaveFailed(e));
     this.announceSave(saveLabel);
     this.emit();
   }

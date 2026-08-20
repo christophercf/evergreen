@@ -62,7 +62,11 @@ export class SupabaseBackend implements Backend {
   }
 
   async persistDB(db: DB): Promise<void> {
-    await this.client.from("project_state").upsert({ id: PROJECT_ID, db, updated_at: new Date().toISOString() });
+    // supabase-js reports failures in `error` rather than throwing. Unchecked,
+    // a rejected write is invisible: the UI has already shown "Saved" and the
+    // change is gone at the next refresh. Throw so the store can say so.
+    const { error } = await this.client.from("project_state").upsert({ id: PROJECT_ID, db, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
   }
 
   persistSession(session: Session): void {
