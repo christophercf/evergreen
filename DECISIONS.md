@@ -96,3 +96,45 @@ approval queue exposes the same write with no role check. The rule is now:
 approval and the QC counter-signature — the builder signs first, she signs
 second, and that second signature is what makes a draw releasable at all.
 Nothing is releasable until both have signed.
+
+---
+
+## 04 — Keep the Dashboard. Do not adopt the design's "Today".
+**Decided 2026-08-20 · Chris**
+
+The design replaces the dashboard with *Today*: seven action groups that empty,
+whose stated goal is a blank screen — *"An empty Today is the goal, not a blank
+screen."* Chris prefers what the app already has, so the dashboard stays and
+the nav label changes from "Today" to **Dashboard** to match the screen behind
+it.
+
+**First case where the app wins over the document** — which is what the
+one-at-a-time rule exists to allow.
+
+**Requirement attached: it must reconnect to the new model.** The dashboard
+currently reports a world that decisions 01–03 change:
+- Stat cards read *Projected Cost / All-in / Markup*. Under the ROM they must
+  read against the agreed figure — agreed, committed, paid, variance.
+- The *Draws & Payments* panel links to `/payments`, which decision 02 removes.
+  It becomes a roll-up of draw outcomes pointing at packages.
+- Funding is owner-only (decision 03) and the dashboard is shared with the GC,
+  so nothing funding-shaped may appear on it. The materials-stat leak found in
+  QA is the precedent: scope the figures, not just the rows.
+
+**Still open:** the design makes the owner's home screen the approval queue, not
+a dashboard. Chris chose the dashboard for himself; whether Emily lands on the
+dashboard or on her approval queue is a separate question, not settled here.
+
+---
+
+## 05 — Delete the `Test Drywall` package
+**Decided 2026-08-20 · Chris · DONE**
+
+Removed from live data. It was empty — no bids, no award, no linked cost line,
+no scope items — so the guard that would have refused a package carrying real
+money never fired. Snapshot taken immediately before the write to
+`evergreen-backups/pre-delete-2026-08-20T12-05-37-233+00-00.json`, and the row
+was re-read for concurrent writes before writing.
+
+Verified after: 39 cost lines, 77 materials, 19 messages, 11 funding sources,
+6 packages, no Test Drywall.

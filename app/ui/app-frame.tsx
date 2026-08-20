@@ -28,7 +28,7 @@ type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; ba
 // The bands sort by frequency of use, not by domain: the job you are doing,
 // then the things you look up. "Administrative" stays behind the header ⚙.
 const NAV: NavItem[] = [
-  { href: "/", label: "Today", mod: "dashboard", band: "job", Icon: HomeIcon },
+  { href: "/", label: "Dashboard", mod: "dashboard", band: "job", Icon: HomeIcon },
   { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
   // Budget Management is one nav item over three routes (Committed · Paid ·
   // Funded). Which one it opens is role-shaped — see MONEY_HOME.
