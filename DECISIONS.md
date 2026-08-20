@@ -259,3 +259,21 @@ that cannot be enlarged does not do anything useful.
 and **map rooms** (dragging a box to tie a room to an area of the drawing).
 Neither is annotation, and the design dropped both independently of this
 decision. Whether they go with the markup layer or stay is not settled here.
+
+---
+
+## 12 — Kill scope view; the viewer becomes a viewer
+**Decided 2026-08-20 · Chris**
+
+Scope view goes — no more shading a trade's rooms on the plan with their scope
+and materials beside it.
+
+**Two things fall with it, as consequences rather than separate decisions.**
+*Map rooms* (dragging a box to tie a room to an area of a drawing) existed only
+to feed scope view, and the shareable *scope link* (`?view=scope&trade=…`) only
+pointed at it. Both go; neither has another consumer.
+
+**What the drawing viewer is, after decisions 11 and 12:** open a drawing, read
+it, pan and zoom around it, drop a new image on it to create a version, and
+append it to a trade's contract so it rides along in the trade packet. Nothing
+else.
