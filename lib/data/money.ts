@@ -290,7 +290,7 @@ export type RomRow = {
   tradeId: string;
   markupModel: MarkupModel;
   label: string;
-  defaultLabel: string;
+  tradeLabel: string;
   /** True when this trade is priced both ways, so the label names the model. */
   splitByMarkup: boolean;
   lines: CostLine[];
@@ -415,9 +415,9 @@ export function romRows(db: DB): RomRow[] {
 
     rows.push({
       key, tradeId, markupModel: model,
-      label: rom?.label ?? (splitByMarkup ? `${name} — ${markupLabel}` : name),
-      /** The name it would carry with no override — shown while editing. */
-      defaultLabel: splitByMarkup ? `${name} — ${markupLabel}` : name,
+      label: splitByMarkup ? `${name} — ${markupLabel}` : name,
+      /** The trade's own name, without the fee suffix a split row carries. */
+      tradeLabel: name,
       splitByMarkup,
       lines, rom, committed, autoCommitted,
       low, high, ranged: low !== high,

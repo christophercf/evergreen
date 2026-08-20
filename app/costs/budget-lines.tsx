@@ -184,19 +184,18 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
           <td colSpan={COLS.length} style={{ padding: "4px 10px 16px 27px", borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
               <div>
-                {/* The line's own name. Defaults to the trade's, and renaming it
-                    renames this line only — the trade is still the trade on the
-                    schedule, the materials list and the vendor roster. */}
+                {/* One name, held on the trade. Everything that shows it reads
+                    the same record, so there is no second copy to drift. */}
                 <Kick>Name</Kick>
                 {canManage ? (
                   <>
-                    <TextInput value={r.rom?.label ?? ""} placeholder={r.defaultLabel}
-                      onCommit={(v) => store.setBudgetLineLabel(r.tradeId, r.markupModel, v)}
+                    <TextInput value={r.tradeLabel}
+                      onCommit={(v) => store.setBudgetLineName(r.tradeId, v)}
                       style={{ width: "100%", fontSize: 13, fontWeight: 600, marginTop: 4 }} />
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>
-                      {r.rom?.label
-                        ? `Renamed. Clear it to go back to "${r.defaultLabel}".`
-                        : "Renames this budget line only — the trade keeps its name everywhere else."}
+                      Renaming this renames it everywhere — the schedule, the materials list, the
+                      vendor roster and every package read the same name.
+                      {r.splitByMarkup ? " This trade is priced two ways, so both of its lines follow." : ""}
                     </div>
                   </>
                 ) : (

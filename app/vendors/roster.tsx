@@ -229,6 +229,7 @@ function VendorProfile({ c, ro, onBack }: { c: ContactSheet; ro: boolean; onBack
   return (
     <>
       <button className="btn btn-sm" style={{ marginBottom: 10 }} onClick={onBack}>← Back to the roster</button>
+      {!ro ? <DeleteVendor c={c} history={h.rows.length} onDone={onBack} /> : null}
       <PageHeader
         title={c.company}
         subtitle={covers.map((t) => tradeName(db, t)).join(" · ") || "No trades set — they will not appear for any bid package."}
@@ -421,6 +422,45 @@ function Field({ k, v, ro, placeholder, onCommit }: {
         : <input className="input" defaultValue={v ?? ""} placeholder={placeholder}
             onBlur={(e) => onCommit(e.target.value)}
             style={{ flex: 1, maxWidth: 230, fontSize: 12, textAlign: "right" }} />}
+    </div>
+  );
+}
+
+
+/** Removing a vendor. A company with bid history or an assigned contract is
+ *  worth pausing over — deleting it does not delete the bids, it just detaches
+ *  the name from them, so the confirm says exactly that instead of a generic
+ *  "are you sure". */
+function DeleteVendor({ c, history, onDone }: { c: ContactSheet; history: number; onDone: () => void }) {
+  const store = useStore();
+  const db = store.db;
+  const [arm, setArm] = useState(false);
+
+  const engaged = !!c.tradeId && (db.vendorAgreements ?? []).some((a) => a.tradeId === c.tradeId);
+  const consequence = [
+    history ? `${history} bid${history === 1 ? "" : "s"} on record` : "",
+    engaged ? "a contract on this project" : "",
+  ].filter(Boolean).join(" and ");
+
+  if (!arm) {
+    return (
+      <button className="btn btn-sm" style={{ marginBottom: 10, marginLeft: 8, color: "var(--rust)" }}
+        onClick={() => setArm(true)}>Remove from the roster</button>
+    );
+  }
+  return (
+    <div className="card" style={{ padding: 13, marginBottom: 12, borderLeft: "3px solid var(--rust)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ fontSize: 12.5, lineHeight: 1.55, maxWidth: "68ch" }}>
+        <strong>Remove {c.company} from the roster?</strong>{" "}
+        {consequence
+          ? `They have ${consequence}. Removing them does not delete any of that — the bids and the money stay exactly as they are, and the vendor's name stays on them. What goes is the roster record: their contact details, documents and notes, and they stop appearing for any bid package.`
+          : "They have no bids and no contract on this project, so nothing else is affected."}
+      </div>
+      <div style={{ display: "flex", gap: 7 }}>
+        <button className="btn btn-sm" onClick={() => setArm(false)}>Keep them</button>
+        <button className="btn btn-sm" style={{ background: "var(--rust)", color: "#fff", fontWeight: 700 }}
+          onClick={() => { store.removeContactSheet(c.id); onDone(); }}>Remove {c.company}</button>
+      </div>
     </div>
   );
 }

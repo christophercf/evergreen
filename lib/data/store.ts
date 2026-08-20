@@ -1228,15 +1228,25 @@ class Store {
     }, manager === "owner" ? "Now owner managed" : "Now GC managed");
   }
 
-  /** Rename a budget line. Clearing it falls back to the trade's own name. */
-  setBudgetLineLabel(tradeId: string, markupModel: MarkupModel, label: string) {
+  /** Rename a budget line — which is to say, rename the trade. Everything that
+   *  shows this name reads it from the one trade record, so the schedule, the
+   *  materials list, the vendor roster and every package follow immediately.
+   *  There is no second copy to drift. */
+  setBudgetLineName(tradeId: string, name: string) {
     if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    const next = name.trim();
+    if (!next) return; // a nameless trade would be worse than the old name
     this.mutate((db) => {
-      db.rom = db.rom ?? [];
-      let r = db.rom.find((x) => x.tradeId === tradeId && x.markupModel === markupModel);
-      if (!r) { r = { id: newId("rom"), tradeId, markupModel, committed: false }; db.rom.push(r); }
-      r.label = label.trim() || undefined;
-    }, "Name saved");
+      const t = db.trades.find((x) => x.id === tradeId);
+      if (!t || t.name === next) return;
+      // Capture the old name BEFORE overwriting it — the cost lines are matched
+      // against what they used to say.
+      const was = t.name;
+      t.name = next;
+      // Cost lines carry their own name, but the ones that were only ever named
+      // after the trade should follow it rather than fossilise the old label.
+      for (const l of db.costLines) if (l.tradeId === tradeId && l.name === was) l.name = next;
+    }, "Renamed everywhere");
   }
 
   /** Kill a budget line, put it on hold, or bring it back. A killed line is kept
