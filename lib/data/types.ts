@@ -1100,7 +1100,9 @@ export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "view",
+    // Draw Management is the GC's console. The owner sees what draws do to the
+    // budget — decision 03 — rather than the machinery that builds them.
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "none", updates: "edit", bids: "view",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",

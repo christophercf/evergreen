@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput, TextInput } from "../ui/bits";
-import { MoneyTabs } from "../ui/money-tabs";
 import { accessFor, type FundingSource } from "@/lib/data/types";
 import { totals, fmt, budgetRange } from "@/lib/data/money";
 
@@ -97,7 +96,6 @@ export default function BudgetPage() {
           <Pill color="#fff" bg="var(--brass)">Owner only</Pill>
         </div>}
       />
-      <MoneyTabs />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(165px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="All-in Need" value={hasRange ? <span style={{ fontSize: ".7em", fontWeight: 700 }}>{fmt(allInLow)}<span style={{ color: "var(--muted)" }}> – </span>{fmt(allInHigh)}</span> : <Money value={allInHigh} />} sub={`cost range + ${db.project.bufferPct}% buffer`} accent="var(--brass-2)" />

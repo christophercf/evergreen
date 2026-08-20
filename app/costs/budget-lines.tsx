@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
-import { accessFor, type MacroCategory } from "@/lib/data/types";
+import { accessFor, type CostOwner, type MacroCategory } from "@/lib/data/types";
 import { fmt, romRows, romTotals, romCanLock, MACRO_ORDER, type RomRow } from "@/lib/data/money";
 import { Pill, StatCard, TextInput, NumInput } from "../ui/bits";
 import { ChangeOrders } from "./line-parts";
@@ -64,17 +64,16 @@ export function BudgetLines() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <Pill color="#fff" bg={db.romLocked ? "var(--walnut)" : "var(--brass)"}>
-            {db.romLocked ? `ROM locked ${db.romLockedAt ?? ""}`.trim() : "Drafting the ROM"}
-          </Pill>
-          {canLock && !db.romLocked ? (
+          {db.romLocked ? <Pill color="#fff" bg="var(--walnut)">{`ROM locked ${db.romLockedAt ?? ""}`.trim()}</Pill> : null}
+          {/* Only shown once it can actually be pressed — a disabled button that
+              names what it is waiting for is just a status flag. */}
+          {canLock && !db.romLocked && ready ? (
             <button
-              className={`btn btn-sm ${ready ? "btn-primary" : ""}`}
-              disabled={!ready}
+              className="btn btn-sm btn-primary"
               onClick={() => {
                 if (confirm(`Lock the ROM at ${fmt(t.romFigure)}?\n\nIt does not move again. From here the budget is negotiated inside the packages, and a signed line changes only through a change order.`)) store.lockRom();
               }}
-            >{ready ? "🔒 Lock the ROM" : `${t.rows - t.committedRows} still with the owner`}</button>
+            >🔒 Lock the ROM</button>
           ) : null}
         </div>
       </div>
@@ -336,62 +335,112 @@ function AddBudgetLine() {
   const [openForm, setOpenForm] = useState(false);
   const [tradeId, setTradeId] = useState("");
   const [amount, setAmount] = useState(0);
-  const [note, setNote] = useState("");
+  const [scope, setScope] = useState("");
+  const [roomIds, setRoomIds] = useState<string[]>([]);
+  const [manager, setManager] = useState<CostOwner>("builder");
 
   const locked = !!db.romLocked;
   const trade = db.trades.find((t) => t.id === tradeId);
-  const ready = !!tradeId && amount > 0;
+
+  // Everything a line needs to mean something: who does it, what it covers,
+  // where, what it costs, and whose money it is.
+  const missing = [
+    !tradeId && "a trade",
+    !(amount > 0) && "a cost",
+    !scope.trim() && "the scope",
+    !roomIds.length && "at least one room",
+  ].filter(Boolean) as string[];
+  const ready = !missing.length;
+
+  const reset = () => {
+    setOpenForm(false); setTradeId(""); setAmount(0); setScope(""); setRoomIds([]); setManager("builder");
+  };
 
   if (!openForm) {
     return <button className="btn btn-sm" style={{ marginTop: 14 }} onClick={() => setOpenForm(true)}>＋ Add a budget line</button>;
   }
 
   return (
-    <div className="card" style={{ padding: 14, marginTop: 14, display: "flex", flexDirection: "column", gap: 10, maxWidth: 720 }}>
+    <div className="card" style={{ padding: 16, marginTop: 14, display: "flex", flexDirection: "column", gap: 14, borderLeft: "3px solid var(--sage)" }}>
       <div>
-        <div className="serif" style={{ fontSize: 16, fontWeight: 700, color: "var(--walnut)" }}>Add a budget line</div>
-        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5 }}>
+        <div className="serif" style={{ fontSize: 17, fontWeight: 700, color: "var(--walnut)" }}>Add a budget line</div>
+        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5, maxWidth: "70ch" }}>
           {locked
-            ? "The ROM is locked, so this cannot join it. The line goes in as contracted and is sent to the owner for approval."
+            ? "The ROM is locked and does not re-open, so this line goes straight in as contracted and the owner is asked to approve it."
             : "The ROM is still open, so this joins it as a draft for the owner to agree."}
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 11, color: MUTED }}>Trade</span>
-          <select className="input" value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ fontSize: 12.5 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
+        <div>
+          <Kick>Trade</Kick>
+          <select className="input" value={tradeId} onChange={(e) => setTradeId(e.target.value)}
+            style={{ fontSize: 12.5, width: "100%", marginTop: 4 }}>
             <option value="">Choose…</option>
             {MACRO_ORDER.map((cat: MacroCategory) => {
               const inCat = db.trades.filter((tr) => tr.category === cat);
               if (!inCat.length) return null;
-              return (
-                <optgroup key={cat} label={cat}>
-                  {inCat.map((tr) => <option key={tr.id} value={tr.id}>{tr.name}</option>)}
-                </optgroup>
-              );
+              return <optgroup key={cat} label={cat}>{inCat.map((tr) => <option key={tr.id} value={tr.id}>{tr.name}</option>)}</optgroup>;
             })}
           </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontSize: 11, color: MUTED }}>Cost to the trade, before fee</span>
-          <NumInput value={amount} onCommit={setAmount} />
-        </label>
+
+          <Kick style={{ marginTop: 12 }}>Scope</Kick>
+          <textarea className="input" value={scope} onChange={(e) => setScope(e.target.value)}
+            placeholder="What this line covers, and what it does not"
+            style={{ width: "100%", minHeight: 74, fontSize: 12.5, lineHeight: 1.5, marginTop: 4 }} />
+
+          <Kick style={{ marginTop: 12 }}>{locked ? "Contracted cost, before fee" : "Cost to the trade, before fee"}</Kick>
+          <div style={{ marginTop: 4 }}>
+            <NumInput value={amount} onCommit={setAmount} width={140} />
+          </div>
+        </div>
+
+        <div>
+          <Kick>Rooms included</Kick>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 5, maxHeight: 168, overflowY: "auto" }}>
+            {db.rooms.map((rm) => {
+              const on = roomIds.includes(rm.id);
+              return (
+                <button key={rm.id} className="btn btn-sm"
+                  onClick={() => setRoomIds((p) => on ? p.filter((x) => x !== rm.id) : [...p, rm.id])}
+                  style={{
+                    background: on ? "var(--sage)" : undefined, color: on ? "#fff" : undefined,
+                    fontWeight: on ? 700 : 400, fontSize: 11.5,
+                  }}>{rm.name}</button>
+              );
+            })}
+          </div>
+
+          <Kick style={{ marginTop: 14 }}>Who manages this line</Kick>
+          <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+            {([["builder", "GC managed"], ["owner", "Owner managed"]] as const).map(([k, label]) => (
+              <button key={k} className="btn btn-sm" onClick={() => setManager(k)}
+                style={{
+                  background: manager === k ? "var(--sage)" : undefined,
+                  color: manager === k ? "#fff" : undefined,
+                  fontWeight: manager === k ? 700 : 400,
+                }}>{label}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 5 }}>
+            {manager === "owner"
+              ? "The owner contracts and pays this trade direct. No builder fee applies."
+              : `The GC carries it, at ${db.project.builderMarkupPct ?? 20}% on top.`}
+          </div>
+        </div>
       </div>
 
-      <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-        <span style={{ fontSize: 11, color: MUTED }}>What this figure assumes</span>
-        <TextInput value={note} onCommit={setNote} placeholder="What the price covers, and what it does not" style={{ fontSize: 12.5 }} />
-      </label>
-
-      <div style={{ display: "flex", gap: 7, justifyContent: "flex-end" }}>
-        <button className="btn btn-sm" onClick={() => setOpenForm(false)}>Cancel</button>
+      <div style={{ display: "flex", gap: 7, justifyContent: "flex-end", alignItems: "center", flexWrap: "wrap" }}>
+        <button className="btn btn-sm" onClick={reset}>Cancel</button>
         <button className={`btn btn-sm ${ready ? "btn-primary" : ""}`} disabled={!ready}
           onClick={() => {
-            store.addBudgetLine({ tradeId, amount, note, category: trade?.category as MacroCategory | undefined });
-            setOpenForm(false); setTradeId(""); setAmount(0); setNote("");
+            store.addBudgetLine({
+              tradeId, amount, note: scope, roomIds, manager,
+              category: trade?.category as MacroCategory | undefined,
+            });
+            reset();
           }}>
-          {!ready ? "Trade and a figure required" : locked ? "Add and send for approval" : "Add to the ROM"}
+          {!ready ? `Needs ${missing.join(", ")}` : locked ? "Add as contracted, and send for approval" : "Add to the ROM"}
         </button>
       </div>
     </div>

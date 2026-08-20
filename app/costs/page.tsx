@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
-import { MoneyTabs } from "../ui/money-tabs";
 import { BudgetLines } from "./budget-lines";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
@@ -53,14 +52,8 @@ export default function CostsPage() {
       <PageHeader
         title="Budget Management"
         subtitle="The money, one line per trade. The builder drafts a rough figure, the owner agrees it, and from there the price is settled inside the packages. A signed line moves only through a change order, and a line paid in full closes."
-        right={
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {ro && <Pill color="var(--muted)">View only</Pill>}
-            <Link href="/timing" className="btn btn-sm">Schedule →</Link>
-          </div>
-        }
+        right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
-      <MoneyTabs />
 
       {/* The time series leads: how the budget got to where it is, before the
           lines that make it up. */}

@@ -33,6 +33,10 @@ const NAV: NavItem[] = [
   // a line the owner has already agreed. You read the money before you go out
   // to price against it.
   { href: "/costs", label: "Budget Management", short: "Budget", mod: "costs", band: "job", Icon: CoinsIcon },
+  // Draws are the GC's to manage; funding is the owner's own money. Two
+  // audiences, so two modules, each absent for the side it does not belong to.
+  { href: "/payments", label: "Draw Management", short: "Draws", mod: "payments", band: "job", Icon: ReceiptIcon },
+  { href: "/budget", label: "Funding", short: "Funding", mod: "budget", band: "job", Icon: WalletIcon },
   { href: "/bids", label: "Bid and Package Management", short: "Packages", mod: "bids", band: "job", Icon: ClipboardIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
@@ -43,22 +47,16 @@ const NAV: NavItem[] = [
 
 const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference" };
 
-// The three routes behind the single "Money" item, and which one each role lands
-// on: the owner's question is "is it covered?", the builder's is "what has been
-// paid?", and a full admin wants all three, so they start at what we promised.
-const MONEY_ROUTES = ["/costs", "/payments", "/budget"];
-const MONEY_HOME: Partial<Record<Role, string>> = { owner: "/budget", builder: "/payments" };
-
 /** What each role opens on, and the order they meet things in. A role's first
  *  item should be what that role actually does most — permission decides what is
  *  reachable, this decides what comes first. Anything not listed keeps its
  *  default order behind these. */
 const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   // The owner opens the app to approve one thing, then look at money.
-  owner: ["/", "/costs", "/bids", "/materials", "/timing", "/updates"],
+  owner: ["/", "/costs", "/budget", "/bids", "/materials", "/timing", "/updates"],
   // The builder runs the job from the money out: the agreed figure first, then
   // the packages bid against it.
-  builder: ["/", "/costs", "/bids", "/timing", "/materials", "/updates"],
+  builder: ["/", "/costs", "/payments", "/bids", "/timing", "/materials", "/updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
   // The designer works from the drawings and the programme, not materials.
@@ -142,13 +140,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 }}>{BAND_LABEL[band]}</div>
               )}
               {items.map((n) => {
-            // Money spans three routes, so it stays lit on all of them and opens
-            // wherever this role's question lives.
-            const isMoney = n.mod === "costs";
-            const href = isMoney ? (MONEY_HOME[role] ?? n.href) : n.href;
-            const active = isMoney
-              ? MONEY_ROUTES.some((r) => pathname.startsWith(r))
-              : n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
+            const href = n.href;
+            const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
             // A vendor sees their own contract, not a management console.
             const label = n.mod === "vendors" && role === "trade" ? "Your contract" : n.label;
             return (

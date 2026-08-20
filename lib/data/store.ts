@@ -1159,19 +1159,19 @@ class Store {
    *  still has to agree. Once locked the ROM does not re-open, so the line goes
    *  in already contracted and the owner is asked to approve it instead — the
    *  work is real either way, and pretending otherwise just hides it. */
-  addBudgetLine(p: { tradeId: string; amount: number; note?: string; category?: MacroCategory }) {
+  addBudgetLine(p: { tradeId: string; amount: number; note?: string; category?: MacroCategory; roomIds?: string[]; manager?: CostOwner }) {
     if (!["full_admin", "builder", "owner"].includes(this.session.role)) return;
     if (!p.tradeId || !(p.amount > 0)) return;
     this.mutate((db) => {
       const trade = db.trades.find((t) => t.id === p.tradeId);
-      const owner: CostOwner = trade?.managedBy === "owner" ? "owner" : "builder";
+      const owner: CostOwner = p.manager ?? (trade?.managedBy === "owner" ? "owner" : "builder");
       const locked = !!db.romLocked;
       const today = new Date().toISOString().slice(0, 10);
       const markupModel: MarkupModel = "passthrough";
       const line: CostLine = {
         id: newId("cl"), name: trade?.name ?? "New line", tradeId: p.tradeId,
         category: p.category ?? trade?.category ?? "Soft Costs",
-        owner, roomIds: [], markupModel,
+        owner, roomIds: p.roomIds ?? [], markupModel,
         markupPct: owner === "owner" ? 0 : (db.project.builderMarkupPct ?? 20),
         history: [{ label: locked ? "Added after ROM lock" : "Added to the ROM", date: today, amount: p.amount }],
         status: locked ? "contracted" : "estimate",
