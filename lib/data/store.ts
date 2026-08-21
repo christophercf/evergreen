@@ -1317,6 +1317,19 @@ class Store {
     }, "ROM unlocked");
   }
 
+  /** Name a conversation — the WhatsApp group subject. Any participant can set
+   *  or change it; clearing it falls back to the participant names. */
+  setConversationSubject(key: string, subject: string) {
+    const me = this.session.userId;
+    if (this.session.role !== "full_admin" && !key.split("+").includes(me)) return;
+    this.mutate((db) => {
+      db.convMeta = db.convMeta ?? [];
+      let m = db.convMeta.find((x) => x.key === key);
+      if (!m) { m = { key }; db.convMeta.push(m); }
+      m.subject = subject.trim() || undefined;
+    }, subject.trim() ? "Subject saved" : "Subject removed");
+  }
+
   /** Builder's star rating for a trade (one row per rater per trade). */
   setTradeRating(tradeId: string, patch: Partial<Pick<TradeRating, "speed" | "clean" | "budget" | "mistakeFree" | "note">>) {
     if (!["full_admin", "builder", "owner"].includes(this.session.role)) return;

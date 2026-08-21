@@ -1074,6 +1074,11 @@ export interface DB {
   updates: SiteUpdate[];
   bidPackages: BidPackage[];
   tradeRatings: TradeRating[];
+  /** Conversation metadata, keyed by the sorted participant-id key. A
+   *  conversation is otherwise derived from its messages, so this is the one
+   *  thing stored about it: the subject — what a WhatsApp user knows as the
+   *  group name. */
+  convMeta?: { key: string; subject?: string }[];
   /** The project's macro categories. Absent on databases saved before they were
    *  editable, in which case the built-in set stands in. */
   categories?: MacroCat[];

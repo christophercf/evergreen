@@ -79,6 +79,7 @@ export default function UpdatesPage() {
   const [showNew, setShowNew] = useState(false);
   const [showDigest, setShowDigest] = useState(false);
   const [newTo, setNewTo] = useState<Set<string>>(new Set());
+  const [newSubject, setNewSubject] = useState("");
   const [pendingOthers, setPendingOthers] = useState<string[] | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, string>>({});
@@ -150,7 +151,15 @@ export default function UpdatesPage() {
   const people = db.users.filter((u) => u.id !== meId);
   const filtered = convs
     .filter((c) => {
-      if (q.trim() && !c.otherIds.some((id) => nameOf(id).toLowerCase().includes(q.trim().toLowerCase()))) return false;
+      if (q.trim()) {
+        const needle = q.trim().toLowerCase();
+        // WhatsApp searches what was said, not just who said it.
+        const subject = db.convMeta?.find((m) => m.key === c.key)?.subject ?? "";
+        const hit = c.otherIds.some((id) => nameOf(id).toLowerCase().includes(needle))
+          || subject.toLowerCase().includes(needle)
+          || c.msgs.some((mm) => (mm.body ?? "").toLowerCase().includes(needle));
+        if (!hit) return false;
+      }
       if (personF !== "all" && !c.otherIds.includes(personF)) return false;
       if (tradeF !== "all" && !c.otherIds.some((id) => userOf(id)?.tradeIds?.includes(tradeF))) return false;
       return true;
@@ -183,7 +192,7 @@ export default function UpdatesPage() {
         <Avatar u={others[0]} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.otherIds.map(nameOf).join(", ")}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{db.convMeta?.find((m) => m.key === c.key)?.subject ?? c.otherIds.map(nameOf).join(", ")}</span>
             <span style={{ fontSize: 10.5, color: unread ? "var(--sage-2)" : "var(--muted)", flexShrink: 0, fontWeight: unread ? 700 : 400 }}>{c.lastAt ? timeShort(c.lastAt) : ""}</span>
           </span>
           <span style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
@@ -199,10 +208,12 @@ export default function UpdatesPage() {
     const ids = [...newTo];
     if (!ids.length) return;
     const key = convKeyOf([meId, ...ids]);
+    if (newSubject.trim()) store.setConversationSubject(key, newSubject);
     setPendingOthers(ids);
     setSel(key);
     setShowNew(false);
     setNewTo(new Set());
+    setNewSubject("");
   };
 
   return (
@@ -257,6 +268,11 @@ export default function UpdatesPage() {
                   );
                 })}
                 {!allowed.length && <div style={{ fontSize: 12, color: "var(--muted)" }}>No one available for your role yet.</div>}
+                <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Subject — optional</span>
+                  <input className="input" value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
+                    placeholder="e.g. Kitchen cabinets" style={{ fontSize: 12.5 }} />
+                </label>
                 <div style={{ display: "flex", gap: 6 }}>
                   <button className="btn btn-primary btn-sm" disabled={!newTo.size} onClick={startNew}>Start chat{newTo.size > 1 ? ` (${newTo.size})` : ""}</button>
                   <button className="btn btn-sm" onClick={() => { setShowNew(false); setNewTo(new Set()); }}>Cancel</button>
@@ -476,6 +492,8 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
   const userOf = (id: string) => db.users.find((x) => x.id === id);
   const others = conv.otherIds.map(userOf);
   const group = conv.otherIds.length > 1;
+  const subject = db.convMeta?.find((m) => m.key === conv.key)?.subject;
+  const [editingSubject, setEditingSubject] = useState(false);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [conv.msgs.length]);
 
@@ -492,7 +510,7 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
       store.replyToUpdate(latest.id, text);
     }
     const emails = emailsFor(db.users, conv.otherIds);
-    pushEmail(emails, `💬 ${db.project.name} — message from ${name}`, text || "(photo)",
+    pushEmail(emails, `💬 ${db.project.name} — ${subject ?? `message from ${name}`}`, text || "(photo)",
       { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), convKey: conversationKeyOf([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
     setBody(""); att.clear();
   };
@@ -505,9 +523,22 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
         <button className="btn btn-sm msgr-back" onClick={onBack}>←</button>
         <Avatar u={others[0]} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.otherIds.map((id) => userOf(id)?.name ?? "—").join(", ")}</div>
+          {editingSubject ? (
+            <input className="input" autoFocus defaultValue={subject ?? ""}
+              placeholder="Subject — e.g. Kitchen cabinets"
+              onBlur={(e) => { store.setConversationSubject(conv.key, e.target.value); setEditingSubject(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditingSubject(false); }}
+              style={{ fontSize: 13, fontWeight: 700, width: "100%", maxWidth: 340 }} />
+          ) : (
+            <div onClick={() => setEditingSubject(true)} title="Set the subject" style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: "pointer" }}>
+              {subject ?? conv.otherIds.map((id) => userOf(id)?.name ?? "—").join(", ")}
+              <span style={{ fontSize: 10.5, color: "var(--muted)", marginLeft: 6, fontWeight: 400 }}>✎</span>
+            </div>
+          )}
           <div style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {others.map((u) => u ? (u.role === "trade" && u.tradeIds?.length ? tradeName(db, u.tradeIds[0]) : ROLE_LABEL[u.role]) : "—").join(" · ")}
+            {subject
+              ? conv.otherIds.map((id) => userOf(id)?.name ?? "—").join(", ")
+              : others.map((u) => u ? (u.role === "trade" && u.tradeIds?.length ? tradeName(db, u.tradeIds[0]) : ROLE_LABEL[u.role]) : "—").join(" · ")}
           </div>
         </div>
       </div>
