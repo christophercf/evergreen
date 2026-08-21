@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, Pill, SectionTitle, TextInput } from "../ui/bits";
-import { MACRO_ORDER, tradeUsage } from "@/lib/data/money";
+import { tradeUsage, macroOrder } from "@/lib/data/money";
 import { accessFor, ROLE_LABEL, type MacroCategory, type Trade } from "@/lib/data/types";
 import { authUpdatePassword } from "@/lib/data/auth";
 import { IS_SUPABASE } from "@/lib/data/config";
@@ -107,7 +107,7 @@ function TradesCard() {
   const store = useStore();
   const db = store.db;
   const [name, setName] = useState("");
-  const [cat, setCat] = useState<MacroCategory>(MACRO_ORDER[0]);
+  const [cat, setCat] = useState<MacroCategory>(macroOrder(db)[0]);
   const [managed, setManaged] = useState<"builder" | "owner">("builder");
   const [open, setOpen] = useState(false);
 
@@ -121,7 +121,7 @@ function TradesCard() {
         bar is a trade, and a vendor covers trades. A trade can only be removed once nothing uses it.
       </div>
 
-      {MACRO_ORDER.map((c: MacroCategory) => {
+      {macroOrder(db).map((c: MacroCategory) => {
         const inCat = db.trades.filter((t) => t.category === c);
         if (!inCat.length) return null;
         return (
@@ -147,7 +147,7 @@ function TradesCard() {
             <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
               <span style={{ fontSize: 11, color: "var(--muted)" }}>Category</span>
               <select className="input" value={cat} onChange={(e) => setCat(e.target.value as MacroCategory)} style={{ fontSize: 12.5 }}>
-                {MACRO_ORDER.map((c: MacroCategory) => <option key={c} value={c}>{c}</option>)}
+                {macroOrder(db).map((c: MacroCategory) => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { accessFor, type CostOwner, type MacroCategory } from "@/lib/data/types";
-import { fmt, romRows, romTotals, romCanLock, MACRO_ORDER, type RomRow } from "@/lib/data/money";
+import { fmt, romRows, romTotals, romCanLock, type RomRow, macroOrder } from "@/lib/data/money";
 import { Pill, StatCard, TextInput, NumInput } from "../ui/bits";
 import { ChangeOrders } from "./line-parts";
 
@@ -395,7 +395,7 @@ function AddBudgetLine() {
           <select className="input" value={tradeId} onChange={(e) => setTradeId(e.target.value)}
             style={{ fontSize: 12.5, width: "100%", marginTop: 4 }}>
             <option value="">Choose…</option>
-            {MACRO_ORDER.map((cat: MacroCategory) => {
+            {macroOrder(db).map((cat: MacroCategory) => {
               const inCat = db.trades.filter((tr) => tr.category === cat);
               if (!inCat.length) return null;
               return <optgroup key={cat} label={cat}>{inCat.map((tr) => <option key={tr.id} value={tr.id}>{tr.name}</option>)}</optgroup>;

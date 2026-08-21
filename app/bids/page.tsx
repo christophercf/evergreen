@@ -9,7 +9,7 @@ import {
   vendorCovers, vendorTrades,
   type BidPackage, type BidRoute, type ContactSheet, type PricingBasis,
 } from "@/lib/data/types";
-import { tradeName, MACRO_ORDER } from "@/lib/data/money";
+import { tradeName, macroOrder } from "@/lib/data/money";
 import {
   Check, Kicker, OptionBtn, ScreenHead, Tag, Tile, Triage, contactLine, contactOf, useNarrow, type TriageRow,
 } from "./kit";
@@ -174,7 +174,7 @@ function TradesScreen({ ro, onCreated }: { ro: boolean; onCreated: (id: string) 
   );
 
   if (narrow) {
-    const rows: TriageRow[] = MACRO_ORDER.flatMap((cat) =>
+    const rows: TriageRow[] = macroOrder(db).flatMap((cat) =>
       db.trades.filter((t) => t.category === cat).map((t) => ({
         id: t.id,
         title: t.name,
@@ -189,7 +189,7 @@ function TradesScreen({ ro, onCreated }: { ro: boolean; onCreated: (id: string) 
   return (
     <>
       {head}
-      {MACRO_ORDER.map((cat) => {
+      {macroOrder(db).map((cat) => {
         const trades = db.trades.filter((t) => t.category === cat);
         if (!trades.length) return null;
         return (

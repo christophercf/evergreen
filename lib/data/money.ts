@@ -256,6 +256,8 @@ export function totals(lines: CostLine[]) {
   };
 }
 
+/** The set every project starts with. Kept as the fallback so a database
+ *  saved before categories were editable still reads correctly. */
 export const MACRO_ORDER: MacroCategory[] = [
   "Soft Costs",
   "Site & Demo",
@@ -464,6 +466,35 @@ export function romTotals(db: DB) {
     paid: sum((r) => r.paid),
     remaining: sum((r) => r.remaining),
     removedRows: all.length - rows.length,
+  };
+}
+
+/** The project's categories, in order. Falls back to the built-in set. */
+export function macroOrder(db: DB): MacroCategory[] {
+  const own = db.categories;
+  return own && own.length ? own.map((c) => c.name) : MACRO_ORDER;
+}
+
+/** A category's colour. An added category that has not been given one falls
+ *  back to a neutral rather than rendering as an invisible bar segment. */
+export function macroColor(db: DB, name: MacroCategory): string {
+  return db.categories?.find((c) => c.name === name)?.color
+    ?? MACRO_COLOR[name]
+    ?? "var(--muted)";
+}
+
+/** Everything filed under a category — a category can only be removed once
+ *  this is empty, same rule as a trade. */
+export function categoryUsage(db: DB, name: MacroCategory) {
+  const counts: Record<string, number> = {
+    trades: db.trades.filter((t) => t.category === name).length,
+    "budget lines": db.costLines.filter((l) => l.category === name).length,
+  };
+  const used = Object.entries(counts).filter(([, n]) => n > 0);
+  return {
+    counts,
+    total: used.reduce((a, [, n]) => a + n, 0),
+    summary: used.map(([k, n]) => `${n} ${n === 1 ? k.replace(/s$/, "") : k}`).join(", "),
   };
 }
 

@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, StatCard, Pill, NumInput, TextInput } from "../ui/bits";
 import { accessFor, isArchitectUser, materialLockedCost, MATERIAL_STATUS_LABEL, type Material, type MaterialStatus, type ProductOption, type Purchaser } from "@/lib/data/types";
-import { tradeName, MACRO_ORDER, materialDates } from "@/lib/data/money";
+import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 import { CATALOG_CATEGORIES } from "@/lib/data/materialCatalog";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
@@ -636,7 +636,7 @@ function TimingBlock({ mt, ro }: { mt: Material; ro: boolean }) {
           <label style={{ fontSize: 11, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Driven by trade
             <select value={mt.tradeId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { tradeId: e.target.value || undefined })} style={{ fontSize: 12 }}>
               <option value="">— pick trade —</option>
-              {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+              {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
             </select>
           </label>
           {!mt.tradeId ? (
@@ -728,7 +728,7 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
           <option value="">— trade —</option>
           {tradeChoices
             ? tradeChoices.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)
-            : MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+            : macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
         </select>
       ))}
       {cell("Qty", <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 58 }} />)}

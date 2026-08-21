@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { Money, StatCard, SectionTitle, PageHeader, StackBar, Pill } from "./ui/bits";
-import { byCategory, totals, drawAmount, MACRO_ORDER, MACRO_COLOR, fmt, materialDates, tradeName } from "@/lib/data/money";
+import { byCategory, totals, drawAmount, fmt, materialDates, tradeName, macroOrder, macroColor } from "@/lib/data/money";
 import { accessFor } from "@/lib/data/types";
 
 export default function Dashboard() {
@@ -105,14 +105,14 @@ export default function Dashboard() {
       {canSeeCosts && <>
         <SectionTitle right={<Link href="/costs" className="btn btn-sm">Open Budget Management →</Link>}>Cost by Category</SectionTitle>
         <div className="card" style={{ padding: 16 }}>
-          <StackBar height={14} segments={MACRO_ORDER.map((c) => ({ value: cats.find((x) => x.key === c)?.total ?? 0, color: MACRO_COLOR[c], label: c }))} />
+          <StackBar height={14} segments={macroOrder(db).map((c) => ({ value: cats.find((x) => x.key === c)?.total ?? 0, color: macroColor(db, c), label: c }))} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px,1fr))", gap: "8px 18px", marginTop: 14 }}>
-            {MACRO_ORDER.map((c) => {
+            {macroOrder(db).map((c) => {
               const r = cats.find((x) => x.key === c);
               if (!r || r.total === 0) return null;
               return (
                 <div key={c} style={{ display: "flex", alignItems: "center", gap: 9 }}>
-                  <span style={{ width: 11, height: 11, borderRadius: 3, background: MACRO_COLOR[c], flexShrink: 0 }} />
+                  <span style={{ width: 11, height: 11, borderRadius: 3, background: macroColor(db, c), flexShrink: 0 }} />
                   <span style={{ fontSize: 13, flex: 1 }}>{c}</span>
                   <span style={{ fontSize: 13, fontWeight: 700 }}><Money value={r.total} /></span>
                 </div>

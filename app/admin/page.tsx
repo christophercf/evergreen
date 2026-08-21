@@ -8,7 +8,7 @@ import {
   VENDOR_DOC_LABEL, vendorTrades,
   type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User, type VendorDocKind,
 } from "@/lib/data/types";
-import { MACRO_ORDER, tradeName } from "@/lib/data/money";
+import { tradeName, macroOrder, macroColor, categoryUsage } from "@/lib/data/money";
 import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { AddVendor } from "./add-vendor";
@@ -21,7 +21,7 @@ const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Base
 // Who can hand out access. Mirrors the check the /api/invite route enforces.
 const CAN_INVITE: Role[] = ["full_admin", "builder", "owner"];
 
-type Tab = "matrix" | "trade" | "team";
+type Tab = "matrix" | "trade" | "categories" | "team";
 
 export default function AdminPage() {
   const store = useStore();
@@ -41,7 +41,7 @@ export default function AdminPage() {
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
-        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
+        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["categories", "Trade Category Management"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className="btn btn-sm"
             style={{ border: "none", borderBottom: tab === k ? "2px solid var(--sage)" : "2px solid transparent", background: "transparent", borderRadius: 0, color: tab === k ? "var(--walnut)" : "var(--muted)", fontWeight: 700 }}>
             {label}
@@ -51,6 +51,7 @@ export default function AdminPage() {
 
       {tab === "matrix" && <MatrixTab ro={ro} />}
       {tab === "trade" && <TradeScopeTab ro={ro} />}
+      {tab === "categories" && <CategoriesTab ro={ro} />}
       {tab === "team" && <TeamTab ro={ro} />}
     </>
   );
@@ -86,7 +87,7 @@ function MatrixTab({ ro }: { ro: boolean }) {
     <>
       {/* cluster toggle buttons */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 16 }}>
-        {(["All", ...MACRO_ORDER] as (MacroCategory | "All")[]).map((c) => (
+        {(["All", ...macroOrder(db)] as (MacroCategory | "All")[]).map((c) => (
           <button key={c} onClick={() => setCat(c)} className="btn btn-sm" style={{ background: cat === c ? "var(--sage)" : "var(--paper)", color: cat === c ? "#fff" : "var(--ink)", borderColor: cat === c ? "var(--sage)" : "var(--line)", fontWeight: 700 }}>{c}</button>
         ))}
       </div>
@@ -202,7 +203,7 @@ function TradeScopeTab({ ro }: { ro: boolean }) {
     <>
       <SectionTitle right={
         <select value={tradeId} onChange={(e) => setTradeId(e.target.value)}>
-          {MACRO_ORDER.map((c) => (
+          {macroOrder(db).map((c) => (
             <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
           ))}
         </select>
@@ -303,6 +304,126 @@ const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];
 // One merged tab: companies (Builder/GC, Owner, each Vendor) with their contact &
 // billing on top and the people + their access nested inside — Users & Access and
 // Contacts & Billing unified so there's a single source for each person/company.
+// ---------------------------------------------------------------------------
+// Trade Category Management.
+//
+// A category is the band a trade sits in — it groups the budget, colours the
+// cost chart and orders every trade picker in the app. It is data, so the
+// project can add its own; and like a trade, it can only be removed once
+// nothing is filed under it.
+// ---------------------------------------------------------------------------
+const CAT_SWATCHES = [
+  "#8b6f47", "#a8743c", "#6b7f5b", "#4a7a8c", "#9c6b8e", "#7d8a4f", "#b08a3e",
+  "#5f6b8a", "#8a5f5f", "#4f7d6a", "#7a5f8a", "#8a7a4f",
+];
+
+function CategoriesTab({ ro }: { ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const cats = macroOrder(db);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(CAT_SWATCHES[0]);
+
+  const dupe = cats.some((c) => c.toLowerCase() === name.trim().toLowerCase());
+  const ready = !!name.trim() && !dupe;
+
+  return (
+    <div style={{ marginTop: 16, maxWidth: 780 }}>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55, marginBottom: 12, maxWidth: "72ch" }}>
+        Categories group the budget, colour the cost chart and order every trade list in the app.
+        {cats.length} in use. Renaming one carries its trades and budget lines with it; removing one
+        is only possible once nothing is filed under it.
+      </div>
+
+      <div className="card" style={{ padding: 4 }}>
+        {cats.map((c) => <CategoryRow key={c} name={c} ro={ro} />)}
+      </div>
+
+      {!ro ? (
+        !adding ? (
+          <button className="btn btn-sm" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>＋ Add a category</button>
+        ) : (
+          <div className="card" style={{ padding: 14, marginTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 190 }}>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>Category name</span>
+                <input className="input" value={name} autoFocus onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Landscape & Grounds" style={{ fontSize: 12.5 }} />
+              </label>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 5 }}>Colour — used on the cost chart and the budget bars</div>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {CAT_SWATCHES.map((sw) => (
+                  <button key={sw} onClick={() => setColor(sw)} title={sw}
+                    style={{
+                      width: 26, height: 26, borderRadius: 6, cursor: "pointer", background: sw,
+                      border: color === sw ? "3px solid var(--walnut)" : "1px solid var(--line)",
+                    }} />
+                ))}
+              </div>
+            </div>
+            {dupe ? <div style={{ fontSize: 11.5, color: "var(--rust)" }}>There is already a category with that name.</div> : null}
+            <div style={{ display: "flex", gap: 7, justifyContent: "flex-end" }}>
+              <button className="btn btn-sm" onClick={() => { setAdding(false); setName(""); }}>Cancel</button>
+              <button className={`btn btn-sm ${ready ? "btn-primary" : ""}`} disabled={!ready}
+                onClick={() => { store.addCategory(name.trim(), color); setName(""); setAdding(false); }}>
+                {dupe ? "Name already used" : "Add category"}
+              </button>
+            </div>
+          </div>
+        )
+      ) : null}
+    </div>
+  );
+}
+
+function CategoryRow({ name, ro }: { name: string; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const use = categoryUsage(db, name);
+  const color = macroColor(db, name);
+  const [arm, setArm] = useState(false);
+  const [swatches, setSwatches] = useState(false);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
+      <button disabled={ro} onClick={() => setSwatches((v) => !v)} title="Change colour"
+        style={{ width: 16, height: 16, borderRadius: 4, background: color, border: "1px solid var(--line)", cursor: ro ? "default" : "pointer", flexShrink: 0 }} />
+      {ro ? (
+        <span style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600 }}>{name}</span>
+      ) : (
+        <input className="input" defaultValue={name}
+          onBlur={(e) => store.updateCategory(name, { name: e.target.value })}
+          style={{ flex: 1, minWidth: 150, fontSize: 13, fontWeight: 600 }} />
+      )}
+
+      {use.total > 0 ? (
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>{use.summary}</span>
+      ) : arm ? (
+        <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>Remove it?</span>
+          <button className="btn btn-sm" onClick={() => setArm(false)}>No</button>
+          <button className="btn btn-sm" style={{ background: "var(--rust)", color: "#fff", fontWeight: 700 }}
+            onClick={() => store.removeCategory(name)}>Remove</button>
+        </span>
+      ) : !ro ? (
+        <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => setArm(true)}>Remove</button>
+      ) : <span style={{ fontSize: 11, color: "var(--muted)" }}>empty</span>}
+
+      {swatches && !ro ? (
+        <div style={{ width: "100%", display: "flex", gap: 5, flexWrap: "wrap", paddingTop: 6 }}>
+          {CAT_SWATCHES.map((sw) => (
+            <button key={sw} onClick={() => { store.updateCategory(name, { color: sw }); setSwatches(false); }} title={sw}
+              style={{ width: 24, height: 24, borderRadius: 5, background: sw, border: color === sw ? "3px solid var(--walnut)" : "1px solid var(--line)", cursor: "pointer" }} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TeamTab({ ro }: { ro: boolean }) {
   const store = useStore();
   const db = store.db;
@@ -848,12 +969,12 @@ function AddVendorTrade() {
       {mode === "existing" ? (
         <select value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ fontSize: 12 }}>
           <option value="">— trade —</option>
-          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+          {macroOrder(db).map((c) => <optgroup key={c} label={c}>{trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
         </select>
       ) : (
         <>
           <input placeholder="New trade name (e.g. Windows — Builder)" value={newName} onChange={(e) => setNewName(e.target.value)} style={{ fontSize: 12, width: 190 }} />
-          <select value={cat} onChange={(e) => setCat(e.target.value as MacroCategory)} style={{ fontSize: 12 }}>{MACRO_ORDER.map((c) => <option key={c} value={c}>{c}</option>)}</select>
+          <select value={cat} onChange={(e) => setCat(e.target.value as MacroCategory)} style={{ fontSize: 12 }}>{macroOrder(db).map((c) => <option key={c} value={c}>{c}</option>)}</select>
         </>
       )}
       {isOwnerRole ? <Pill color="#fff" bg="var(--brass)">⌂ Owner Managed</Pill> : (
@@ -1020,7 +1141,7 @@ function InvitePanel({ viewerRole, name, setName, email, setEmail, nrole, setNro
         {needsTrade && (
           <select value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ borderColor: needsTrade && !tradeId ? "var(--rust)" : undefined }}>
             <option value="">Assign trade…</option>
-            {MACRO_ORDER.map((c) => (
+            {macroOrder(db).map((c) => (
               <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>
             ))}
           </select>

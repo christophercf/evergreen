@@ -7,13 +7,7 @@ import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, Nu
 import { BudgetLines } from "./budget-lines";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
-import {
-  lineBase, lineStart, lineDelta, totals, byCategory, byTrade, drawAmount,
-  lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange,
-  phaseAmount, phasesTotal, tradeName, MACRO_ORDER, MACRO_COLOR, fmt,
-  linePaid, linePaidByDraws, lineUnpaid, linePaidStatus,
-  lineHasRange, lineLow, lineHigh, budgetRange, isLocked, lineLockedCost, lineRemaining,
-} from "@/lib/data/money";
+import { lineBase, lineStart, lineDelta, totals, byCategory, byTrade, drawAmount, lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange, phaseAmount, phasesTotal, tradeName, fmt, linePaid, linePaidByDraws, lineUnpaid, linePaidStatus, lineHasRange, lineLow, lineHigh, budgetRange, isLocked, lineLockedCost, lineRemaining, macroOrder, macroColor } from "@/lib/data/money";
 import { fileToDataURL } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import { MsgButton } from "../ui/messenger";
@@ -148,7 +142,7 @@ function AddCostLine() {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input placeholder="Line item name…" value={name} onChange={(e) => setName(e.target.value)} style={{ flex: 1, minWidth: 180 }} />
         <select value={tradeId} onChange={(e) => pickTrade(e.target.value)} style={{ fontSize: 12.5 }}>
-          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+          {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
         </select>
         <select value={owner} onChange={(e) => setOwner(e.target.value as CostOwner)} style={{ fontSize: 12.5 }}>
           <option value="builder">Builder-carried</option>
@@ -234,7 +228,7 @@ function CostChart() {
   const y = (v: number) => padT + plotH - (v / maxV) * plotH;
   const xAt = (i: number) => padL + (months.length <= 1 ? plotW : (i / (months.length - 1)) * plotW);
   const budgetY = y(baseTotal);
-  const cats = MACRO_ORDER.filter((c) => db.costLines.some((l) => l.category === c));
+  const cats = macroOrder(db).filter((c) => db.costLines.some((l) => l.category === c));
 
   // Build cumulative stacked series: bottom[i] accumulates as we stack categories.
   const bottom = months.map(() => 0);
@@ -273,7 +267,7 @@ function CostChart() {
           </g>
         ))}
         {/* stacked areas */}
-        {bands.map((b) => <polygon key={b.c} points={b.poly} fill={MACRO_COLOR[b.c]} opacity={0.82} stroke={MACRO_COLOR[b.c]} strokeWidth={0.5} />)}
+        {bands.map((b) => <polygon key={b.c} points={b.poly} fill={macroColor(db, b.c)} opacity={0.82} stroke={macroColor(db, b.c)} strokeWidth={0.5} />)}
         {/* total boundary line + points */}
         <polyline points={totalLine} fill="none" stroke="var(--walnut)" strokeWidth={1.5} />
         {months.map((m, i) => <circle key={i} cx={xAt(i)} cy={y(bottom[i])} r={2.4} fill="var(--walnut)" />)}
@@ -305,7 +299,7 @@ function CostChart() {
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--ok)" }}><span style={{ width: 14, height: 3, background: "var(--ok)", borderRadius: 2 }} />Actual paid</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--walnut)" }}><span style={{ width: 14, height: 2, background: "var(--walnut)", borderRadius: 2 }} />Projected</span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontWeight: 700, color: "var(--rust)" }}><span style={{ width: 14, height: 0, borderTop: "2px dashed var(--rust)" }} />Today</span>
-        {cats.map((c) => <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: MACRO_COLOR[c] }} />{c}</span>)}
+        {cats.map((c) => <span key={c} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: macroColor(db, c) }} />{c}</span>)}
       </div>
       <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>The stacked area is the <strong>projected</strong> cumulative cost (each trade lands per the schedule), building toward the baseline budget (dashed brass). The solid green line is <strong>actual money paid</strong> (draws + direct payments) up to the Today marker — the gap between green and the area is work committed but not yet paid.</p>
     </div>
@@ -322,7 +316,7 @@ function groupLines(lines: CostLine[], group: GroupBy, db: ReturnType<typeof use
   if (group === "trade") {
     return byTrade(db, lines).map((r) => ({ key: r.key, label: r.label, color: "var(--sage)", lines: lines.filter((l) => l.tradeId === r.key) }));
   }
-  return MACRO_ORDER.map((c) => ({ key: c, label: c, color: MACRO_COLOR[c], lines: lines.filter((l) => l.category === c) })).filter((g) => g.lines.length);
+  return macroOrder(db).map((c) => ({ key: c, label: c, color: macroColor(db, c), lines: lines.filter((l) => l.category === c) })).filter((g) => g.lines.length);
 }
 
 // ---------------------------------------------------------------------------

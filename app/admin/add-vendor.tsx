@@ -6,7 +6,7 @@ import {
   DOC_ROUTE_HINT, DOC_ROUTE_LABEL, VENDOR_DOC_LABEL,
   type DocRoute, type VendorDoc,
 } from "@/lib/data/types";
-import { MACRO_ORDER } from "@/lib/data/money";
+import { macroOrder } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
 // Add a vendor to the roster.
@@ -77,7 +77,7 @@ export function AddVendor({ onDone }: { onDone: (id: string) => void }) {
       </Section>
 
       <Section label="What can they work on?">
-        {MACRO_ORDER.map((cat) => {
+        {macroOrder(db).map((cat) => {
           const inCat = db.trades.filter((t) => t.category === cat);
           if (!inCat.length) return null;
           return (

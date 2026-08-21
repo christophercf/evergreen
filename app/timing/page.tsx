@@ -7,7 +7,7 @@ import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import {
   accessFor, isArchitectUser, SCHEDULE_LABEL, type ScheduleItem, type ScheduleStatus, type MacroCategory,
 } from "@/lib/data/types";
-import { tradeName, MACRO_COLOR, MACRO_ORDER, romRows, fmt } from "@/lib/data/money";
+import { tradeName, romRows, fmt, macroOrder, macroColor } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
 import { conversationKeyOf, conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
 
@@ -89,7 +89,7 @@ export default function TimingPage() {
     : [...baseVisible].sort((a, b) => (rowSort === "latest" ? b.start.localeCompare(a.start) : a.start.localeCompare(b.start)));
 
   const catOf = (tradeId?: string): MacroCategory | undefined => db.trades.find((t) => t.id === tradeId)?.category;
-  const colorOf = (s: ScheduleItem) => (s.kind === "milestone" ? "var(--walnut)" : MACRO_COLOR[catOf(s.tradeId) ?? "Soft Costs"]);
+  const colorOf = (s: ScheduleItem) => (s.kind === "milestone" ? "var(--walnut)" : macroColor(db, catOf(s.tradeId) ?? "Soft Costs"));
   // Owner sees confirmed dates; builder/editor see working dates.
   const datesOf = (s: ScheduleItem): [number, number] =>
     ownerView && !editing ? [parse(s.confirmedStart ?? s.start), parse(s.confirmedEnd ?? s.end)] : [parse(s.start), parse(s.end)];
@@ -435,7 +435,7 @@ function AddTimelineItem() {
       {!milestone && cell("Trade", (
         <select value={tradeId} onChange={(e) => setTradeId(e.target.value)}>
           <option value="">— none —</option>
-          {MACRO_ORDER.map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+          {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
         </select>
       ))}
       {needsBudget && cell("Budget line", (

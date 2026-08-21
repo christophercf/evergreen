@@ -72,14 +72,16 @@ export interface User {
 }
 
 // ---- Trades & rooms ---------------------------------------------------------
-export type MacroCategory =
-  | "Soft Costs"
-  | "Site & Demo"
-  | "Structure & Envelope"
-  | "Mechanicals (MEP)"
-  | "Interior Finishes"
-  | "Exterior"
-  | "Owner Items";
+/** A macro category is data, not a fixed set — the project adds its own in
+ *  Administrative. It is keyed by its own name, which is what every cost line,
+ *  trade and rollup already stores. */
+export type MacroCategory = string;
+
+export interface MacroCat {
+  name: MacroCategory;
+  /** Used by the stacked bars, the cost chart and the budget rows. */
+  color: string;
+}
 
 export interface Trade {
   id: string;
@@ -1072,6 +1074,9 @@ export interface DB {
   updates: SiteUpdate[];
   bidPackages: BidPackage[];
   tradeRatings: TradeRating[];
+  /** The project's macro categories. Absent on databases saved before they were
+   *  editable, in which case the built-in set stands in. */
+  categories?: MacroCat[];
   /** The ROM: one agreement row per trade. Absent on databases saved before it
    *  existed, so every reader must tolerate undefined. */
   rom?: RomLine[];

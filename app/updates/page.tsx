@@ -5,7 +5,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
 import { ContextChip, conversationKeyOf, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
-import { tradeName, MACRO_ORDER, materialDates } from "@/lib/data/money";
+import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
 // Messenger — WhatsApp-style: a conversation list (per participant set, with
@@ -265,7 +265,7 @@ export default function UpdatesPage() {
             ) : (
               <>
                 {grouped
-                  ? [...MACRO_ORDER, "Project Team"].map((cat) => {
+                  ? [...macroOrder(db), "Project Team"].map((cat) => {
                       const inCat = filtered.filter((c) => convCategory(c) === cat);
                       if (!inCat.length) return null;
                       return (

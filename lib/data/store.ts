@@ -12,7 +12,7 @@ import type {
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
-import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage } from "./money";
+import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage, categoryUsage, MACRO_ORDER, MACRO_COLOR } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
 
@@ -1570,6 +1570,63 @@ class Store {
     }
     return id;
   }
+  // ---- Macro categories ------------------------------------------------------
+  /** Seed the editable list from the built-in set the first time one is touched,
+   *  so an untouched project keeps reading the defaults. */
+  private ensureCategories(db: DB) {
+    if (!db.categories?.length) {
+      db.categories = MACRO_ORDER.map((name) => ({ name, color: MACRO_COLOR[name] ?? "var(--muted)" }));
+    }
+    return db.categories;
+  }
+
+  addCategory(name: string, color: string): boolean {
+    if (!this.canManageContacts) return false;
+    const next = name.trim();
+    if (!next) return false;
+    let ok = false;
+    this.mutate((db) => {
+      const cats = this.ensureCategories(db);
+      if (cats.some((c) => c.name.toLowerCase() === next.toLowerCase())) return;
+      cats.push({ name: next, color });
+      ok = true;
+    }, "Category added");
+    return ok;
+  }
+
+  updateCategory(name: string, patch: { name?: string; color?: string }) {
+    if (!this.canManageContacts) return;
+    this.mutate((db) => {
+      const cats = this.ensureCategories(db);
+      const c = cats.find((x) => x.name === name);
+      if (!c) return;
+      if (patch.color) c.color = patch.color;
+      const renamed = patch.name?.trim();
+      if (renamed && renamed !== name) {
+        if (cats.some((x) => x.name.toLowerCase() === renamed.toLowerCase())) return;
+        c.name = renamed;
+        // Everything files itself by the category's NAME, so a rename has to
+        // carry those references with it or they point at nothing.
+        for (const t of db.trades) if (t.category === name) t.category = renamed;
+        for (const l of db.costLines) if (l.category === name) l.category = renamed;
+      }
+    }, "Category saved");
+  }
+
+  /** Refused while any trade or budget line is still filed under it. */
+  removeCategory(name: string): boolean {
+    if (!this.canManageContacts) return false;
+    if (categoryUsage(this.db, name).total > 0) return false;
+    let ok = false;
+    this.mutate((db) => {
+      const cats = this.ensureCategories(db);
+      const before = cats.length;
+      db.categories = cats.filter((c) => c.name !== name);
+      ok = db.categories.length < before;
+    }, "Category removed");
+    return ok;
+  }
+
   /** Remove a trade the project does not use. Refused while anything still
    *  points at it: the alternative is cascading the delete through budget
    *  lines, schedule bars and materials, which is a far bigger action than the
