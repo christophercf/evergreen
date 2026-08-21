@@ -80,19 +80,26 @@ next action is not obvious, not reachable, or silently does nothing.
    pick the counterparty, issue it.
 5. **Contracts** (under Draw Management) — the new contract appears as its own
    line in the Packages band; expand it; sign both rounds.
-6. **Draw Management** — the signed line is now draggable. Build a draw, set
-   allocations, mark client approved, mark client paid, confirm it archives.
-7. **Change order after the fact** — add a change order on a contracted line,
+6. **Draw Management** — the signed line is now draggable. Build a draw and
+   check each line shows what is left to draw against it, and that the draw
+   refuses to pretend: allocating past the headroom must say so in red.
+   Confirm what the draw finishes is pre-filled from the package, that an item
+   already claimed by another draw is named as such, and that the GC can change
+   it.
+7. **Issue the draw** — issue it to a client, read the document, sign it as
+   them. Signing must move the draw to Client approved on its own; then mark it
+   paid and confirm it archives and appears in Contracts under Draw requests.
+8. **Change order after the fact** — add a change order on a contracted line,
    choose *Push a revised contract* with *also update the draw*; confirm the
    contract gains an amendment, both signatures clear, and the draw returns to
    Saved.
-8. **Schedule** — add a timeline item against a budget line; drag a bar; drag
+9. **Schedule** — add a timeline item against a budget line; drag a bar; drag
    the empty chart to pan.
-9. **Materials** — add a material, set its status through to delivered.
-10. **Messages** — start a new chat, set a subject, reply, react, pin, archive.
-11. **Help** — every numbered step's *Take me there* lands on a real screen, and
+10. **Materials** — add a material, set its status through to delivered.
+11. **Messages** — start a new chat, set a subject, reply, react, pin, archive.
+12. **Help** — every numbered step's *Take me there* lands on a real screen, and
     a step this seat cannot reach says so rather than linking into a refusal.
-12. **Feedback** — file with an empty description and with a bug that has no
+13. **Feedback** — file with an empty description and with a bug that has no
     expectation; both must refuse in words. Then file a real one and confirm the
     brief carries seat, device, ROM phase and screen.
 
@@ -169,6 +176,19 @@ Prove the isolation, do not assume it: read `notifications[].readBy` after
 opening a module and confirm it holds exactly the one user id.
 ---
 
+## 6b. The feedback tracker (daily)
+
+Run `node scripts/pull-feedback.mjs`. It is read-only against live and rewrites
+`FEEDBACK.md`, preserving every **Triage:** line already there.
+
+- Work the Open table: blocking bugs, then bugs, then the rest.
+- Write a **Triage:** line under each one you act on — the decision and why.
+- Close it in the app (Help → the report → Close) once it ships; the next pull
+  moves it to Closed with its triage line intact.
+- A report's seat is load-bearing. Reproduce it from that seat, not from admin.
+
+---
+
 ## 7. Regression watchlist
 
 Bugs that already escaped once. Each run, prove they are still dead.
@@ -190,6 +210,10 @@ Bugs that already escaped once. Each run, prove they are still dead.
 - **Change-order exhibit letters are unique per line** — lettered from the
   highest letter used, not the count, so deleting one cannot hand out a
   duplicate (fixed 2026-08-21, found by this QA's first run).
+- **A draw must never quietly exceed its lines** — the row says what is left,
+  and going past it reads in red rather than being clamped or hidden.
+- **A signed draw request is the approval** — there is no second control that
+  sets the same status from a different fact.
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the

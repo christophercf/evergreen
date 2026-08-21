@@ -12,7 +12,8 @@ import type {
 } from "./types";
 import { BID_REQ_DEFAULT, FEEDBACK_KIND_LABEL, ROLE_LABEL } from "./types";
 import { buildDB } from "./seed";
-import { contractFromAward } from "./contract";
+import { contractFromAward, lineDrawable } from "./contract";
+import { uncoveredScopeFor } from "./drawscope";
 import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage, categoryUsage, MACRO_ORDER, MACRO_COLOR } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
@@ -801,10 +802,14 @@ class Store {
     this.mutate((db) => {
       const d = db.draws.find((x) => x.id === drawId);
       if (!d || d.status === "paid") return;
-      // Only locked cost lines can be drawn against — pricing must be agreed first.
+      // A line opens up when its contract is signed — the same gate the drag
+      // handle uses, so the two cannot disagree.
       const line = db.costLines.find((l) => l.id === lineId);
-      if (!line?.locked) return;
-      if (!d.allocations.some((a) => a.lineId === lineId)) d.allocations.push({ lineId, mode, value });
+      if (!line || !lineDrawable(db, line)) return;
+      if (d.allocations.some((a) => a.lineId === lineId)) return;
+      // What this draw finishes starts as whatever the package priced and no
+      // other draw has claimed. The GC adjusts it; they do not build it.
+      d.allocations.push({ lineId, mode, value, includedScope: uncoveredScopeFor(db, line, drawId) });
     });
   }
   setAllocation(drawId: string, lineId: string, patch: Partial<{ mode: "pct" | "flat"; value: number; note: string }>) {
@@ -1151,6 +1156,79 @@ class Store {
       this.notify(db, { toRole: "owner", kind: "info", module: "bids", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
     });
     return outLineId;
+  }
+
+  // ---- The draw as a document ------------------------------------------------
+  // A draw is a request for money. Sending it as a document the client signs
+  // makes the approval a thing that exists, rather than a status somebody set.
+
+  /** Freeze this draw into a document addressed to one client. */
+  issueDrawRequest(drawId: string, toUserId: string, body: string, total: number): boolean {
+    if (!["full_admin", "builder"].includes(this.session.role)) return false;
+    let ok = false;
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      const to = db.users.find((u) => u.id === toUserId);
+      if (!d || !to || d.status === "paid") return;
+      if (!d.allocations.length) return; // nothing to ask for
+      d.request = {
+        body, total,
+        issuedAt: new Date().toISOString(),
+        issuedBy: this.session.displayName,
+        toUserId: to.id, toName: to.name, toEmail: to.email,
+      };
+      this.notify(db, {
+        toUserId: to.id, kind: "info", module: "vendors",
+        message: `\u{1F4C4} Draw request "${d.name}" is ready for your signature in Contracts.`,
+      });
+      ok = true;
+    }, "Issued the draw for signature");
+    return ok;
+  }
+
+  /** Withdraw an unsigned request — the GC needs the draw editable again. */
+  withdrawDrawRequest(drawId: string) {
+    if (!["full_admin", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (!d?.request || d.request.signedBy) return; // a signed document stands
+      d.request = undefined;
+    }, "Withdrew the draw request");
+  }
+
+  markDrawRequestEmailed(drawId: string) {
+    this.mutateQuiet((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (d?.request) d.request.emailedAt = new Date().toISOString();
+    });
+  }
+
+  /** The client signs. The signature IS the approval — there is no second
+   *  button that says the same thing, so the two can never disagree. */
+  signDrawRequest(drawId: string, signatureImg?: string): boolean {
+    const role = this.session.role;
+    let ok = false;
+    this.mutate((db) => {
+      const d = db.draws.find((x) => x.id === drawId);
+      if (!d?.request || d.request.signedBy) return;
+      // Only the person it was addressed to. A full admin who is also the owner
+      // signs as themselves, not on anyone's behalf.
+      if (d.request.toUserId !== this.session.userId && role !== "full_admin") return;
+      const today = new Date().toISOString().slice(0, 10);
+      d.request.signedBy = this.session.displayName;
+      d.request.signedAt = new Date().toISOString();
+      d.request.signatureImg = signatureImg;
+      d.status = "pushed";
+      d.approvedBy = this.session.displayName;
+      d.approvedDate = today;
+      d.pushedDate = d.pushedDate ?? today;
+      this.notify(db, {
+        toRole: "builder", kind: "info", module: "payments",
+        message: `\u2713 ${this.session.displayName} signed the draw request for "${d.name}" \u2014 ready to be paid.`,
+      });
+      ok = true;
+    }, "Signed the draw request");
+    return ok;
   }
 
   // ---- Feedback, filed from inside the app -----------------------------------

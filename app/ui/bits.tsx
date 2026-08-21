@@ -126,6 +126,51 @@ export function StackBar({ segments, height = 10 }: { segments: { value: number;
   );
 }
 
+/** Spend pacing: what has been paid, what is committed to a draw but not yet
+ *  paid, and what is left. One definition, so the budget line, the draw and the
+ *  contract cannot each draw a slightly different bar.
+ *
+ *  `drawn` is the FULL allocated figure; the unpaid slice is drawn − paid, so a
+ *  caller never has to work out the middle segment itself and get it wrong. */
+export function PaceBar({ paid, drawn, total, height = 5, legend }: {
+  paid: number; drawn: number; total: number; height?: number; legend?: boolean;
+}) {
+  const p = Math.max(0, Math.min(paid, total));
+  const unpaid = Math.max(0, Math.min(drawn, total) - p);
+  const left = Math.max(0, total - p - unpaid);
+  const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
+  return (
+    <div>
+      <div title={`Paid ${money(p)} · In a draw, unpaid ${money(unpaid)} · Left ${money(left)}`}>
+        <StackBar height={height} segments={[
+          { value: p, color: "var(--ok)" },
+          { value: unpaid, color: "var(--brass)" },
+          { value: left, color: "var(--cream-2)" },
+        ]} />
+      </div>
+      {legend ? (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 10.5, color: "var(--muted)", marginTop: 4 }}>
+          <Dot c="var(--ok)">Paid {money(p)}</Dot>
+          <Dot c="var(--brass)">In a draw {money(unpaid)}</Dot>
+          <Dot c="var(--cream-2)">Left {money(left)}</Dot>
+          <span style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums" }}>
+            {total > 0 ? `${Math.round((p / total) * 100)}% paid` : "—"}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Dot({ c, children }: { c: string; children: ReactNode }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span style={{ width: 7, height: 7, borderRadius: 99, background: c, border: c === "var(--cream-2)" ? "1px solid var(--line)" : undefined }} />
+      {children}
+    </span>
+  );
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <div style={{ padding: 28, textAlign: "center", color: "var(--muted)", fontSize: 14 }}>{children}</div>;
 }

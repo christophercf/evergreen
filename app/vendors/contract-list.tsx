@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import type { DB } from "@/lib/data/types";
-import { fmt, tradeName } from "@/lib/data/money";
+import { fmt, tradeName, lineCurrent, lineDrawn, linePaid } from "@/lib/data/money";
 import { contractOf, contractState, contractMissingSigs, contractAmount, type ContractState } from "@/lib/data/contract";
-import { Pill, StatCard } from "../ui/bits";
+import type { Draw } from "@/lib/data/types";
+import { Pill, StatCard, PaceBar } from "../ui/bits";
 
 // ---------------------------------------------------------------------------
 // Contracts, one line each.
@@ -40,6 +41,9 @@ export type ContractRow = {
   revisions: number;
   signed: number;
   needed: number;
+  /** Paid and drawn against this contract's budget lines, for the pacing bar. */
+  paid: number;
+  drawn: number;
   /** No package behind it — contracted on paper before the app. */
   legacy: boolean;
   /** No contract was ever issued through the app: the locked cost line is the
@@ -60,6 +64,16 @@ export function contractRows(db: DB, tradeIds: string[]): ContractRow[] {
   const allowed = new Set(tradeIds);
   const rows: ContractRow[] = [];
   const claimed = new Set<string>();
+  // Money moves on budget lines, not on contracts, so a contract's pacing is
+  // its trades' lines added up — read, never stored.
+  const spend = (trades: string[]) => {
+    const lines = db.costLines.filter((l) => trades.includes(l.tradeId));
+    return {
+      paid: lines.reduce((a, l) => a + linePaid(db, l), 0),
+      drawn: lines.reduce((a, l) => a + lineDrawn(db, l.id), 0),
+      lineTotal: lines.reduce((a, l) => a + lineCurrent(l), 0),
+    };
+  };
 
   for (const p of db.bidPackages ?? []) {
     const trades = [...new Set([p.tradeId, ...(p.tradeIds ?? [])])].filter((t) => allowed.has(t));
@@ -82,6 +96,7 @@ export function contractRows(db: DB, tradeIds: string[]): ContractRow[] {
       revisions: contracts.reduce((a, c) => a + (c!.revisions?.length ?? 0), 0),
       signed: trades.reduce((a, t) => a + (2 - contractMissingSigs(db, t).length), 0),
       needed: contracts.length * 2,
+      ...(({ paid, drawn }) => ({ paid, drawn }))(spend(trades)),
       legacy: false,
       paper: !contracts.length,
     });
@@ -106,12 +121,93 @@ export function contractRows(db: DB, tradeIds: string[]): ContractRow[] {
       revisions: c?.revisions?.length ?? 0,
       signed: c ? 2 - contractMissingSigs(db, t).length : 0,
       needed: c ? 2 : 0,
+      ...(({ paid, drawn }) => ({ paid, drawn }))(spend([t])),
       legacy: true,
       paper: !c,
     });
   }
 
   return rows.sort((a, b) => Number(a.legacy) - Number(b.legacy) || b.amount - a.amount);
+}
+
+// ---------------------------------------------------------------------------
+// Draw requests. A signed draw request is a contract in every sense that
+// matters — an owner agreeing, in writing, to release a specific sum for
+// specific work — so it is filed here rather than living only in the module
+// that produced it.
+// ---------------------------------------------------------------------------
+function DrawRequests() {
+  const store = useStore();
+  const db = store.db;
+  const [open, setOpen] = useState<string | null>(null);
+  const me = store.session.userId;
+  const role = store.session.role;
+  // You see the ones addressed to you, and an admin or builder sees them all.
+  const rows = db.draws.filter((d) => d.request && (
+    ["full_admin", "builder"].includes(role) || d.request!.toUserId === me
+  ));
+  if (!rows.length) return null;
+
+  const signed = rows.filter((d) => d.request!.signedBy);
+  const total = rows.reduce((a, d) => a + (d.request!.total ?? 0), 0);
+
+  return (
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: MUTED }}>
+          Draw requests — {rows.length}
+        </span>
+        <span style={{ fontSize: 11, color: MUTED }}>
+          {signed.length} signed · {fmt(total)} requested in total
+        </span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {rows.map((d) => <DrawRequestRow key={d.id} draw={d} open={open === d.id} onToggle={() => setOpen(open === d.id ? null : d.id)} />)}
+      </div>
+    </div>
+  );
+}
+
+function DrawRequestRow({ draw, open, onToggle }: { draw: Draw; open: boolean; onToggle: () => void }) {
+  const store = useStore();
+  const r = draw.request!;
+  const isSigned = !!r.signedBy;
+  const canSign = !isSigned && (r.toUserId === store.session.userId || store.session.role === "full_admin");
+
+  return (
+    <div className="card" style={{ padding: "10px 12px", borderLeft: `3px solid ${isSigned ? "var(--ok)" : "var(--brass)"}` }}>
+      <div onClick={onToggle} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", flexWrap: "wrap" }}>
+        <span style={{ color: MUTED, fontSize: 12 }}>{open ? "▾" : "▸"}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 12.5 }}>{draw.name}</div>
+          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>
+            {isSigned
+              ? `Signed by ${r.signedBy} on ${r.signedAt?.slice(0, 10)}`
+              : `Issued to ${r.toName} on ${r.issuedAt.slice(0, 10)} — unsigned`}
+            {draw.status === "paid" ? " · paid" : ""}
+          </div>
+        </div>
+        <Pill color={isSigned ? "#fff" : MUTED} bg={isSigned ? "var(--ok)" : "var(--cream-2)"}>
+          {isSigned ? "Signed" : "Awaiting signature"}
+        </Pill>
+        <span style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(r.total)}</span>
+      </div>
+      {open ? (
+        <>
+          <pre style={{
+            margin: "8px 0 0", maxHeight: 320, overflow: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+            fontSize: 11, lineHeight: 1.5, background: "var(--paper)", border: "1px solid var(--line)",
+            borderRadius: 8, padding: 10, fontFamily: "var(--font-sans)",
+          }}>{r.body}</pre>
+          {canSign ? (
+            <div style={{ fontSize: 11.5, color: "var(--brass-2)", marginTop: 8, fontWeight: 600 }}>
+              Sign it in Draw Management — the signature belongs with the draw it releases.
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 export function ContractList({ tradeIds, renderDetail }: {
@@ -137,9 +233,12 @@ export function ContractList({ tradeIds, renderDetail }: {
 
   if (!rows.length) {
     return (
-      <div className="card" style={{ padding: 20, textAlign: "center", color: MUTED, fontSize: 13 }}>
-        Nothing is under contract yet. A contract is created when a bid is awarded in Bid and Package Management.
-      </div>
+      <>
+        <div className="card" style={{ padding: 20, textAlign: "center", color: MUTED, fontSize: 13 }}>
+          Nothing is under contract yet. A contract is created when a bid is awarded in Bid and Package Management.
+        </div>
+        <DrawRequests />
+      </>
     );
   }
 
@@ -202,6 +301,8 @@ export function ContractList({ tradeIds, renderDetail }: {
         </table>
       </div>
 
+      <DrawRequests />
+
       <div style={{ fontSize: 11.5, lineHeight: 1.55, color: MUTED, marginTop: 10, maxWidth: "80ch" }}>
         Every sum here is the contract&rsquo;s own, amendments included, and is the cost of the work before
         the builder&rsquo;s fee — which is why it does not match Budget Management&rsquo;s Total column. Work marked
@@ -219,7 +320,7 @@ function Row({ r, open, onToggle, renderDetail }: {
   const db = store.db;
   return (
     <>
-      <tr onClick={onToggle} style={{ cursor: "pointer", borderBottom: open ? "none" : "1px solid var(--line)", background: open ? "var(--cream-2)" : undefined }}>
+      <tr onClick={onToggle} style={{ cursor: "pointer", background: open ? "var(--cream-2)" : undefined }}>
         <td style={{ padding: "9px 4px 9px 10px", width: 22, color: MUTED }}>{open ? "▾" : "▸"}</td>
         <td style={{ padding: "9px 10px", minWidth: 200 }}>
           <div style={{ fontWeight: 600 }}>{r.title}</div>
@@ -242,6 +343,13 @@ function Row({ r, open, onToggle, renderDetail }: {
         </td>
         <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
           {r.amount ? fmt(r.amount) : "—"}
+        </td>
+      </tr>
+      {/* How far this contract has been paid down — the same bar Draw
+          Management draws, from the same three figures. */}
+      <tr style={{ borderBottom: open ? "none" : "1px solid var(--line)" }}>
+        <td colSpan={6} style={{ padding: "0 10px 8px 36px", background: open ? "var(--cream-2)" : undefined }}>
+          <PaceBar paid={r.paid} drawn={r.drawn} total={r.amount || r.paid} legend />
         </td>
       </tr>
       {open ? (

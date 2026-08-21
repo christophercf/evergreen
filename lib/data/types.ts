@@ -416,9 +416,32 @@ export interface DrawAllocation {
   /** Free-text note about what this allocation covers. */
   note?: string;
 }
+/** The draw written out as a document and sent to the client. Frozen at issue:
+ *  the allocations keep moving until the GC stops editing, and what the client
+ *  signs must not move underneath them. */
+export interface DrawRequest {
+  /** The full text as issued — this is what was read and signed. */
+  body: string;
+  total: number;
+  issuedAt: string;
+  issuedBy: string;
+  /** The client it was addressed to. */
+  toUserId: string;
+  toName: string;
+  toEmail?: string;
+  /** When the GC actually emailed it, if they did. */
+  emailedAt?: string;
+  /** The client's signature. Its presence IS the approval. */
+  signedBy?: string;
+  signedAt?: string;
+  signatureImg?: string;
+}
+
 export interface Draw {
   id: string;
   name: string;
+  /** Present once the GC has issued this draw to the client for signature. */
+  request?: DrawRequest;
   allocations: DrawAllocation[];
   /** Stored values are unchanged so no existing draw needs migrating; what
    *  they MEAN is: planned = saved by the GC, pushed = approved by the client,

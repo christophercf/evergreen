@@ -29,14 +29,17 @@ you remember about the app. Work through its sections in order.
 2. §1 data checks: open `/qa` in the mock preview as full admin and read the
    report. Use the *Copy report as JSON* button, or read the findings off the
    page.
-3. §2 workflow: actually click the ten steps. Drive with
+3. §2 workflow: actually click every numbered step. Drive with
    `mcp__Claude_Browser__computer` and `form_input` where you can; use
    `javascript_tool` only to read state or to set up a fixture, never to
    simulate a user's click as evidence that the click works.
 4. §3–§6: per-role access, button feedback, responsive, cross-user signals.
-5. §7 regression watchlist: prove each listed bug is still dead. These are the
+5. §6b: run `node scripts/pull-feedback.mjs` and work the tracker. Reproduce
+   each open report FROM THE SEAT IT WAS FILED ON, then write its **Triage:**
+   line. Do not close anything in the app yourself — closing is Chris's call.
+6. §7 regression watchlist: prove each listed bug is still dead. These are the
    ones that already escaped once.
-6. Restore `.env.local`. Confirm with `git diff -- .env.local` that it is
+7. Restore `.env.local`. Confirm with `git diff -- .env.local` that it is
    `supabase` again, and say so in the report.
 
 ## What a finding must contain
