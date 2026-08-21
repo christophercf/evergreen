@@ -8,6 +8,7 @@ import { accessFor, DRAW_STATUS_LABEL, isOwnerManaged, type ContactSheet, type D
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
 import { renderTerms } from "@/lib/data/terms";
 import { contractOf, contractAmount, renderContract } from "@/lib/data/contract";
+import { ContractList } from "./contract-list";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
 import { jsPDF } from "jspdf";
 
@@ -134,17 +135,31 @@ export default function VendorsPage() {
         title={role === "trade" ? "Current Contract" : "Contracts"}
         subtitle={role === "trade"
           ? "Your contract with the project: scope, terms, your requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."
-          : "Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."}
+          : "One line per contract, in the packages they came out of. Open one for the full document: scope pulled from the Admin matrix, the terms applied, the vendor's requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."}
         right={accessFor(user, role, "costs") !== "none" ? <Link href="/costs" className="btn btn-sm">Budget Management →</Link> : undefined}
       />
-      <SectionTitle>{role === "trade" ? "Your Contract" : "Vendors & Contracts"}</SectionTitle>
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {activeTradeIds.length === 0 ? (
-          <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
-            {scopedToOwn ? "No vendor contracts are assigned to you." : "No vendors or contracts yet."}
-          </div>
-        ) : activeTradeIds.map((tid) => <VendorCard key={tid} tradeId={tid} />)}
-      </div>
+      <SectionTitle>{role === "trade" ? "Your Contract" : "Contracts"}</SectionTitle>
+      {/* A trade has exactly one contract and came here to read it, so theirs is
+          open. Everyone else gets the list — one line per package — and opens
+          the one they came for. */}
+      {scopedToOwn ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {activeTradeIds.length === 0 ? (
+            <div className="card" style={{ padding: 20, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+              No vendor contracts are assigned to you.
+            </div>
+          ) : activeTradeIds.map((tid) => <VendorCard key={tid} tradeId={tid} />)}
+        </div>
+      ) : (
+        <ContractList
+          tradeIds={activeTradeIds}
+          renderDetail={(tids) => (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {tids.map((tid) => <VendorCard key={tid} tradeId={tid} />)}
+            </div>
+          )}
+        />
+      )}
     </>
   );
 }

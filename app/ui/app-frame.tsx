@@ -38,13 +38,13 @@ const NAV: NavItem[] = [
   // Draws are the GC's to manage; funding is the owner's own money. Two
   // audiences, so two modules, each absent for the side it does not belong to.
   { href: "/payments", label: "Draw Management", short: "Draws", mod: "payments", band: "job", Icon: ReceiptIcon },
+  // The contract sits under the draws because that is the order the money runs
+  // in: a contract is signed, and then it is drawn against.
+  { href: "/vendors", label: "Contracts", mod: "vendors", band: "job", Icon: UsersIcon },
   { href: "/budget", label: "Funding", short: "Funding", mod: "budget", band: "job", Icon: WalletIcon },
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
-  // The roster moved into Administrative; what lives here is the contract
-  // itself, which is what a trade came for.
-  { href: "/vendors", label: "Contracts", mod: "vendors", band: "reference", Icon: UsersIcon },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", band: "reference", Icon: FolderIcon },
 ];
 
