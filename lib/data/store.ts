@@ -1760,7 +1760,22 @@ class Store {
 
   updateTrade(id: string, patch: Partial<Trade>) {
     if (!this.canManageContacts) return;
-    this.mutate((db) => { const t = db.trades.find((x) => x.id === id); if (t) Object.assign(t, patch); });
+    this.mutate((db) => {
+      const t = db.trades.find((x) => x.id === id);
+      if (!t) return;
+      const wasCategory = t.category;
+      Object.assign(t, patch);
+      // Moving a trade to another category carries its budget lines with it.
+      // A cost line stores its own category, so without this the trade and its
+      // own money would sit under two different headings — the drift this app
+      // spends its time avoiding. Lines deliberately filed elsewhere keep their
+      // own category, because they never matched the trade's to begin with.
+      if (patch.category && patch.category !== wasCategory) {
+        for (const l of db.costLines) {
+          if (l.tradeId === id && l.category === wasCategory) l.category = patch.category;
+        }
+      }
+    });
   }
   /** Set a trade owner/builder-managed and keep its trade users' managedBy in sync. */
   setTradeManaged(tradeId: string, managedBy: "builder" | "owner") {

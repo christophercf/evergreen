@@ -6,9 +6,9 @@ import { PageHeader, NoAccess, Pill, SectionTitle } from "../ui/bits";
 import {
   accessFor, canRemoveUser, canSeeContacts, isArchitectUser, isOwnerManaged, SCOPE_LABEL, ROLE_LABEL,
   VENDOR_DOC_LABEL, vendorTrades,
-  type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type User, type VendorDocKind,
+  type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type Trade, type User, type VendorDocKind,
 } from "@/lib/data/types";
-import { tradeName, macroOrder, macroColor, categoryUsage } from "@/lib/data/money";
+import { tradeName, macroOrder, macroColor, categoryUsage, tradeUsage } from "@/lib/data/money";
 import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { AddVendor } from "./add-vendor";
@@ -332,8 +332,9 @@ function CategoriesTab({ ro }: { ro: boolean }) {
     <div style={{ marginTop: 16, maxWidth: 780 }}>
       <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.55, marginBottom: 12, maxWidth: "72ch" }}>
         Categories group the budget, colour the cost chart and order every trade list in the app.
-        {cats.length} in use. Renaming one carries its trades and budget lines with it; removing one
-        is only possible once nothing is filed under it.
+        {cats.length} in use. Open one to see the trades filed under it — add a trade, rename it, or
+        move it to another category. Renaming a category carries its trades and budget lines with it;
+        removing one is only possible once nothing is filed under it.
       </div>
 
       <div className="card" style={{ padding: 4 }}>
@@ -386,9 +387,20 @@ function CategoryRow({ name, ro }: { name: string; ro: boolean }) {
   const color = macroColor(db, name);
   const [arm, setArm] = useState(false);
   const [swatches, setSwatches] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newTrade, setNewTrade] = useState("");
+
+  const trades = db.trades.filter((t) => t.category === name);
+  const dupe = !!newTrade.trim() && db.trades.some((t) => t.name.trim().toLowerCase() === newTrade.trim().toLowerCase());
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
+    <div style={{ borderBottom: "1px solid var(--line)" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 10px", flexWrap: "wrap" }}>
+      <button onClick={() => setOpen((v) => !v)} title={open ? "Collapse" : "Show the trades in this category"}
+        style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: "0 2px" }}>
+        {open ? "▾" : "▸"}
+      </button>
       <button disabled={ro} onClick={() => setSwatches((v) => !v)} title="Change colour"
         style={{ width: 16, height: 16, borderRadius: 4, background: color, border: "1px solid var(--line)", cursor: ro ? "default" : "pointer", flexShrink: 0 }} />
       {ro ? (
@@ -420,6 +432,82 @@ function CategoryRow({ name, ro }: { name: string; ro: boolean }) {
           ))}
         </div>
       ) : null}
+    </div>
+
+    {/* The trades filed under this category. This is where a trade is added,
+        renamed, or moved somewhere else — the category is only a grouping, and
+        the trade is the thing everything else points at. */}
+    {open ? (
+      <div style={{ padding: "2px 10px 12px 34px", background: "var(--cream)" }}>
+        {!trades.length ? (
+          <div style={{ fontSize: 11.5, color: "var(--muted)", fontStyle: "italic", padding: "4px 0" }}>
+            No trades in this category yet.
+          </div>
+        ) : trades.map((t) => <CategoryTradeRow key={t.id} trade={t} ro={ro} />)}
+
+        {!ro ? (
+          !adding ? (
+            <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={() => setAdding(true)}>＋ Add a trade to {name}</button>
+          ) : (
+            <div style={{ display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+              <input className="input" autoFocus value={newTrade} onChange={(e) => setNewTrade(e.target.value)}
+                placeholder="Trade name" style={{ fontSize: 12.5, minWidth: 180 }}
+                onKeyDown={(e) => { if (e.key === "Escape") { setAdding(false); setNewTrade(""); } }} />
+              <button className={`btn btn-sm ${newTrade.trim() && !dupe ? "btn-primary" : ""}`} disabled={!newTrade.trim() || dupe}
+                onClick={() => { store.addTrade({ name: newTrade.trim(), category: name as MacroCategory }); setNewTrade(""); setAdding(false); }}>
+                {dupe ? "Name already used" : "Add"}
+              </button>
+              <button className="btn btn-sm" onClick={() => { setAdding(false); setNewTrade(""); }}>Cancel</button>
+            </div>
+          )
+        ) : null}
+      </div>
+    ) : null}
+    </div>
+  );
+}
+
+/** One trade inside a category: rename it, move it, or remove it if unused. */
+function CategoryTradeRow({ trade, ro }: { trade: Trade; ro: boolean }) {
+  const store = useStore();
+  const db = store.db;
+  const use = tradeUsage(db, trade.id);
+  const [arm, setArm] = useState(false);
+  const cats = macroOrder(db);
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 0", fontSize: 12.5, flexWrap: "wrap" }}>
+      {ro ? (
+        <span style={{ flex: 1, minWidth: 150 }}>{trade.name}</span>
+      ) : (
+        <input className="input" defaultValue={trade.name}
+          title="Renaming a trade renames it everywhere in the app"
+          onBlur={(e) => store.setBudgetLineName(trade.id, e.target.value)}
+          style={{ flex: 1, minWidth: 150, fontSize: 12.5 }} />
+      )}
+
+      {!ro ? (
+        <select className="input" value={trade.category}
+          title="Move this trade to another category"
+          onChange={(e) => store.updateTrade(trade.id, { category: e.target.value as MacroCategory })}
+          style={{ fontSize: 11.5, maxWidth: 190 }}>
+          {cats.map((c: MacroCategory) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      ) : null}
+
+      {trade.managedBy === "owner" ? <Pill bg="var(--cream-2)">Owner</Pill> : null}
+
+      {use.total > 0 ? (
+        <span title={`Used by ${use.summary}`} style={{ fontSize: 10.5, color: "var(--muted)" }}>in use · {use.summary}</span>
+      ) : ro ? null : arm ? (
+        <span style={{ display: "inline-flex", gap: 5, alignItems: "center" }}>
+          <button className="btn btn-sm" onClick={() => setArm(false)}>No</button>
+          <button className="btn btn-sm" style={{ background: "var(--rust)", color: "#fff", fontWeight: 700 }}
+            onClick={() => store.removeTrade(trade.id)}>Remove</button>
+        </span>
+      ) : (
+        <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => setArm(true)}>Remove</button>
+      )}
     </div>
   );
 }
