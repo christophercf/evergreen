@@ -161,7 +161,7 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
           below its own text, which pushed this past the width of a phone. */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         {canDrag && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
-        <button onClick={() => setOpen((v) => !v)} title="Show scope" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
+        <button className="tap" onClick={() => setOpen((v) => !v)} title="Show scope" aria-label={open ? "Hide scope" : "Show scope"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
         <span style={{ fontWeight: 600, fontSize: 12.5, flex: "1 1 90px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.name}</span>
         {cstate === "signed" || drawable
           ? <Pill color="#fff" bg="var(--ok)">{cstate === "signed" ? "Contract signed" : "Contract issued"}</Pill>
@@ -247,7 +247,7 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
       className="card"
       style={{ padding: 14, borderLeft: `3px solid ${STATUS_BG[draw.status]}`, outline: over ? "2px dashed var(--sage)" : "none", background: over ? "var(--sage-tint)" : undefined }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Expand" : "Collapse"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>{collapsed ? "▸" : "▾"}</button>
+        <button className="tap" onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Expand" : "Collapse"} aria-label={collapsed ? "Expand this draw" : "Collapse this draw"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>{collapsed ? "▸" : "▾"}</button>
         <input value={draw.name} disabled={ro || locked} onChange={(e) => store.renameDraw(draw.id, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", minWidth: 110, flex: 1 }} />
         <Pill color="#fff" bg={STATUS_BG[draw.status]}>{DRAW_STATUS_LABEL[draw.status]}{draw.paidDate ? ` · ${draw.paidDate}` : draw.approvedDate ? ` · ${draw.approvedDate}` : ""}</Pill>
         <span style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-serif)" }}><Money value={total} /></span>
@@ -474,7 +474,7 @@ function AllocationRow({ draw, alloc, ro, locked }: { draw: Draw; alloc: DrawAll
   return (
     <div style={{ borderBottom: "1px solid var(--line)", paddingBottom: 5 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-        <button onClick={() => setOpen((v) => !v)} title="Clarify scope / notes" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 10, padding: 0 }}>{open ? "▾" : "▸"}</button>
+        <button className="tap" onClick={() => setOpen((v) => !v)} title="Clarify scope / notes" aria-label={open ? "Hide the detail" : "Show what this draw finishes"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 10, padding: 0 }}>{open ? "▾" : "▸"}</button>
         <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
         {editable ? (
           <>
@@ -485,7 +485,7 @@ function AllocationRow({ draw, alloc, ro, locked }: { draw: Draw; alloc: DrawAll
           </>
         ) : <span style={{ color: "var(--muted)" }}>{alloc.mode === "pct" ? `${alloc.value}%` : "$"}</span>}
         <span style={{ width: 72, textAlign: "right", fontWeight: 700, color: over > 0 ? "var(--rust)" : undefined }}>{fmt(amount)}</span>
-        {editable && <button className="btn btn-sm" style={{ color: "var(--rust)", padding: "1px 6px" }} onClick={() => store.removeAllocation(draw.id, alloc.lineId)}>✕</button>}
+        {editable && <button className="btn btn-sm tap" title="Remove this line from the draw" aria-label="Remove this line from the draw" style={{ color: "var(--rust)", padding: "1px 6px" }} onClick={() => store.removeAllocation(draw.id, alloc.lineId)}>✕</button>}
       </div>
 
       {/* How much of this line is still available to draw against. It sits on

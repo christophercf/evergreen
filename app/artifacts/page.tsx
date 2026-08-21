@@ -187,7 +187,7 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
           {(a.versions ?? []).slice().reverse().map((v) => (
             <div key={v.id} style={{ display: "flex", gap: 8, fontSize: 11.5, alignItems: "center", padding: "2px 0" }}>
               <span style={{ flex: 1, minWidth: 0 }}><strong>{v.label}</strong>{v.fileName ? <span style={{ color: "var(--muted)" }}> · {v.fileName}</span> : v.driveUrl ? <span style={{ color: "var(--muted)" }}> · Drive link</span> : ""} · {v.uploadedBy} {v.uploadedAt && <span style={{ color: "var(--muted)" }}>· {new Date(v.uploadedAt).toLocaleDateString()}</span>}</span>
-              {v.fileUrl ? <a href={v.fileUrl} download={v.fileName} style={{ color: "var(--sage-2)" }}>⬇</a> : v.driveUrl ? <a href={driveViewLink(v.driveUrl)} target="_blank" rel="noreferrer" style={{ color: "var(--sage-2)" }}>↗</a> : null}
+              {v.fileUrl ? <a className="tap" href={v.fileUrl} download={v.fileName} aria-label={`Download ${v.fileName ?? "this version"}`} style={{ color: "var(--sage-2)" }}>⬇</a> : v.driveUrl ? <a className="tap" href={driveViewLink(v.driveUrl)} target="_blank" rel="noreferrer" aria-label="Open in Drive" style={{ color: "var(--sage-2)" }}>↗</a> : null}
             </div>
           ))}
           {!a.versions?.length && <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{a.url || a.version ? `${a.version ?? "v1"} (legacy)` : "No versions."}</div>}

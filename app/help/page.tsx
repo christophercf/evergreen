@@ -58,7 +58,7 @@ export default function HelpPage() {
                 <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
                   <strong style={{ fontSize: 13.5, color: "var(--walnut)" }}>{s.t}</strong>
                   {reachable ? (
-                    <Link href={s.to} style={{ fontSize: 11.5, color: "var(--sage-2)", fontWeight: 600 }}>Take me there →</Link>
+                    <Link href={s.to} className="tap-row" style={{ fontSize: 11.5, color: "var(--sage-2)", fontWeight: 600 }}>Take me there →</Link>
                   ) : (
                     <span style={{ fontSize: 11, color: MUTED }}>not on your seat</span>
                   )}

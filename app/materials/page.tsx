@@ -273,7 +273,7 @@ export default function MaterialsPage() {
                 {/* Item stays pinned while the table scrolls sideways. */}
                 <td style={{ ...td, position: "sticky", left: 0, zIndex: 1, background: open ? "var(--sage-tint)" : "var(--paper)", minWidth: 150, maxWidth: 230, boxShadow: "2px 0 4px -2px rgba(44,36,28,.15)" }}>
                   <button onClick={() => setOpenId(open ? null : mt.id)} style={{ border: "none", background: "transparent", textAlign: "left", cursor: "pointer", padding: 0, maxWidth: "100%" }}>
-                    <div style={{ fontWeight: 600 }}>{mt.item} <span style={{ color: "var(--muted)", fontSize: 11 }}>{open ? "▾" : "▸"}</span></div>
+                    <div className="tap-row" style={{ fontWeight: 600 }}>{mt.item} <span style={{ color: "var(--muted)", fontSize: 11 }}>{open ? "▾" : "▸"}</span></div>
                     {mt.desc && <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{mt.desc}</div>}
                   </button>
                 </td>

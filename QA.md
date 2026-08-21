@@ -142,19 +142,35 @@ Specifically confirm:
 
 ## 5. Responsive — desktop and phone
 
-Check at **1280×800**, **768×1024** and **375×812** (`resize_window`), reloading
-after each switch so load-time device gates re-run.
+Check at **1280×800**, **768×1024** and **375×812**. The reliable way to measure
+every route at once is an in-page iframe sized to the width you are testing —
+media queries respond to the iframe, and nothing depends on the preview pane's
+own size. Reload after switching a real viewport so load-time device gates rerun.
 
-- No horizontal scroll on the page body. Wide tables scroll inside their own
-  container. Measure it, do not eyeball it — on each page run
-  `document.documentElement.scrollWidth - clientWidth` and require `0`.
-  A grid item defaults to `min-width: auto`, so a one-column grid still refuses
+Per route, require:
+
+| Measure | Threshold | Why |
+|---|---|---|
+| `documentElement.scrollWidth - clientWidth` | **0** | the page body must never scroll sideways |
+| Elements past the viewport with no scrollable ancestor | **0** | a wide table inside `overflow-x:auto` is fine; a spilling card is not |
+| Smallest dimension of any control, at 375px | **≥ 24px**, target 34 | a 9px caret is not a control on a phone |
+| Last content bottom, scrolled to the end | above the tab bar | measure the last child of `.ever-main`, not any element — inner scrollers give false positives |
+
+Notes that keep this honest:
+
+- A grid item defaults to `min-width: auto`, so a one-column grid still refuses
   to shrink below its widest un-wrappable child: any `display:grid` wrapper
   needs `> * { min-width: 0 }`, and any `flex: 1` label needs `min-width: 0`.
-- The floating bars (bundle, scope) clear the bottom nav on a phone.
-- Tap targets on the phone are reachable — nothing under the safe-area inset.
-- Both colour schemes render (`colorScheme: dark` / `light`).
-
+- Small controls on **desktop** are deliberate — this is a dense data app and a
+  mouse is precise. Only the ≤860px breakpoint enforces the tap-target floor,
+  via `.btn` / `.btn-sm` / `.scope-btn` / `.tap` / `.tap-row` in globals.css.
+  Give a small control `.tap` rather than inventing a new size.
+- Only ONE stylesheet may own `.ever-main` padding-bottom. A `padding` shorthand
+  elsewhere silently wins and drops content under the tab bar.
+- The floating bars (bundle, scope) must clear the tab bar on a phone.
+- Administrative carries the room × trade matrix — ~1,500 controls on one page.
+  It is inside a scroll container and does not spill, but it is a desktop screen
+  in practice. Do not file it as a layout defect; do not let it grow.
 ---
 
 ## 6. Cross-user change signals
@@ -214,6 +230,10 @@ Bugs that already escaped once. Each run, prove they are still dead.
   and going past it reads in red rather than being clamped or hidden.
 - **A signed draw request is the approval** — there is no second control that
   sets the same status from a different fact.
+- **Every control on a phone is at least 24px on its smallest side** — carets,
+  row titles and icon links carry `.tap` / `.tap-row` (fixed 2026-08-21; 112
+  controls across Draw Management, Materials, Help and Artifacts were between
+  9px and 19px).
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the

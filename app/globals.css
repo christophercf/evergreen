@@ -117,6 +117,12 @@ table { border-collapse: collapse; width: 100%; }
   .btn { min-height: 44px; }
   .btn-sm { min-height: 40px; }
   .scope-btn { min-height: 36px; }
+  /* For controls that are deliberately small on a desktop — a caret, a row
+     title, an icon link. The glyph stays the size it is; only the area a
+     thumb has to hit grows. A 9px-wide caret is not a control on a phone. */
+  .tap { min-height: 34px; min-width: 34px; display: inline-flex !important;
+         align-items: center; justify-content: center; }
+  .tap-row { min-height: 34px; display: inline-flex !important; align-items: center; }
   /* Single-line, truncated project tagline in the top bar. */
   .ever-tagline { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .m-hide-i { display: none !important; } /* inline bits hidden on mobile (e.g. button labels) */
@@ -160,7 +166,9 @@ table { border-collapse: collapse; width: 100%; }
   /* Native selects size to their longest option — never let one stretch a page. */
   select { max-width: 86vw; }
   .ever-bottomnav a.active { color: #fdf8ee; background: rgba(255,255,255,.08); }
-  .ever-main { padding-bottom: 110px !important; }
+  /* Clears the fixed tab bar (58px) plus the home indicator, plus room to
+     breathe — scrolled to the end, the last control must still be tappable. */
+  .ever-main { padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important; }
 }
 
 /* Always-visible, easy-to-grab scrollbars — styling these forces Android

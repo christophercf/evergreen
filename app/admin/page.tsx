@@ -41,7 +41,7 @@ export default function AdminPage() {
         subtitle="Define the project: which rooms are included, what each trade does in each room (In / EX / Out), and who can see and edit each part of the app."
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
-      <div style={{ display: "flex", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
         {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["categories", "Trade Category Management"], ["vendors", "Vendor Management"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className="btn btn-sm"
             style={{ border: "none", borderBottom: tab === k ? "2px solid var(--sage)" : "2px solid transparent", background: "transparent", borderRadius: 0, color: tab === k ? "var(--walnut)" : "var(--muted)", fontWeight: 700 }}>
