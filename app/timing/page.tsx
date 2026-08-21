@@ -142,6 +142,32 @@ export default function TimingPage() {
 
   const [drag, setDrag] = useState<DragState>(null);
   const dragRef = useRef<DragState>(null);
+  // Grab the empty chart and drag it around. Anything interactive — a bar, its
+  // resize handle, a button, a link — keeps its own gesture; panning only picks
+  // up what nothing else claimed.
+  const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
+  const [panning, setPanning] = useState(false);
+  const startPan = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("button, a, input, textarea, select, [data-bar]")) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    panRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+    setPanning(true);
+    el.setPointerCapture(e.pointerId);
+  };
+  const movePan = (e: React.PointerEvent<HTMLDivElement>) => {
+    const p = panRef.current, el = scrollRef.current;
+    if (!p || !el) return;
+    el.scrollLeft = p.left - (e.clientX - p.x);
+    el.scrollTop = p.top - (e.clientY - p.y);
+  };
+  const endPan = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!panRef.current) return;
+    panRef.current = null;
+    setPanning(false);
+    scrollRef.current?.releasePointerCapture?.(e.pointerId);
+  };
   // Multi-select (edit mode): checked bars move together when any of them is dragged.
   const [selIds, setSelIds] = useState<Set<string>>(new Set());
   const toggleSel = (id: string) => setSelIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -276,7 +302,9 @@ export default function TimingPage() {
       {canAdd && <AddTimelineItem />}
 
       {/* Gantt: maxHeight + sticky header */}
-      <div ref={scrollRef} className="card" style={{ padding: 0, overflow: "auto", maxHeight: "62vh" }}>
+      <div ref={scrollRef} className="card"
+        onPointerDown={startPan} onPointerMove={movePan} onPointerUp={endPan} onPointerCancel={endPan}
+        style={{ padding: 0, overflow: "auto", maxHeight: "62vh", cursor: panning ? "grabbing" : "grab", touchAction: "pan-x pan-y", userSelect: panning ? "none" : undefined }}>
         <div style={{ position: "relative", width: LABEL_W + totalW, minWidth: "100%" }}>
           <div style={{ display: "flex", position: "sticky", top: 0, background: "var(--paper)", zIndex: 5, borderBottom: "1px solid var(--line)" }}>
             <div style={{ width: LABEL_W, flexShrink: 0, position: "sticky", left: 0, background: "var(--paper)", zIndex: 6, padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: ".04em", borderRight: "1px solid var(--line)" }}>Task</div>
@@ -340,6 +368,7 @@ export default function TimingPage() {
                       <div title={SCHEDULE_LABEL[s.status]} style={{ position: "absolute", left: left - 7, top: ROW_H / 2 - 7, width: 14, height: 14, background: "var(--walnut)", transform: "rotate(45deg)", borderRadius: 2 }} />
                     ) : (
                       <div
+                        data-bar={canDrag ? "" : undefined}
                         title={`${s.label} · ${dl}${canDrag ? " · drag to move, edge to resize" : ""}`}
                         onPointerDown={(e) => { if (!canDrag) return; e.currentTarget.setPointerCapture(e.pointerId); const st = { id: s.id, startX: e.clientX, days: 0, mode: "move" as const }; dragRef.current = st; setDrag(st); }}
                         onPointerMove={(e) => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = Math.round((e.clientX - d.startX) / pxPerDay); if (days !== d.days) { dragRef.current = { ...d, days }; setDrag({ ...d, days }); } }}
