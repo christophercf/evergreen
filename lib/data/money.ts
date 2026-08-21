@@ -30,6 +30,15 @@ export function lineStart(line: CostLine): number {
   return lineBase(line);
 }
 
+/** What this line is contracted at, before the builder's fee.
+ *  Once a line is locked its price is `lockedCost`; the history behind it is the
+ *  estimate it USED to be, and reading that back is how a contracted line ends
+ *  up showing a stale figure. Exported so the budget rows and QA cannot answer
+ *  this question two different ways. */
+export function lineContracted(line: CostLine): number {
+  return line.lockedCost ?? lineBase(line);
+}
+
 export function lineMarkup(line: CostLine): number {
   return line.markupModel === "passthrough" ? lineBase(line) * (line.markupPct / 100) : 0;
 }
@@ -410,9 +419,8 @@ export function romRows(db: DB): RomRow[] {
     // lockedCost — not the latest price point, which is an estimate and moves
     // for its own reasons. Reading the estimate here meant typing a contract
     // changed nothing in the column named after it.
-    const contractedOf = (l: CostLine) => l.lockedCost ?? lineBase(l);
-    const contracted = locked.reduce((a, l) => a + contractedOf(l), 0);
-    const builderFee = locked.reduce((a, l) => a + contractedOf(l) * (lineMarkupFactor(l) - 1), 0);
+    const contracted = locked.reduce((a, l) => a + lineContracted(l), 0);
+    const builderFee = locked.reduce((a, l) => a + lineContracted(l) * (lineMarkupFactor(l) - 1), 0);
     const total = contracted + changeOrders + builderFee;
     const draw = lines.reduce((a, l) => a + lineDrawn(db, l.id), 0);
     // Paid in full closes the line. Nothing moves again until a change order

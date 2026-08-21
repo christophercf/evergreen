@@ -91,7 +91,13 @@ export default function PaymentsPage() {
         </div>
       </div>
 
-      <style>{`@media (max-width: 860px){ .ever-pay{ grid-template-columns: 1fr !important; } }`}</style>
+      {/* A grid item defaults to min-width:auto, so a single 1fr column still
+          refuses to shrink below its widest un-wrappable child — which is how
+          this page ran 77px past a phone while claiming to be one column. */}
+      <style>{`
+        .ever-pay > * { min-width: 0; }
+        @media (max-width: 860px){ .ever-pay{ grid-template-columns: 1fr !important; } }
+      `}</style>
     </>
   );
 }
@@ -135,10 +141,12 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
           <Link href={waiting ? "/vendors" : "/bids"} style={{ color: "#ffe6b8", marginLeft: 6, fontWeight: 600 }}>{waiting ? "Sign it →" : "Open packages →"}</Link>
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {/* The name gives way before the row does: flex:1 alone will not shrink
+          below its own text, which pushed this past the width of a phone. */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         {canDrag && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
         <button onClick={() => setOpen((v) => !v)} title="Show scope" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
-        <span style={{ fontWeight: 600, fontSize: 12.5, flex: 1 }}>{line.name}</span>
+        <span style={{ fontWeight: 600, fontSize: 12.5, flex: "1 1 90px", minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{line.name}</span>
         {cstate === "signed" || drawable
           ? <Pill color="#fff" bg="var(--ok)">{cstate === "signed" ? "Contract signed" : "Contract issued"}</Pill>
           : cstate === "issued" ? <Pill color="#fff" bg="var(--brass)">Contract issued</Pill>

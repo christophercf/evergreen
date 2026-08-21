@@ -14,5 +14,9 @@ next-env.d.ts
 
 # Agent worktrees — scratch clones with their own node_modules.
 .claude/
+# ...except the agent definitions, which are project tooling and should travel
+# with the repo. launch.json stays out: it holds this machine's absolute paths.
+!.claude/agents/
+!.claude/agents/**
 
 .env*

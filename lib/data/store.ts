@@ -694,7 +694,13 @@ class Store {
     this.mutate((db) => {
       const l = db.costLines.find((x) => x.id === lineId);
       if (!l) return;
-      const exhibit = `Exhibit ${String.fromCharCode(65 + l.changeOrders.length)}`;
+      // Lettered from the highest letter already used, not from the count:
+      // deleting Exhibit B and adding another would otherwise hand out a second
+      // Exhibit B, and two exhibits with one name is a contract dispute.
+      const used = l.changeOrders.map((c) => c.exhibit.match(/Exhibit ([A-Z])/)?.[1] ?? "@")
+        .reduce((a, c) => (c > a ? c : a), "@");
+      const next = String.fromCharCode(Math.max(used.charCodeAt(0) + 1, 65));
+      const exhibit = `Exhibit ${next > "Z" ? `${l.changeOrders.length + 1}` : next}`;
       out = newId("co");
       l.changeOrders.push({ id: out, exhibit, ...co });
     });
