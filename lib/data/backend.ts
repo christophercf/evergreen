@@ -23,6 +23,11 @@ export interface Backend {
   loadSession(): Promise<Session>;
   onRemoteDB(cb: (db: DB) => void): void;
   persistDB(db: DB): void | Promise<void>;
+  /** Apply a small mutation to the FRESHEST stored copy rather than persisting
+   *  the caller's whole document. Bookkeeping writes (read receipts, reactions)
+   *  go through here so they can never clobber somebody else's just-sent
+   *  message with a stale snapshot. */
+  patchDB?(apply: (db: DB) => void): void | Promise<void>;
   persistSession(session: Session): void | Promise<void>;
   reset(): Promise<DB>;
 }
@@ -70,6 +75,18 @@ export class MockBackend implements Backend {
   persistDB(db: DB): void {
     // A quota failure loses the change just as completely as a network one, so
     // it is reported rather than swallowed.
+    localStorage.setItem(DB_KEY, JSON.stringify(db));
+    this.channel?.postMessage({ type: "db", db });
+  }
+
+  patchDB(apply: (db: DB) => void): void {
+    // Fresh from storage, so a second tab's writes are not overwritten.
+    let db = buildDB();
+    try {
+      const raw = localStorage.getItem(DB_KEY);
+      if (raw) db = { ...buildDB(), ...(JSON.parse(raw) as DB) };
+    } catch { /* corrupt state: patch the seed */ }
+    apply(db);
     localStorage.setItem(DB_KEY, JSON.stringify(db));
     this.channel?.postMessage({ type: "db", db });
   }

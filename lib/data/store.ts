@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   BudgetLineState, CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
@@ -134,14 +134,41 @@ class Store {
     fn(next);
     this.db = next;
     // persistDB may be sync (mock) or async (Supabase); either can fail, and a
-    // failure must reach the person who just typed something.
-    this.lastWrite = (async () => {
+    // failure must reach the person who just typed something. Writes chain in
+    // order — a burst of edits cannot land out of sequence.
+    const run = async () => {
       await this.backend?.persistDB(next);
       if (this.saveError) { this.saveError = null; this.emit(); }
-    })();
+    };
+    this.lastWrite = this.lastWrite.catch(() => undefined).then(run);
     this.lastWrite.catch((e: unknown) => this.announceSaveFailed(e));
     this.announceSave(saveLabel);
     this.emit();
+  }
+
+  /** A write that is bookkeeping, not authorship: no undo entry, no toast, and
+   *  never a whole-document overwrite. The mutation is re-applied to a FRESH
+   *  copy of the stored row (fetch → apply → write), so opening a chat cannot
+   *  clobber a message somebody else sent seconds ago. A failure stays quiet
+   *  and rolls the local change back — the UI never claims a receipt or a
+   *  reaction that did not land, and nobody gets a "Not saved" scare for an
+   *  action they never took. */
+  private mutateQuiet(fn: (db: DB) => void) {
+    const prev = this.db;
+    const next = clone(prev);
+    fn(next);
+    this.db = next;
+    this.emit();
+    const run = async () => {
+      if (this.backend?.patchDB) await this.backend.patchDB(fn);
+      else if (this.backend) await this.backend.persistDB(next);
+    };
+    // Chained behind whatever write is in flight, so order is preserved.
+    this.lastWrite = this.lastWrite.catch(() => undefined).then(run);
+    this.lastWrite.catch(() => {
+      // Roll back only if nothing else has moved local state since.
+      if (this.db === next) { this.db = prev; this.emit(); }
+    });
   }
 
   private lastWrite: Promise<unknown> = Promise.resolve();
@@ -157,13 +184,20 @@ class Store {
   undo() {
     const prev = this.undoStack.pop();
     if (prev === undefined) return;
-    this.db = JSON.parse(prev) as DB;
+    const restored = JSON.parse(prev) as DB;
+    // Bookkeeping survives an undo: read receipts, pins and subjects were
+    // never part of the action being reverted, so the snapshot must not drag
+    // them backwards. (Reactions live inside messages and do get caught by a
+    // snapshot restore — accepted; a reaction is one tap to redo.)
+    restored.convMeta = this.db.convMeta;
+    this.db = restored;
     // An undo that doesn't reach the server is as silent a loss as a save that
     // doesn't, and it looks worse: the change appears to come back on screen.
-    this.lastWrite = (async () => {
+    const run = async () => {
       await this.backend?.persistDB(this.db);
       if (this.saveError) { this.saveError = null; this.emit(); }
-    })();
+    };
+    this.lastWrite = this.lastWrite.catch(() => undefined).then(run);
     this.lastWrite.catch((e: unknown) => this.announceSaveFailed(e));
     this.emit();
   }
@@ -1317,6 +1351,71 @@ class Store {
     }, "ROM unlocked");
   }
 
+  /** Toggle my reaction on a message — an update head or any reply. Tapping the
+   *  same emoji again removes it. Quiet: a reaction is an acknowledgement, not
+   *  authorship. */
+  reactToMessage(msgId: string, emoji: string) {
+    const me = this.session.userId;
+    this.mutateQuiet((db) => {
+      for (const u of db.updates) {
+        const target = u.id === msgId ? u : u.replies.find((r) => r.id === msgId);
+        if (!target) continue;
+        target.reactions = target.reactions ?? {};
+        if (target.reactions[me] === emoji) delete target.reactions[me];
+        else target.reactions[me] = emoji;
+        return;
+      }
+    });
+  }
+
+  /** Record that I have read a conversation up to `upTo` — powers the ✓✓
+   *  ticks. Skipped when nothing is new, so opening a chat does not write the
+   *  database for no reason. */
+  markConversationRead(key: string, upTo: string) {
+    const me = this.session.userId;
+    if (!upTo || !key.split("+").includes(me)) return;
+    // A QA impersonation must not fake the real person's receipts, and a
+    // background tab has not "read" anything.
+    if (this.viewAsBase) return;
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    const cur = this.db.convMeta?.find((m) => m.key === key)?.reads?.[me];
+    if (cur && cur >= upTo) return;
+    this.mutateQuiet((db) => {
+      db.convMeta = db.convMeta ?? [];
+      let m = db.convMeta.find((x) => x.key === key);
+      if (!m) { m = { key }; db.convMeta.push(m); }
+      m.reads = { ...m.reads, [me]: upTo };
+    });
+  }
+
+  /** Pin is per-user: my pin does not rearrange anyone else's list. */
+  togglePinConversation(key: string) {
+    const me = this.session.userId;
+    const on = this.db.convMeta?.find((m) => m.key === key)?.pinnedBy?.includes(me);
+    this.mutate((db) => {
+      db.convMeta = db.convMeta ?? [];
+      let m = db.convMeta.find((x) => x.key === key);
+      if (!m) { m = { key }; db.convMeta.push(m); }
+      const set = new Set(m.pinnedBy ?? []);
+      if (set.has(me)) set.delete(me); else set.add(me);
+      m.pinnedBy = [...set];
+    }, on ? "Unpinned" : "📌 Pinned");
+  }
+
+  /** Archive is per-user too — out of sight, never deleted. */
+  toggleArchiveConversation(key: string) {
+    const me = this.session.userId;
+    const on = this.db.convMeta?.find((m) => m.key === key)?.archivedBy?.includes(me);
+    this.mutate((db) => {
+      db.convMeta = db.convMeta ?? [];
+      let m = db.convMeta.find((x) => x.key === key);
+      if (!m) { m = { key }; db.convMeta.push(m); }
+      const set = new Set(m.archivedBy ?? []);
+      if (set.has(me)) set.delete(me); else set.add(me);
+      m.archivedBy = [...set];
+    }, on ? "Restored" : "🗂 Archived");
+  }
+
   /** Name a conversation — the WhatsApp group subject. Any participant can set
    *  or change it; clearing it falls back to the participant names. */
   setConversationSubject(key: string, subject: string) {
@@ -1346,7 +1445,7 @@ class Store {
 
   // ---- Site updates (message board) ----
   /** Post a field update to specific recipients. Returns the new update's id. */
-  postUpdate(u: { title: string; body?: string; photos?: string[]; toUserIds: string[]; context?: UpdateContext }): string {
+  postUpdate(u: { title: string; body?: string; photos?: string[]; toUserIds: string[]; context?: UpdateContext; quote?: MsgQuote }): string {
     const id = newId("upd");
     this.mutate((db) => {
       const me = db.users.find((x) => x.id === this.session.userId);
@@ -1355,7 +1454,7 @@ class Store {
         photos: u.photos?.length ? u.photos : undefined,
         authorId: me?.id ?? this.session.userId, authorName: this.session.displayName,
         at: new Date().toISOString(), toUserIds: u.toUserIds, replies: [],
-        context: u.context,
+        context: u.context, quote: u.quote,
       });
       for (const uid of u.toUserIds) {
         this.notify(db, { toUserId: uid, kind: "info", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
@@ -1364,14 +1463,14 @@ class Store {
     return id;
   }
   /** In-line reply on an update — allowed for the author and any recipient. */
-  replyToUpdate(updateId: string, body: string): void {
+  replyToUpdate(updateId: string, body: string, quote?: MsgQuote): void {
     this.mutate((db) => {
       const up = db.updates.find((x) => x.id === updateId);
       if (!up || !body.trim()) return;
       const meId = this.session.userId;
       const involved = up.authorId === meId || up.toUserIds.includes(meId) || this.session.role === "full_admin";
       if (!involved) return;
-      up.replies.push({ id: newId("rep"), authorId: meId, authorName: this.session.displayName, at: new Date().toISOString(), body: body.trim() });
+      up.replies.push({ id: newId("rep"), authorId: meId, authorName: this.session.displayName, at: new Date().toISOString(), body: body.trim(), quote });
       // Ping everyone on the thread except the person replying.
       const others = new Set([up.authorId, ...up.toUserIds].filter((x) => x !== meId));
       for (const uid of others) {

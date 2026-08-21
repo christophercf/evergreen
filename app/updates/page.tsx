@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
-import { accessFor, canMessageUser, ROLE_LABEL, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
+import { accessFor, canMessageUser, ROLE_LABEL, type MsgQuote, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
 import { ContextChip, conversationKeyOf, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
 import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 
@@ -52,7 +52,10 @@ function Avatar({ u, size = 38 }: { u?: User; size?: number }) {
 }
 
 // One flattened chat message (an update, or one of its replies).
-type Msg = { id: string; authorId: string; authorName: string; at: string; body?: string; title?: string; photos?: string[]; context?: UpdateContext };
+type Msg = { id: string; authorId: string; authorName: string; at: string; body?: string; title?: string; photos?: string[]; context?: UpdateContext; quote?: MsgQuote; reactions?: Record<string, string> };
+
+// WhatsApp's default reaction set.
+const REACT_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 type Conv = { key: string; otherIds: string[]; items: SiteUpdate[]; msgs: Msg[]; lastAt: string; preview: string };
 
 const convKeyOf = (ids: string[]) => [...new Set(ids)].sort().join("+");
@@ -80,6 +83,9 @@ export default function UpdatesPage() {
   const [showDigest, setShowDigest] = useState(false);
   const [newTo, setNewTo] = useState<Set<string>>(new Set());
   const [newSubject, setNewSubject] = useState("");
+  const [groupMode, setGroupMode] = useState(false);
+  const [pq, setPq] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   const [pendingOthers, setPendingOthers] = useState<string[] | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, string>>({});
@@ -110,8 +116,8 @@ export default function UpdatesPage() {
       const participantIds = key.split("+");
       const otherIds = participantIds.filter((id) => id !== meId);
       const msgs: Msg[] = items.flatMap((u) => [
-        { id: u.id, authorId: u.authorId, authorName: u.authorName, at: u.at, body: u.body, title: u.title, photos: u.photos, context: u.context },
-        ...u.replies.map((r) => ({ id: r.id, authorId: r.authorId, authorName: r.authorName, at: r.at, body: r.body })),
+        { id: u.id, authorId: u.authorId, authorName: u.authorName, at: u.at, body: u.body, title: u.title, photos: u.photos, context: u.context, quote: u.quote, reactions: u.reactions },
+        ...u.replies.map((r) => ({ id: r.id, authorId: r.authorId, authorName: r.authorName, at: r.at, body: r.body, quote: r.quote, reactions: r.reactions })),
       ]).sort((a, b) => a.at.localeCompare(b.at));
       const last = msgs[msgs.length - 1];
       out.push({
@@ -149,24 +155,35 @@ export default function UpdatesPage() {
   // ---- filters ----
   const tradesUsed = db.trades.filter((t) => db.users.some((u) => u.tradeIds?.includes(t.id)));
   const people = db.users.filter((u) => u.id !== meId);
-  const filtered = convs
-    .filter((c) => {
-      if (q.trim()) {
-        const needle = q.trim().toLowerCase();
-        // WhatsApp searches what was said, not just who said it.
-        const subject = db.convMeta?.find((m) => m.key === c.key)?.subject ?? "";
-        const hit = c.otherIds.some((id) => nameOf(id).toLowerCase().includes(needle))
-          || subject.toLowerCase().includes(needle)
-          || c.msgs.some((mm) => (mm.body ?? "").toLowerCase().includes(needle));
-        if (!hit) return false;
-      }
-      if (personF !== "all" && !c.otherIds.includes(personF)) return false;
-      if (tradeF !== "all" && !c.otherIds.some((id) => userOf(id)?.tradeIds?.includes(tradeF))) return false;
-      return true;
-    })
-    .sort((a, b) => sortAZ
-      ? nameOf(a.otherIds[0] ?? "").localeCompare(nameOf(b.otherIds[0] ?? ""))
-      : b.lastAt.localeCompare(a.lastAt));
+  const metaOf = (key: string) => db.convMeta?.find((m) => m.key === key);
+  const isPinned = (c: Conv) => !!metaOf(c.key)?.pinnedBy?.includes(meId);
+  const isArchived = (c: Conv) => !!metaOf(c.key)?.archivedBy?.includes(meId);
+
+  const matching = convs.filter((c) => {
+    if (q.trim()) {
+      const needle = q.trim().toLowerCase();
+      // WhatsApp searches what was said, not just who said it.
+      const subject = metaOf(c.key)?.subject ?? "";
+      const hit = c.otherIds.some((id) => nameOf(id).toLowerCase().includes(needle))
+        || subject.toLowerCase().includes(needle)
+        || c.msgs.some((mm) => (mm.body ?? "").toLowerCase().includes(needle));
+      if (!hit) return false;
+    }
+    if (personF !== "all" && !c.otherIds.includes(personF)) return false;
+    if (tradeF !== "all" && !c.otherIds.some((id) => userOf(id)?.tradeIds?.includes(tradeF))) return false;
+    return true;
+  });
+  const archivedConvs = matching.filter(isArchived).sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  const filtered = matching
+    .filter((c) => !isArchived(c))
+    .sort((a, b) => {
+      // Pinned float, like WhatsApp; inside each band the chosen sort applies.
+      const pin = Number(isPinned(b)) - Number(isPinned(a));
+      if (pin) return pin;
+      return sortAZ
+        ? (metaOf(a.key)?.subject ?? nameOf(a.otherIds[0] ?? "")).localeCompare(metaOf(b.key)?.subject ?? nameOf(b.otherIds[0] ?? ""))
+        : b.lastAt.localeCompare(a.lastAt);
+    });
 
   const allowed = db.users.filter((u) => canMessageUser(user, role, u, db.trades));
 
@@ -192,7 +209,7 @@ export default function UpdatesPage() {
         <Avatar u={others[0]} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{db.convMeta?.find((m) => m.key === c.key)?.subject ?? c.otherIds.map(nameOf).join(", ")}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--walnut)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{isPinned(c) ? "📌 " : ""}{metaOf(c.key)?.subject ?? c.otherIds.map(nameOf).join(", ")}</span>
             <span style={{ fontSize: 10.5, color: unread ? "var(--sage-2)" : "var(--muted)", flexShrink: 0, fontWeight: unread ? 700 : 400 }}>{c.lastAt ? timeShort(c.lastAt) : ""}</span>
           </span>
           <span style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 2 }}>
@@ -204,16 +221,16 @@ export default function UpdatesPage() {
     );
   };
 
-  const startNew = () => {
-    const ids = [...newTo];
+  const openConv = (ids: string[], subject?: string) => {
     if (!ids.length) return;
     const key = convKeyOf([meId, ...ids]);
-    if (newSubject.trim()) store.setConversationSubject(key, newSubject);
+    // "New group" with the same people as an existing thread lands in that
+    // thread — its subject is shared history and must not be silently renamed.
+    const existing = db.convMeta?.find((m) => m.key === key)?.subject;
+    if (subject?.trim() && !existing) store.setConversationSubject(key, subject);
     setPendingOthers(ids);
     setSel(key);
-    setShowNew(false);
-    setNewTo(new Set());
-    setNewSubject("");
+    setShowNew(false); setGroupMode(false); setNewTo(new Set()); setNewSubject(""); setPq("");
   };
 
   return (
@@ -252,30 +269,48 @@ export default function UpdatesPage() {
               <DigestBuilder allowed={allowed} onDone={() => setShowDigest(false)} />
             ) : showNew ? (
               <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Start a conversation with</div>
-                {allowed.map((u) => {
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <div style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>
+                    {groupMode ? "New group" : "New chat"}
+                  </div>
+                  <button className="btn btn-sm" onClick={() => { setGroupMode((v) => !v); setNewTo(new Set()); }}>
+                    {groupMode ? "← Single chat" : "👥 New group"}
+                  </button>
+                </div>
+                <input className="input" autoFocus value={pq} onChange={(e) => setPq(e.target.value)} placeholder="Search people…" style={{ fontSize: 12.5 }} />
+                {groupMode && (
+                  <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Group subject</span>
+                    <input className="input" value={newSubject} onChange={(e) => setNewSubject(e.target.value)} placeholder="e.g. Kitchen cabinets" style={{ fontSize: 12.5 }} />
+                  </label>
+                )}
+                {allowed.filter((u) => !pq.trim() || u.name.toLowerCase().includes(pq.trim().toLowerCase())).map((u) => {
                   const on = newTo.has(u.id);
                   return (
-                    <button key={u.id} onClick={() => setNewTo((s) => { const n = new Set(s); on ? n.delete(u.id) : n.add(u.id); return n; })}
+                    <button key={u.id}
+                      onClick={() => {
+                        // WhatsApp's reflex: tap a person and you are in the chat.
+                        if (!groupMode) { openConv([u.id]); return; }
+                        setNewTo((sset) => { const n = new Set(sset); on ? n.delete(u.id) : n.add(u.id); return n; });
+                      }}
                       style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 9px", borderRadius: 10, border: on ? "2px solid var(--sage)" : "1px solid var(--line)", background: on ? "var(--sage-tint)" : "var(--paper)", cursor: "pointer", textAlign: "left" }}>
                       <Avatar u={u} size={34} />
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{u.name}</span>
                         <span style={{ display: "block", fontSize: 11, color: "var(--muted)" }}>{u.role === "trade" && u.tradeIds?.length ? tradeName(db, u.tradeIds[0]) : ROLE_LABEL[u.role]}</span>
                       </span>
-                      {on && <span style={{ color: "var(--sage-2)", fontWeight: 700 }}>✓</span>}
+                      {groupMode && on && <span style={{ color: "var(--sage-2)", fontWeight: 700 }}>✓</span>}
                     </button>
                   );
                 })}
                 {!allowed.length && <div style={{ fontSize: 12, color: "var(--muted)" }}>No one available for your role yet.</div>}
-                <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)" }}>Subject — optional</span>
-                  <input className="input" value={newSubject} onChange={(e) => setNewSubject(e.target.value)}
-                    placeholder="e.g. Kitchen cabinets" style={{ fontSize: 12.5 }} />
-                </label>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn btn-primary btn-sm" disabled={!newTo.size} onClick={startNew}>Start chat{newTo.size > 1 ? ` (${newTo.size})` : ""}</button>
-                  <button className="btn btn-sm" onClick={() => { setShowNew(false); setNewTo(new Set()); }}>Cancel</button>
+                  {groupMode && (
+                    <button className="btn btn-primary btn-sm" disabled={newTo.size < 2} onClick={() => openConv([...newTo], newSubject)}>
+                      Create group{newTo.size ? ` (${newTo.size})` : ""}
+                    </button>
+                  )}
+                  <button className="btn btn-sm" onClick={() => { setShowNew(false); setGroupMode(false); setNewTo(new Set()); setPq(""); }}>Cancel</button>
                 </div>
               </div>
             ) : (
@@ -292,7 +327,24 @@ export default function UpdatesPage() {
                       );
                     })
                   : filtered.map(renderConv)}
-                {!filtered.length && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--muted)" }}>No conversations{q || tradeF !== "all" || personF !== "all" ? " match the filter" : " yet — start one with ＋ New"}.</div>}
+                {archivedConvs.length > 0 && (
+                  <>
+                    <button onClick={() => setShowArchived((v) => !v)}
+                      style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 12px", border: "none", borderBottom: "1px solid var(--line)", background: "var(--cream)", cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+                      🗂 Archived ({archivedConvs.length})
+                      {/* An archived chat can still receive a message — the badge is
+                          how it stays findable, same as WhatsApp's Archived row. */}
+                      {archivedConvs.reduce((a, c) => a + unreadOf(c), 0) > 0 && (
+                        <span style={{ background: "var(--sage)", color: "#fff", borderRadius: 99, fontSize: 10.5, fontWeight: 700, minWidth: 18, height: 18, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                          {archivedConvs.reduce((a, c) => a + unreadOf(c), 0)}
+                        </span>
+                      )}
+                      <span style={{ marginLeft: "auto" }}>{showArchived ? "▾" : "▸"}</span>
+                    </button>
+                    {showArchived && archivedConvs.map(renderConv)}
+                  </>
+                )}
+                {!filtered.length && !archivedConvs.length && <div style={{ padding: 20, textAlign: "center", fontSize: 12.5, color: "var(--muted)" }}>No conversations{q || tradeF !== "all" || personF !== "all" ? " match the filter" : " yet — start one with ＋ New"}.</div>}
               </>
             )}
           </div>
@@ -492,8 +544,23 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
   const userOf = (id: string) => db.users.find((x) => x.id === id);
   const others = conv.otherIds.map(userOf);
   const group = conv.otherIds.length > 1;
-  const subject = db.convMeta?.find((m) => m.key === conv.key)?.subject;
+  const meta = db.convMeta?.find((m) => m.key === conv.key);
+  const subject = meta?.subject;
+  const pinned = !!meta?.pinnedBy?.includes(meId);
+  const archived = !!meta?.archivedBy?.includes(meId);
   const [editingSubject, setEditingSubject] = useState(false);
+  const [quoting, setQuoting] = useState<MsgQuote | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const [reactFor, setReactFor] = useState<string | null>(null);
+
+  // Opening (or catching up on) a chat marks it read — the other side's ✓✓
+  // turns. Quiet write, skipped when nothing is new.
+  useEffect(() => {
+    if (conv.lastAt) store.markConversationRead(conv.key, conv.lastAt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conv.key, conv.lastAt]);
+  // A message is "read" once every other participant has read past it.
+  const readByAll = (at: string) => conv.otherIds.every((id) => (meta?.reads?.[id] ?? "") >= at);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [conv.msgs.length]);
 
@@ -505,14 +572,14 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
     const latest = conv.items[0] ? conv.items.reduce((a, b) => (a.at > b.at ? a : b)) : null;
     if (photos.length || !latest) {
       // photos (or a brand-new thread) need a full update
-      store.postUpdate({ title: derivedTitle(text || "📷 Photo"), body: text, photos, toUserIds: conv.otherIds });
+      store.postUpdate({ title: derivedTitle(text || "📷 Photo"), body: text, photos, toUserIds: conv.otherIds, quote: quoting ?? undefined });
     } else {
-      store.replyToUpdate(latest.id, text);
+      store.replyToUpdate(latest.id, text, quoting ?? undefined);
     }
     const emails = emailsFor(db.users, conv.otherIds);
     pushEmail(emails, `💬 ${db.project.name} — ${subject ?? `message from ${name}`}`, text || "(photo)",
       { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), convKey: conversationKeyOf([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
-    setBody(""); att.clear();
+    setBody(""); att.clear(); setQuoting(null);
   };
 
   let lastDay = "";
@@ -541,6 +608,12 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
               : others.map((u) => u ? (u.role === "trade" && u.tradeIds?.length ? tradeName(db, u.tradeIds[0]) : ROLE_LABEL[u.role]) : "—").join(" · ")}
           </div>
         </div>
+        <button className="btn btn-sm" title={pinned ? "Unpin" : "Pin to top"}
+          onClick={() => store.togglePinConversation(conv.key)}
+          style={pinned ? { background: "var(--sage-tint)" } : { opacity: 0.65 }}>📌</button>
+        <button className="btn btn-sm" title={archived ? "Restore from archive" : "Archive"}
+          onClick={() => { store.toggleArchiveConversation(conv.key); if (!archived) onBack(); }}
+          style={{ opacity: archived ? 1 : 0.65 }}>🗂</button>
       </div>
 
       {/* messages */}
@@ -553,8 +626,20 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column" }}>
               {divider && <div style={{ alignSelf: "center", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 99, padding: "2px 10px", margin: "8px 0" }}>{day}</div>}
-              <div style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "80%", background: mine ? "#dde8d2" : "var(--paper)", border: "1px solid var(--line)", borderRadius: mine ? "12px 12px 3px 12px" : "12px 12px 12px 3px", padding: "7px 10px", boxShadow: "0 1px 1px rgba(44,36,28,.06)" }}>
-                {group && !mine && <div style={{ fontSize: 10.5, fontWeight: 700, color: avaColor(m.authorId), marginBottom: 2 }}>{m.authorName}</div>}
+              <div onMouseEnter={() => setHoverId(m.id)} onMouseLeave={() => { setHoverId(null); setReactFor(null); }}
+                onClick={() => setHoverId((h) => (h === m.id ? null : m.id))}
+                style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "80%", display: "flex", alignItems: "flex-end", gap: 5, flexDirection: mine ? "row-reverse" : "row" }}>
+              <div style={{ minWidth: 0, background: mine ? "#dde8d2" : "var(--paper)", border: "1px solid var(--line)", borderRadius: mine ? "12px 12px 3px 12px" : "12px 12px 12px 3px", padding: "7px 10px", boxShadow: "0 1px 1px rgba(44,36,28,.06)" }}>
+                {/* Name the author in groups — and in a 1:1 whenever a third
+                    voice (a full admin) speaks, so their words are never
+                    mistaken for the other person's. */}
+                {!mine && (group || !conv.otherIds.includes(m.authorId)) && <div style={{ fontSize: 10.5, fontWeight: 700, color: avaColor(m.authorId), marginBottom: 2 }}>{m.authorName}</div>}
+                {m.quote && (
+                  <div style={{ borderLeft: "3px solid var(--sage)", background: "rgba(44,36,28,.05)", borderRadius: 6, padding: "4px 8px", marginBottom: 5, fontSize: 11.5, maxWidth: 320 }}>
+                    <div style={{ fontWeight: 700, color: "var(--sage-2)" }}>{m.quote.authorName}</div>
+                    <div style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.quote.text}</div>
+                  </div>
+                )}
                 {m.context && <div style={{ marginBottom: 5 }}><ContextChip ctx={m.context} /></div>}
                 {showTitle(m) && <div style={{ fontSize: 13, fontWeight: 700, color: "var(--walnut)", marginBottom: 2 }}>{m.title}</div>}
                 {!!m.photos?.length && (
@@ -566,7 +651,37 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
                   </div>
                 )}
                 {m.body && <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>}
-                <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "right", marginTop: 3 }}>{timeBubble(m.at)}</div>
+                {m.reactions && Object.keys(m.reactions).length > 0 && (
+                  <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
+                    {Object.entries(Object.values(m.reactions).reduce<Record<string, number>>((a, e) => { a[e] = (a[e] ?? 0) + 1; return a; }, {})).map(([e, n]) => (
+                      <span key={e} title={Object.entries(m.reactions!).filter(([, em]) => em === e).map(([uid]) => db.users.find((x) => x.id === uid)?.name ?? "someone").join(", ")}
+                        style={{ fontSize: 11.5, background: "var(--cream)", border: "1px solid var(--line)", borderRadius: 99, padding: "1px 7px" }}>{e}{n > 1 ? ` ${n}` : ""}</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 9.5, color: "var(--muted)", textAlign: "right", marginTop: 3 }}>
+                  {timeBubble(m.at)}
+                  {mine && <span title={readByAll(m.at) ? "Read by everyone" : "Sent"} style={{ marginLeft: 4, fontWeight: 700, letterSpacing: "-2px", color: readByAll(m.at) ? "var(--sage-2)" : "var(--muted)" }}>✓✓</span>}
+                </div>
+              </div>
+              {hoverId === m.id && (
+                <span onClick={(e) => e.stopPropagation()} style={{ display: "inline-flex", gap: 2, position: "relative", flexShrink: 0 }}>
+                  <button className="btn btn-sm" title="Reply to this message"
+                    onClick={() => setQuoting({ id: m.id, authorName: m.authorName, text: (m.body || m.title || "📷 Photo").slice(0, 140) })}
+                    style={{ padding: "1px 7px", fontSize: 12 }}>↩</button>
+                  <button className="btn btn-sm" title="React"
+                    onClick={() => setReactFor(reactFor === m.id ? null : m.id)}
+                    style={{ padding: "1px 7px", fontSize: 12 }}>🙂</button>
+                  {reactFor === m.id && (
+                    <span style={{ position: "absolute", bottom: "115%", right: 0, display: "inline-flex", gap: 2, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 99, padding: "3px 6px", boxShadow: "0 4px 14px rgba(44,36,28,.18)", zIndex: 5 }}>
+                      {REACT_EMOJI.map((e) => (
+                        <button key={e} onClick={() => { store.reactToMessage(m.id, e); setReactFor(null); }}
+                          style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: 15, padding: "0 2px" }}>{e}</button>
+                      ))}
+                    </span>
+                  )}
+                </span>
+              )}
               </div>
             </div>
           );
@@ -577,6 +692,15 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
       {/* composer */}
       <div style={{ borderTop: "1px solid var(--line)", background: "var(--paper)", padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
         <PhotoStrip photos={att.photos} uploading={att.uploading} onRemove={att.remove} size={48} />
+        {quoting && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, borderLeft: "3px solid var(--sage)", background: "var(--cream)", borderRadius: 6, padding: "4px 8px" }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 11.5 }}>
+              <div style={{ fontWeight: 700, color: "var(--sage-2)" }}>↩ Replying to {quoting.authorName}</div>
+              <div style={{ color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{quoting.text}</div>
+            </div>
+            <button className="btn btn-sm" onClick={() => setQuoting(null)}>✕</button>
+          </div>
+        )}
         {mic.listening && <div style={{ fontSize: 11, color: "var(--rust)", fontWeight: 600 }}>● Listening — tap ■ to stop.</div>}
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
           {att.input}

@@ -61,6 +61,22 @@ export class SupabaseBackend implements Backend {
       .subscribe();
   }
 
+  async patchDB(apply: (db: DB) => void): Promise<void> {
+    // Read-modify-write against the server's current row. Not a transaction —
+    // but the write no longer carries this client's possibly-stale copy of
+    // everything else, which is the difference between a millisecond race and
+    // "opening a chat deleted a message".
+    const { data, error } = await this.client
+      .from("project_state").select("db").eq("id", PROJECT_ID).maybeSingle();
+    if (error) throw new Error(error.message);
+    const fresh = (data?.db as DB | undefined) ?? buildDB();
+    apply(fresh);
+    const { error: e2 } = await this.client
+      .from("project_state")
+      .upsert({ id: PROJECT_ID, db: fresh, updated_at: new Date().toISOString() });
+    if (e2) throw new Error(e2.message);
+  }
+
   async persistDB(db: DB): Promise<void> {
     // supabase-js reports failures in `error` rather than throwing. Unchecked,
     // a rejected write is invisible: the UI has already shown "Saved" and the

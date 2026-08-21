@@ -802,12 +802,24 @@ export function tradeRatingAvg(ratings: TradeRating[], tradeId: string): { overa
 // ---- Site updates (message board) ------------------------------------------
 // A field update: photos + title + text, posted to specific recipients who can
 // respond in-line. Built to be trivially usable from a phone on-site.
+/** A quoted snippet carried on a reply — WhatsApp's swipe-to-reply. Stored as
+ *  a snapshot rather than a reference, so the quote still reads even if the
+ *  original message is edited away. */
+export interface MsgQuote {
+  id: string;
+  authorName: string;
+  text: string;
+}
+
 export interface UpdateReply {
   id: string;
   authorId: string;
   authorName: string;
   at: string;    // ISO
   body: string;
+  quote?: MsgQuote;
+  /** userId → emoji. One reaction per person, tap again to remove. */
+  reactions?: Record<string, string>;
 }
 
 /** What a message is ABOUT — set when it's launched from an item elsewhere in
@@ -838,6 +850,9 @@ export interface SiteUpdate {
   replies: UpdateReply[];
   /** The app item this message was launched from, if any. */
   context?: UpdateContext;
+  quote?: MsgQuote;
+  /** userId → emoji. One reaction per person, tap again to remove. */
+  reactions?: Record<string, string>;
 }
 
 /** Who a user may send updates to:
@@ -1078,7 +1093,15 @@ export interface DB {
    *  conversation is otherwise derived from its messages, so this is the one
    *  thing stored about it: the subject — what a WhatsApp user knows as the
    *  group name. */
-  convMeta?: { key: string; subject?: string }[];
+  convMeta?: {
+    key: string;
+    subject?: string;
+    /** userId → ISO of the newest message that user has read. Powers ✓✓. */
+    reads?: Record<string, string>;
+    /** Per-user, so my pin does not rearrange anyone else's list. */
+    pinnedBy?: string[];
+    archivedBy?: string[];
+  }[];
   /** The project's macro categories. Absent on databases saved before they were
    *  editable, in which case the built-in set stands in. */
   categories?: MacroCat[];
