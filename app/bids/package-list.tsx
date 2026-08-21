@@ -164,8 +164,7 @@ export function PackageList({ onOpen, onNew, canEdit }: {
 function Row({ r, onOpen }: { r: PkgRow; onOpen: (id: string) => void }) {
   const store = useStore();
   const db = store.db;
-  const trades = [r.p.tradeId, ...((r.p as { tradeIds?: string[] }).tradeIds ?? [])]
-    .filter((x, i, a) => x && a.indexOf(x) === i) as string[];
+  const trades = [...new Set([r.p.tradeId, ...(r.p.tradeIds ?? [])])].filter(Boolean);
 
   return (
     <tr onClick={() => onOpen(r.p.id)} style={{ cursor: "pointer", borderBottom: "1px solid var(--line)" }}>

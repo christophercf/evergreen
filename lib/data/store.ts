@@ -966,7 +966,7 @@ class Store {
     return ["full_admin", "builder"].includes(this.session.role);
   }
   addBidPackage(p: {
-    title: string; tradeId: string; roomIds: string[]; scopeDetails: string; scopeItems?: string[];
+    title: string; tradeId: string; tradeIds?: string[]; roomIds: string[]; scopeDetails: string; scopeItems?: string[];
     origin?: BidOrigin; status?: BidPackage["status"]; materialsBasis?: MaterialsBasis;
     requirements?: BidReqKey[]; targetBudget?: number; sourceDoc?: ScopeDoc; pricingBasis?: PricingBasis;
   }): string {
@@ -974,7 +974,9 @@ class Store {
     if (!this.canManageBids || !p.title.trim()) return id;
     this.mutate((db) => {
       db.bidPackages.unshift({
-        id, title: p.title.trim(), tradeId: p.tradeId, roomIds: p.roomIds,
+        id, title: p.title.trim(), tradeId: p.tradeId,
+        tradeIds: p.tradeIds?.length ? [...new Set(p.tradeIds)] : undefined,
+        roomIds: p.roomIds,
         scopeDetails: p.scopeDetails, scopeItems: p.scopeItems?.filter((s) => s.trim()),
         origin: p.origin, status: p.status ?? "draft",
         materialsBasis: p.materialsBasis, requirements: p.requirements ?? BID_REQ_DEFAULT,
@@ -1050,10 +1052,6 @@ class Store {
   updateBidPackage(id: string, patch: Partial<BidPackage>) {
     if (!this.canManageBids) return;
     this.mutate((db) => { const p = db.bidPackages.find((x) => x.id === id); if (p) Object.assign(p, patch); });
-  }
-  removeBidPackage(id: string) {
-    if (!this.canManageBids) return;
-    this.mutate((db) => { db.bidPackages = db.bidPackages.filter((p) => p.id !== id); });
   }
   addBid(packageId: string, bid: { vendorName: string; contactId?: string; status?: VendorBid["status"] }) {
     if (!this.canManageBids || !bid.vendorName.trim()) return;
@@ -1444,6 +1442,22 @@ class Store {
       if (!m) { m = { key }; db.convMeta.push(m); }
       m.subject = subject.trim() || undefined;
     }, subject.trim() ? "Subject saved" : "Subject removed");
+  }
+
+  /** Delete a package. Refused once it is awarded — the award created a
+   *  contract and a budget line, and deleting the paperwork behind real money
+   *  would leave that money with nothing explaining it. */
+  removeBidPackage(id: string): boolean {
+    if (!this.canManageBids) return false;
+    const p = this.db.bidPackages?.find((x) => x.id === id);
+    if (!p || p.awardedBidId) return false;
+    let ok = false;
+    this.mutate((db) => {
+      const before = db.bidPackages.length;
+      db.bidPackages = db.bidPackages.filter((x) => x.id !== id);
+      ok = db.bidPackages.length < before;
+    }, "Package deleted");
+    return ok;
   }
 
   /** Builder's star rating for a trade (one row per rater per trade). */

@@ -720,7 +720,13 @@ export function packageReadiness(p: BidPackage): { ready: boolean; blocking: str
 export interface BidPackage {
   id: string;
   title: string;
+  /** The package's primary trade — kept as the single value everything already
+   *  keys off (the award, the schedule bar, the contract). */
   tradeId: string;
+  /** Every budget line bundled into this package. A GC bundles work that one
+   *  vendor can price and mobilise for once; `tradeId` is the first of these.
+   *  Absent on packages written before bundling existed. */
+  tradeIds?: string[];
   roomIds: string[];
   /** The scope-of-work text: builder-led, pulled from the scope matrix, or a
    *  brief for RFPs the vendor fills out. */

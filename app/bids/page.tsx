@@ -17,6 +17,7 @@ import { IntakeScreen, CompareScreen, AwardScreen } from "./screens";
 import { ScopeScreen } from "./scope";
 import { downloadRequestDoc } from "./request-doc";
 import { PackageList } from "./package-list";
+import { BundlePicker } from "./bundle";
 
 // ---------------------------------------------------------------------------
 // Bid Management — competitive bidding before the budget exists.
@@ -83,9 +84,12 @@ export default function BidsPage() {
     return (
       <>
         <button className="btn btn-sm" style={{ marginBottom: 10 }} onClick={() => setCreating(false)}>← All packages</button>
-        <PageHeader title="New package" subtitle="Pick the trades this package covers. Bids still only compare inside a trade — each one gets its own column set." />
+        <PageHeader
+          title="New package"
+          subtitle="The GC bundles the bid: pick the budget lines going out together, and the app says whether anyone can actually price the bundle."
+        />
         <div style={{ marginTop: 14 }}>
-          <TradesScreen ro={ro} onCreated={(id) => { setCreating(false); setPkgId(id); setTab("scope"); }} />
+          <BundlePicker ro={ro} onCreated={(id) => { setCreating(false); setPkgId(id); setTab("scope"); }} />
         </div>
       </>
     );
@@ -103,7 +107,21 @@ export default function BidsPage() {
 
   return (
     <>
-      <button className="btn btn-sm" style={{ marginBottom: 10 }} onClick={() => { setPkgId(null); }}>← All packages</button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <button className="btn btn-sm" onClick={() => { setPkgId(null); }}>← All packages</button>
+        {/* Deleting is refused once awarded — that award created a contract and
+            a budget line, and the money would be left with nothing explaining it. */}
+        {!ro && !pkg!.awardedBidId ? (
+          <button className="btn btn-sm" style={{ color: "var(--rust)" }}
+            onClick={() => {
+              if (confirm(`Delete "${pkg!.title}"?
+
+Nothing has been awarded on it, so no money or contract depends on it.`)) {
+                store.removeBidPackage(pkg!.id); setPkgId(null);
+              }
+            }}>Delete package</button>
+        ) : null}
+      </div>
       <PageHeader
         title={pkg!.title}
         subtitle={won
@@ -385,91 +403,6 @@ function Field({ k, v }: { k: string; v: string }) {
 }
 
 
-function TradesScreen({ ro, onCreated }: { ro: boolean; onCreated: (id: string) => void }) {
-  const store = useStore();
-  const db = store.db;
-  const narrow = useNarrow();
-  const [picked, setPicked] = useState<string[]>([]);
-
-  // vendorCovers, not the engagement trade: a mason who also pours concrete
-  // counts towards both trades' contact numbers.
-  const saved = (tid: string) => db.contacts.filter((c) => c.party === "vendor" && vendorCovers(c, tid)).length;
-  const toggle = (tid: string) => setPicked((p) => (p.includes(tid) ? p.filter((x) => x !== tid) : [...p, tid]));
-
-  const create = () => {
-    let first = "";
-    for (const tid of picked) {
-      const id = store.addBidPackage({
-        title: `${tradeName(db, tid)} — ${db.project.name}`,
-        tradeId: tid,
-        // The rooms this trade is already scoped into ride along invisibly, so an
-        // award lands on a budget line that knows where the work is.
-        roomIds: db.scope.filter((c) => c.tradeId === tid && c.status === "in").map((c) => c.roomId),
-        scopeDetails: "",
-        pricingBasis: "lump",
-      });
-      if (!first) first = id;
-    }
-    if (first) onCreated(first);
-  };
-
-  const label = `Continue with ${picked.length} trade${picked.length === 1 ? "" : "s"}`;
-  const head = (
-    <ScreenHead
-      title="Which trades is this package for?"
-      sub="Pick one or several. Bids still only compare inside a trade — each one gets its own column set."
-      right={!ro && !narrow && (
-        <button className="btn btn-primary btn-sm" disabled={!picked.length} onClick={create}>{label} →</button>
-      )}
-    />
-  );
-
-  if (narrow) {
-    const rows: TriageRow[] = macroOrder(db).flatMap((cat) =>
-      db.trades.filter((t) => t.category === cat).map((t) => ({
-        id: t.id,
-        title: t.name,
-        value: picked.includes(t.id) ? "Picked" : undefined,
-        meta: `${cat} · ${saved(t.id)} saved contact${saved(t.id) === 1 ? "" : "s"}`,
-        on: picked.includes(t.id),
-        onClick: ro ? undefined : () => toggle(t.id),
-      })));
-    return <>{head}<Triage rows={rows} empty="No trades on this project yet." next={ro ? undefined : { label, disabled: !picked.length, onClick: create }} /></>;
-  }
-
-  return (
-    <>
-      {head}
-      {macroOrder(db).map((cat) => {
-        const trades = db.trades.filter((t) => t.category === cat);
-        if (!trades.length) return null;
-        return (
-          <div key={cat} style={{ marginBottom: 14 }}>
-            <Kicker tone="muted" style={{ marginBottom: 6 }}>{cat}</Kicker>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 10 }}>
-              {trades.map((t) => {
-                const on = picked.includes(t.id);
-                return (
-                  <Tile key={t.id} on={on} onClick={ro ? undefined : () => toggle(t.id)}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, width: "100%" }}>
-                      <span className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)", lineHeight: 1.2 }}>{t.name}</span>
-                      <Check on={on} />
-                    </div>
-                    <span style={{ fontSize: 11, color: "var(--muted)" }}>{saved(t.id)} saved contact{saved(t.id) === 1 ? "" : "s"}</span>
-                  </Tile>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 02 — who bids. The whole directory is here; the ones who cover this package
-// sort to the top rather than the others being hidden.
 function ContactsScreen({ p, ro, onBack, onNext }: { p: BidPackage; ro: boolean; onBack: () => void; onNext: () => void }) {
   const store = useStore();
   const db = store.db;
