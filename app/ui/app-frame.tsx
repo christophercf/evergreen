@@ -10,7 +10,7 @@ import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
 import { Toaster } from "./toast";
 import {
-  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon,
+  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, HelpIcon,
 } from "./icons";
 
 type Band = "job" | "reference";
@@ -46,9 +46,26 @@ const NAV: NavItem[] = [
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", band: "reference", Icon: FolderIcon },
+  // Help is last on purpose and reaches every seat: the person who most needs
+  // it is the one who cannot work out where they are, and filing a report is
+  // how they say so.
+  { href: "/help", label: "Help", mod: "help", band: "reference", Icon: HelpIcon },
 ];
 
 const BAND_LABEL: Record<Band, string> = { job: "The job", reference: "Reference" };
+
+/** How many things happened here while you were somewhere else. Green because
+ *  it is news, not a warning — nothing in this app makes you look at it. */
+function NavCount({ n }: { n: number }) {
+  return (
+    <span aria-label={`${n} new`} style={{
+      background: "var(--sage)", color: "#fff", borderRadius: 99,
+      fontSize: 10.5, fontWeight: 700, minWidth: 18, height: 18,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      padding: "0 5px", flexShrink: 0,
+    }}>{n > 99 ? "99+" : n}</span>
+  );
+}
 
 /** What each role opens on, and the order they meet things in. A role's first
  *  item should be what that role actually does most — permission decides what is
@@ -92,6 +109,14 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
   // Absent, never greyed out: a role should not see a control it cannot use.
   const permitted = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
+
+  // What has happened since this user last looked, per module. Messages counts
+  // unread messages the same way the conversation list counts them; everything
+  // else counts notifications addressed to this user that they have not opened.
+  // Read state is per user, so clearing my count never clears anyone else's.
+  const unseen = store.unseenByModule();
+  const badge = (mod: ModuleKey): number =>
+    mod === "updates" ? store.unreadMessages() : (unseen[mod] ?? 0);
   // Role-shaped order — what this role does most comes first.
   const order = ROLE_ORDER[role];
   const rank = (n: NavItem) => {
@@ -147,11 +172,12 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             const active = n.href === "/" ? pathname === "/" : pathname.startsWith(n.href);
             // A vendor sees their own contract, not a management console.
             const label = n.mod === "vendors" && role === "trade" ? "Your contract" : n.label;
+            const count = badge(n.mod);
             return (
               <Link
                 key={n.href}
                 href={href}
-                onClick={() => setNavOpen(false)}
+                onClick={() => { setNavOpen(false); store.markModuleSeen(n.mod); }}
                 style={{
                   display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 8,
                   fontSize: 13.5, fontWeight: 600,
@@ -161,7 +187,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
                 }}
               >
                 <n.Icon width={17} height={17} />
-                <span style={{ flex: 1 }}>{label}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+                {count > 0 && <NavCount n={count} />}
                 {n.phase2 && <span style={{ fontSize: 9, color: "#9a8e79", border: "1px solid #5a4d3c", borderRadius: 4, padding: "0 4px" }}>soon</span>}
               </Link>
             );
@@ -207,12 +234,25 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
 
       {/* Bottom tab bar — thumb-reach nav on phones; ☰ opens the full drawer. */}
       <nav className="ever-bottomnav">
-        {bottomNav.map(({ href, label, short, Icon }) => (
-          <Link key={href} href={href} className={pathname === href ? "active" : undefined} onClick={() => setNavOpen(false)} aria-label={label}>
-            <Icon width={19} height={19} />
-            {short ?? label}
-          </Link>
-        ))}
+        {bottomNav.map(({ href, label, short, mod, Icon }) => {
+          const count = badge(mod);
+          return (
+            <Link key={href} href={href} className={pathname === href ? "active" : undefined}
+              onClick={() => { setNavOpen(false); store.markModuleSeen(mod); }}
+              aria-label={count ? `${label} — ${count} new` : label}
+              style={{ position: "relative" }}>
+              <Icon width={19} height={19} />
+              {short ?? label}
+              {count > 0 && (
+                <span style={{
+                  position: "absolute", top: 2, right: "50%", marginRight: -18,
+                  background: "var(--sage)", color: "#fff", borderRadius: 99, fontSize: 9.5, fontWeight: 700,
+                  minWidth: 15, height: 15, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 4px",
+                }}>{count > 99 ? "99+" : count}</span>
+              )}
+            </Link>
+          );
+        })}
         <button onClick={() => setNavOpen(true)} aria-label="All tabs">
           <span style={{ fontSize: 17, lineHeight: "19px" }}>☰</span>
           More

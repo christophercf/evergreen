@@ -29,7 +29,8 @@ export type ModuleKey =
   | "budget"
   | "payments"
   | "updates"
-  | "bids";
+  | "bids"
+  | "help";
 
 export type AccessLevel = "none" | "view" | "edit";
 
@@ -1040,6 +1041,50 @@ export interface AppNotification {
   scheduleItemId?: string;
   createdAt: string;
   read: boolean;
+  /** Which module this is about, so the nav can carry a count for it. */
+  module?: ModuleKey;
+  /** Per-user seen list. A notification addressed to a ROLE reaches several
+   *  people; one of them opening it must not clear it for the others. `read`
+   *  stays for notifications written before this existed. */
+  readBy?: string[];
+}
+
+// ---- In-app feedback --------------------------------------------------------
+// Filed from the seat and screen where it was hit, because a report from the
+// owner seat is about what the owner can see, not what the builder can.
+export type FeedbackKind = "bug" | "feature" | "wording" | "question";
+export type FeedbackSeverity = "blocking" | "annoying" | "cosmetic";
+
+export const FEEDBACK_KIND_LABEL: Record<FeedbackKind, string> = {
+  bug: "Bug", feature: "Feature", wording: "Wording", question: "Question",
+};
+export const FEEDBACK_SEVERITY_LABEL: Record<FeedbackSeverity, string> = {
+  blocking: "Blocking", annoying: "Annoying", cosmetic: "Cosmetic",
+};
+
+export interface FeedbackItem {
+  id: string;
+  kind: FeedbackKind;
+  /** A module label, or "Something across the whole app". */
+  area: string;
+  severity?: FeedbackSeverity;
+  what: string;
+  steps?: string;
+  expected?: string;
+  // ---- Auto-attached. Nobody types these; they are the report's evidence. ----
+  seat: string;
+  role: Role;
+  device: "phone" | "desktop";
+  /** "ROM locked" / "ROM drafting" — what phase the job was in. */
+  rom: string;
+  /** "Package 04 — Roofing" / "no package open". */
+  pkg: string;
+  /** The screen they were on when they hit it. */
+  screen: string;
+  filedBy: string;
+  at: string;
+  /** Chris closes one when it is fixed; it leaves the brief, not the record. */
+  done?: boolean;
 }
 
 // ---- Contracts (master terms templates) ------------------------------------
@@ -1169,6 +1214,9 @@ export interface DB {
   artifacts: Artifact[];
   updates: SiteUpdate[];
   bidPackages: BidPackage[];
+  /** Reports filed from inside the app. Absent on databases saved before the
+   *  feedback module existed, so every reader must tolerate undefined. */
+  feedback?: FeedbackItem[];
   tradeRatings: TradeRating[];
   /** Conversation metadata, keyed by the sorted participant-id key. A
    *  conversation is otherwise derived from its messages, so this is the one
@@ -1210,28 +1258,28 @@ export interface Session {
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   full_admin: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "edit", help: "edit",
   },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
     // Draw Management is the GC's console. The owner sees what draws do to the
     // budget — decision 03 — rather than the machinery that builds them.
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "none", updates: "edit", bids: "view",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "none", updates: "edit", bids: "view", help: "edit",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit", bids: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit", bids: "edit", help: "edit",
   },
   trade: {
     // Competing bids are never shown to trades.
     dashboard: "view", timing: "edit", artifacts: "view", admin: "none",
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", help: "edit",
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
     // The designer works from the drawings, not the materials list. Materials are
     // curated by the owner and builder, and sign-off is the owner's alone.
-    materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none",
+    materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", help: "edit",
   },
 };
 

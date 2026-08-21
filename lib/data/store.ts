@@ -8,9 +8,9 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   BudgetLineState, CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, FeedbackItem, FeedbackKind, FeedbackSeverity, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
-import { BID_REQ_DEFAULT } from "./types";
+import { BID_REQ_DEFAULT, FEEDBACK_KIND_LABEL, ROLE_LABEL } from "./types";
 import { buildDB } from "./seed";
 import { contractFromAward } from "./contract";
 import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage, categoryUsage, MACRO_ORDER, MACRO_COLOR } from "./money";
@@ -25,6 +25,14 @@ export type ToastTone = "ok" | "error";
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v));
 let uid = 0;
 const newId = (p: string) => `${p}-${Date.now().toString(36)}-${uid++}`;
+
+/** Notifications written before they carried a module still land somewhere
+ *  sensible: a schedule notification is about the schedule. */
+const MODULE_OF_KIND: Partial<Record<AppNotification["kind"], ModuleKey>> = {
+  schedule_pushed: "timing",
+  schedule_confirmed: "timing",
+  schedule_declined: "timing",
+};
 
 class Store {
   db: DB = buildDB();
@@ -618,7 +626,7 @@ class Store {
       if (l.status === "estimate" || l.status === "allowance") l.status = "contracted";
       l.contractSummary = `Locked at ${new Date().toISOString().slice(0, 10)} — $${Math.round(baseCost * factor).toLocaleString()} (incl. markup). Pushed to ${l.tradeId ? (db.trades.find((t) => t.id === l.tradeId)?.name ?? "trade") : "vendor"} contract. Changes via change order.`;
       const tradeUser = l.tradeId ? db.users.find((u) => u.tradeIds?.includes(l.tradeId!)) : undefined;
-      this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "builder", kind: "info", message: `🔒 "${l.name}" cost locked & added to the vendor contract.` });
+      this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "builder", kind: "info", module: "vendors", message: `🔒 "${l.name}" cost locked & added to the vendor contract.` });
     });
   }
   /** Reopen a locked line (full admin only) — for corrections before a CO is needed. */
@@ -781,7 +789,7 @@ class Store {
         d.approvedBy = this.session.displayName; // who recorded it
         d.approvedDate = today;
         d.pushedDate = d.pushedDate ?? today;
-        this.notify(db, { toRole: "builder", kind: "info", message: `✓ "${d.name}" is client-approved — ready to be paid.` });
+        this.notify(db, { toRole: "builder", kind: "info", module: "payments", message: `✓ "${d.name}" is client-approved — ready to be paid.` });
       }
       if (status === "paid") d.paidDate = d.paidDate ?? today;
       if (status === "planned") { d.approvedBy = undefined; d.approvedDate = undefined; }
@@ -853,7 +861,7 @@ class Store {
         confirm: tradeUser ? "pending" : "confirmed",
         ...(tradeUser ? {} : { confirmedStart: item.start, confirmedEnd: item.end }),
       });
-      if (tradeUser) this.notify(db, { toUserId: tradeUser.id, kind: "info", message: `📅 New task "${item.label.trim()}" proposed ${item.start} → ${item.end}. Please confirm in Timing.` });
+      if (tradeUser) this.notify(db, { toUserId: tradeUser.id, kind: "info", module: "timing", message: `📅 New task "${item.label.trim()}" proposed ${item.start} → ${item.end}. Please confirm in Timing.` });
     });
   }
 
@@ -898,7 +906,7 @@ class Store {
       if (!m) return;
       m.ownerApproved = approved;
       if (approved) m.approvalRequested = false;
-      if (approved) this.notify(db, { toRole: "builder", kind: "info", message: `✓ ${by} approved "${m.item}".` });
+      if (approved) this.notify(db, { toRole: "builder", kind: "info", module: "materials", message: `✓ ${by} approved "${m.item}".` });
     });
   }
   requestMaterialApproval(id: string, by: string) {
@@ -906,7 +914,7 @@ class Store {
       const m = db.materials.find((x) => x.id === id);
       if (!m) return;
       m.approvalRequested = true;
-      this.notify(db, { toRole: "owner", kind: "info", message: `🏠 ${by} requests owner approval for "${m.item}".` });
+      this.notify(db, { toRole: "owner", kind: "info", module: "materials", message: `🏠 ${by} requests owner approval for "${m.item}".` });
     });
   }
   // ---- Product options (alternates) ----
@@ -966,7 +974,7 @@ class Store {
     this.mutate((db) => {
       const m = db.materials.find((x) => x.id === id);
       if (!m) return;
-      this.notify(db, { toRole: "builder", kind: "info", message: `❓ ${by} requested details for "${m.item}".` });
+      this.notify(db, { toRole: "builder", kind: "info", module: "materials", message: `❓ ${by} requested details for "${m.item}".` });
     });
   }
 
@@ -1140,9 +1148,134 @@ class Store {
       p.status = "awarded";
       p.lineId = line.id;
       outLineId = line.id;
-      this.notify(db, { toRole: "owner", kind: "info", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
+      this.notify(db, { toRole: "owner", kind: "info", module: "bids", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
     });
     return outLineId;
+  }
+
+  // ---- Feedback, filed from inside the app -----------------------------------
+  // A report is only worth acting on if you know where the person was standing.
+  // Nobody types that part: the seat, the device, the phase of the job and the
+  // screen are attached for them.
+
+  /** Files a report, or refuses with the reason. The refusals are the point —
+   *  a one-word bug with no expectation is a guess handed to whoever fixes it. */
+  fileFeedback(input: {
+    kind: FeedbackKind; area: string; severity?: FeedbackSeverity;
+    what: string; steps?: string; expected?: string;
+    device: "phone" | "desktop"; screen: string; pkg?: string;
+  }): { ok: true } | { ok: false; reason: string } {
+    const what = input.what.trim();
+    if (!what) return { ok: false, reason: "Nothing filed — write the one line first: what happened, or what you want." };
+    if (input.kind === "bug" && !input.expected?.trim()) {
+      return { ok: false, reason: "Nothing filed — a bug needs what you expected instead, or whoever fixes it is guessing." };
+    }
+    const db0 = this.db;
+    const item: FeedbackItem = {
+      id: newId("fb"),
+      kind: input.kind,
+      area: input.area,
+      severity: input.kind === "bug" ? (input.severity ?? "annoying") : undefined,
+      what,
+      steps: input.steps?.trim() || undefined,
+      expected: input.expected?.trim() || undefined,
+      seat: `${this.session.displayName} (${ROLE_LABEL[this.session.role]})`,
+      role: this.session.role,
+      device: input.device,
+      rom: db0.romLocked ? "ROM locked" : "ROM drafting",
+      pkg: input.pkg || "no package open",
+      screen: input.screen,
+      filedBy: this.session.userId,
+      at: new Date().toISOString(),
+    };
+    this.mutate((db) => {
+      (db.feedback ??= []).unshift(item);
+      this.notify(db, {
+        toRole: "full_admin", kind: "info", module: "help",
+        message: `\u{1F41B} ${FEEDBACK_KIND_LABEL[item.kind]} filed by ${this.session.displayName}: ${what.slice(0, 80)}`,
+      });
+    }, "Filed a report");
+    return { ok: true };
+  }
+
+  removeFeedback(id: string) {
+    this.mutate((db) => { db.feedback = (db.feedback ?? []).filter((x) => x.id !== id); }, "Removed a report");
+  }
+
+  /** Closing one takes it out of the brief without taking it off the record. */
+  setFeedbackDone(id: string, done: boolean) {
+    this.mutate((db) => {
+      const x = (db.feedback ?? []).find((y) => y.id === id);
+      if (x) x.done = done;
+    }, done ? "Closed a report" : "Reopened a report");
+  }
+
+  // ---- What has changed since I last looked ----------------------------------
+
+  /** Unread notifications addressed to me, per module. Read state is per user:
+   *  a notification sent to a ROLE reaches several people, and one of them
+   *  opening it must not clear it for the rest. */
+  unseenByModule(): Partial<Record<ModuleKey, number>> {
+    const me = this.session.userId;
+    const role = this.session.role;
+    const out: Partial<Record<ModuleKey, number>> = {};
+    for (const n of this.db.notifications) {
+      const mine = (n.toUserId && n.toUserId === me) || (n.toRole && n.toRole === role);
+      if (!mine) continue;
+      if (n.readBy?.includes(me)) continue;
+      // Anything written before readBy existed falls back to the shared flag.
+      if (!n.readBy && n.read) continue;
+      const mod = n.module ?? MODULE_OF_KIND[n.kind];
+      if (!mod) continue;
+      out[mod] = (out[mod] ?? 0) + 1;
+    }
+    return out;
+  }
+
+  /** Messages I have not read, counted the same way the conversation list
+   *  counts them, so the nav and the list can never disagree. */
+  unreadMessages(): number {
+    const me = this.session.userId;
+    if (!me) return 0;
+    const reads = new Map((this.db.convMeta ?? []).map((m) => [m.key, m.reads?.[me] ?? ""]));
+    const byConv = new Map<string, string[]>();
+    for (const u of this.db.updates) {
+      const key = [...new Set([u.authorId, ...u.toUserIds])].sort().join("+");
+      if (!key.includes(me)) continue;
+      if (u.authorId === me) continue;
+      byConv.set(key, [...(byConv.get(key) ?? []), u.at]);
+      for (const r of u.replies ?? []) {
+        if (r.authorId !== me) byConv.set(key, [...(byConv.get(key) ?? []), r.at]);
+      }
+    }
+    let n = 0;
+    for (const [key, ats] of byConv) {
+      const since = reads.get(key) ?? "";
+      n += ats.filter((at) => at > since).length;
+    }
+    return n;
+  }
+
+  /** Opening a module clears its count — for me, and for nobody else. */
+  markModuleSeen(mod: ModuleKey) {
+    const me = this.session.userId;
+    const role = this.session.role;
+    if (!me) return;
+    const has = this.db.notifications.some((n) => {
+      const mine = (n.toUserId && n.toUserId === me) || (n.toRole && n.toRole === role);
+      return mine && !n.readBy?.includes(me) && !(n.readBy === undefined && n.read) && (n.module ?? MODULE_OF_KIND[n.kind]) === mod;
+    });
+    if (!has) return; // nothing to write, so nothing is written
+    // Bookkeeping: no undo entry, no toast, and a fetch-fresh write so it cannot
+    // clobber someone else's message that landed in between.
+    this.mutateQuiet((db) => {
+      for (const n of db.notifications) {
+        const mine = (n.toUserId && n.toUserId === me) || (n.toRole && n.toRole === role);
+        if (!mine) continue;
+        if ((n.module ?? MODULE_OF_KIND[n.kind]) !== mod) continue;
+        n.readBy = [...new Set([...(n.readBy ?? []), me])];
+      }
+    });
   }
 
   // ---- Contracts ------------------------------------------------------------
@@ -1175,11 +1308,11 @@ class Store {
         issued++;
         const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
         this.notify(db, {
-          toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info",
+          toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", module: "vendors",
           message: `📄 Contract issued for ${db.trades.find((t) => t.id === tradeId)?.name ?? "your trade"} — review & sign in Vendor Management.`,
         });
       }
-      this.notify(db, { toRole: "owner", kind: "info", message: `📄 "${p.title}" contract issued to ${b.vendorName}.` });
+      this.notify(db, { toRole: "owner", kind: "info", module: "vendors", message: `📄 "${p.title}" contract issued to ${b.vendorName}.` });
     }, "Issued contract");
     return issued;
   }
@@ -1211,7 +1344,7 @@ class Store {
       ag.round1 = [];
       const tradeUser = db.users.find((u) => u.tradeIds?.includes(l.tradeId));
       this.notify(db, {
-        toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info",
+        toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", module: "vendors",
         message: `📄 Revised contract issued (${co.exhibit}: ${co.title}) — please re-sign in Vendor Management.`,
       });
       ok = true;
@@ -1236,7 +1369,7 @@ class Store {
         out.reopened.push(d.name);
       }
       if (out.reopened.length) {
-        this.notify(db, { toRole: "builder", kind: "info", message: `↺ ${out.reopened.join(", ")} reopened — the contract changed, so it needs the client's approval again.` });
+        this.notify(db, { toRole: "builder", kind: "info", module: "payments", message: `↺ ${out.reopened.join(", ")} reopened — the contract changed, so it needs the client's approval again.` });
       }
     }, "Reopened draw for approval");
     return out;
@@ -1594,7 +1727,7 @@ class Store {
         context: u.context, quote: u.quote,
       });
       for (const uid of u.toUserIds) {
-        this.notify(db, { toUserId: uid, kind: "info", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
+        this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
       }
     }, u.toUserIds.length > 1 ? `Message sent to ${u.toUserIds.length} people` : "Message sent");
     return id;
@@ -1611,7 +1744,7 @@ class Store {
       // Ping everyone on the thread except the person replying.
       const others = new Set([up.authorId, ...up.toUserIds].filter((x) => x !== meId));
       for (const uid of others) {
-        this.notify(db, { toUserId: uid, kind: "info", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
+        this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
       }
     }, "Reply sent");
   }
@@ -1729,7 +1862,7 @@ class Store {
       a.permitStatus = status;
       if (status === "issued" && (a.gatesTradeIds?.length || a.isGeneralPermit)) {
         const who = a.gatesTradeIds?.length ? a.gatesTradeIds.map((t) => this.db.trades.find((x) => x.id === t)?.name).filter(Boolean).join(", ") : "all trades";
-        this.notify(db, { toRole: "builder", kind: "info", message: `✅ "${a.name}" issued — work cleared to start for ${who}.` });
+        this.notify(db, { toRole: "builder", kind: "info", module: "artifacts", message: `✅ "${a.name}" issued — work cleared to start for ${who}.` });
       }
     });
   }
@@ -1945,7 +2078,7 @@ class Store {
       const a = db.artifacts.find((x) => x.id === id);
       if (!a) return;
       a.pins = [...(a.pins ?? []), { id: newId("pin"), at: new Date().toISOString(), ...pin }];
-      if (pin.kind === "change") this.notify(db, { toRole: "builder", kind: "info", message: `📌 Change request pinned on "${a.name}" by ${pin.by}.` });
+      if (pin.kind === "change") this.notify(db, { toRole: "builder", kind: "info", module: "artifacts", message: `📌 Change request pinned on "${a.name}" by ${pin.by}.` });
     });
   }
   updateDrawingPin(artId: string, pinId: string, patch: Partial<DrawingPin>) {

@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/styles.css">
+<script src="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/_ds_bundle.js"></script>
+<script src="./doc-page.js"></script>
+<script src="./image-slot.js"></script>
+<style>
+doc-page:not(:defined){visibility:hidden}
+@media print{.om-noprint{display:none !important}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);display:flex;flex-direction:column">
+
+<div class="om-noprint" style="display:flex;align-items:center;justify-content:space-between;gap:var(--space-6);padding:14px 22px;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:10px">
+<span style="font-family:var(--font-heading);font-size:19px;letter-spacing:-0.01em">Scope of Work — Request for Bid</span>
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700)">Trade package</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="background:{{ fillBg }}" onClick="{{ goFill }}">Fill on phone</button>
+<button class="btn btn-secondary" style="background:{{ docBg }}" onClick="{{ goDoc }}">Document · PDF</button>
+</div>
+</div>
+
+<sc-if value="{{ isFill }}" hint-placeholder-val="{{ true }}">
+<div style="flex:1;display:flex;align-items:flex-start;justify-content:center;gap:36px;padding:34px 22px 48px;flex-wrap:wrap">
+
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="393px,852px">
+<div style="height:100%;display:flex;flex-direction:column;background:var(--color-bg);font-family:var(--font-body)">
+
+<div style="padding:62px 18px 12px;border-bottom:1px solid var(--color-divider)">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Request for bid</span>
+<span style="font-size:10px;letter-spacing:0.1em;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ stepCount }}</span>
+</div>
+<div style="font-family:var(--font-heading);font-size:26px;line-height:1.1;margin-top:4px">{{ stepTitle }}</div>
+<div style="height:3px;background:color-mix(in srgb, var(--color-text) 12%, transparent);margin-top:12px">
+<div style="height:3px;background:var(--color-accent);width:{{ pct }};transition:width .25s ease"></div>
+</div>
+</div>
+
+<div style="flex:1;overflow:auto;padding:18px 18px 24px;display:flex;flex-direction:column;gap:16px">
+
+<sc-if value="{{ s0 }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div class="field"><label>Project name</label><input class="input" style="min-height:44px" placeholder="e.g. Ashcroft Lane — rear extension" value="{{ f.project }}" onChange="{{ onProject }}"></div>
+<div class="field"><label>Site address</label><input class="input" style="min-height:44px" placeholder="Street, city, postcode" value="{{ f.address }}" onChange="{{ onAddress }}"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div class="field"><label>Site contact</label><input class="input" style="min-height:44px" placeholder="Name" value="{{ f.contact }}" onChange="{{ onContact }}"></div>
+<div class="field"><label>Phone</label><input class="input" style="min-height:44px" placeholder="Mobile" value="{{ f.phone }}" onChange="{{ onPhone }}"></div>
+</div>
+<div class="field"><label>Overview of the work</label>
+<textarea class="input" style="min-height:132px;line-height:1.5" placeholder="What is being built, where it sits in the schedule, and what a complete job looks like." value="{{ f.overview }}" onChange="{{ onOverview }}"></textarea>
+<div style="font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:6px">Keep it to what the trade needs to price.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sMaterials }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">The GC issued the list below. Add anything they missed — your additions are flagged as yours.</div>
+<sc-for list="{{ materials }}" as="m" hint-placeholder-count="3">
+<div class="blueprint" style="padding:12px;display:flex;flex-direction:column;gap:10px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<sc-if value="{{ m.locked }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Item {{ m.no }} · issued by GC</span>
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ m.srcLabel }} supplies</span>
+</div>
+<span style="font-size:14px;line-height:1.4">{{ m.name }}</span>
+<span style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ m.qtyLabel }}</span>
+</div>
+</sc-if>
+<sc-if value="{{ m.added }}">
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;justify-content:space-between">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Item {{ m.no }} · added by you</span>
+<button class="btn btn-ghost" style="font-size:11px;min-height:32px" onClick="{{ m.onRemove }}">Remove</button>
+</div>
+<input class="input" style="min-height:44px" placeholder="Material and specification" value="{{ m.name }}" onChange="{{ m.onName }}">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+<input class="input" style="min-height:44px" placeholder="Qty" value="{{ m.qty }}" onChange="{{ m.onQty }}">
+<input class="input" style="min-height:44px" placeholder="Unit" value="{{ m.unit }}" onChange="{{ m.onUnit }}">
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Supplied by</span>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+<sc-for list="{{ m.srcOpts }}" as="o" hint-placeholder-count="3">
+<button class="btn" style="min-height:40px;font-size:13px;background:{{ o.bg }};color:{{ o.fg }};border:1px solid {{ o.border }}" onClick="{{ o.select }}">{{ o.label }}</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<button class="btn btn-secondary btn-block" style="min-height:44px" onClick="{{ addMat }}">+ Add a material the GC missed</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ sBid }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Set by the GC before this request went out. Read it, then price against it.</div>
+<div class="blueprint" style="padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--color-accent-100)">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Issued basis — not editable</span>
+<span style="font-family:var(--font-heading);font-size:24px;line-height:1.1;color:var(--color-accent-800)">{{ policyLabel }}</span>
+<span style="font-size:12.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 68%, transparent)">{{ policyHint }}</span>
+</div>
+<div class="blueprint" style="padding:14px;display:flex;flex-direction:column;gap:6px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Notes on supply, from the GC</span>
+<span style="font-size:13px;line-height:1.5;white-space:pre-wrap">{{ dPolicyNote }}</span>
+</div>
+<div style="font-size:12px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Missing something? Add it on the next screen — anything you add is marked as your addition and priced to you unless you say otherwise.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ s3 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div class="field"><label>Earliest start</label><input class="input" type="date" style="min-height:44px" value="{{ f.start }}" onChange="{{ onStart }}"></div>
+<div class="blueprint" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Working days on site</span>
+<div style="display:flex;align-items:center;gap:14px">
+<button class="btn btn-secondary" style="width:44px;height:44px;font-size:20px;padding:0" onClick="{{ decD }}">−</button>
+<span style="font-family:var(--font-heading);font-size:38px;line-height:1;min-width:56px;text-align:center">{{ f.days }}</span>
+<button class="btn btn-secondary" style="width:44px;height:44px;font-size:20px;padding:0" onClick="{{ incD }}">+</button>
+<span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);line-height:1.35">Your estimate of time needed to deliver, excluding cure and inspection waits.</span>
+</div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid var(--color-divider);padding-top:10px">
+<span style="display:flex;flex-direction:column;gap:2px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Projected finish</span>
+<span style="font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ finishNote }}</span>
+</span>
+<span style="font-family:var(--font-heading);font-size:19px;line-height:1;white-space:nowrap">{{ dFinish }}</span>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Working pattern</span>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<sc-for list="{{ shiftChips }}" as="c" hint-placeholder-count="4">
+<button class="tag" style="cursor:pointer;font:inherit;font-size:13px;min-height:38px;padding:0 14px;background:{{ c.bg }};color:{{ c.fg }};border:1px solid {{ c.border }}" onClick="{{ c.toggle }}">{{ c.label }}</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ s4 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:12px;align-items:center">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Workers assigned to this job</span>
+<div style="display:flex;align-items:center;gap:18px">
+<button class="btn btn-secondary" style="width:44px;height:44px;font-size:20px;padding:0" onClick="{{ decW }}">−</button>
+<span style="font-family:var(--font-heading);font-size:56px;line-height:1;min-width:76px;text-align:center">{{ f.workers }}</span>
+<button class="btn btn-secondary" style="width:44px;height:44px;font-size:20px;padding:0" onClick="{{ incW }}">+</button>
+</div>
+<div style="display:flex;gap:5px">
+<sc-for list="{{ crewPips }}" as="p" hint-placeholder-count="4">
+<span style="width:10px;height:18px;background:{{ p.fill }};border:1px solid var(--color-accent-700)"></span>
+</sc-for>
+</div>
+</div>
+<div class="field"><label>Named foreman / supervisor</label><input class="input" style="min-height:44px" placeholder="Who runs the crew on site" value="{{ f.foreman }}" onChange="{{ onForeman }}"></div>
+<div class="field"><label>Exclusions — not in this scope</label>
+<textarea class="input" style="min-height:96px;line-height:1.5" placeholder="Work you expect others to carry out." value="{{ f.exclusions }}" onChange="{{ onExclusions }}"></textarea>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:8px">
+<sc-for list="{{ exclChips }}" as="c" hint-placeholder-count="4">
+<button class="tag tag-outline" style="cursor:pointer;font:inherit;font-size:12px;min-height:36px;padding:0 12px" onClick="{{ c.add }}">+ {{ c.label }}</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ s5 }}">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Two site photographs travel with the request. Tap to attach.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div class="blueprint duotone" style="height:130px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<image-slot id="sow-photo-1" shape="rect" placeholder="Site — wide"></image-slot></div>
+<div class="blueprint duotone" style="height:130px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<image-slot id="sow-photo-2" shape="rect" placeholder="Detail / obstruction"></image-slot></div>
+</div>
+<div class="blueprint" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Project cost — USD, excl. sales tax</span>
+<div class="field"><label>Materials</label>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--font-heading);font-size:18px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">$</span>
+<input class="input" style="min-height:44px" placeholder="0" value="{{ f.costMaterials }}" onChange="{{ onCostMaterials }}"></div>
+</div>
+<div class="field"><label>Labor, plant and everything else</label>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--font-heading);font-size:18px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">$</span>
+<input class="input" style="min-height:44px" placeholder="0" value="{{ f.costLabour }}" onChange="{{ onCostLabour }}"></div>
+</div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid var(--color-divider);padding-top:10px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase">Total project cost</span>
+<span style="font-family:var(--font-heading);font-size:26px;line-height:1">{{ dTotal }}</span>
+</div>
+<span style="font-size:11px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Leave both blank to issue the document with open lines for the trade to price.</span>
+</div>
+<div class="blueprint" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Summary</span>
+<div style="display:flex;flex-direction:column;gap:6px;font-size:13px">
+<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Materials listed</span><span>{{ matCount }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Materials in bid</span><span>{{ policyLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Duration</span><span>{{ daysLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Crew</span><span>{{ crewLabel }}</span></div>
+<sc-for list="{{ supplyTally }}" as="t" hint-placeholder-count="3">
+<div style="display:flex;justify-content:space-between;gap:12px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Supplied by {{ t.label }}</span><span>{{ t.count }}</span></div>
+</sc-for>
+</div>
+</div>
+<div class="field"><label>Return bid by</label><input class="input" type="date" style="min-height:44px" value="{{ f.returnBy }}" onChange="{{ onReturnBy }}"></div>
+</div>
+</sc-if>
+
+</div>
+
+<div style="padding:12px 18px 20px;border-top:1px solid var(--color-divider);display:flex;gap:10px">
+<button class="btn btn-secondary" style="min-height:48px;flex:0 0 96px" onClick="{{ back }}">Back</button>
+<button class="btn btn-primary" style="min-height:48px;flex:1" onClick="{{ next }}">{{ nextLabel }}</button>
+</div>
+
+</div>
+</x-import>
+
+<div style="max-width:290px;display:flex;flex-direction:column;gap:14px;padding-top:8px">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">How it works</div>
+<div style="font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 70%, transparent)">Six screens, one thumb. Every answer lands in the same one-page document, so bids come back on comparable terms.</div>
+<div style="display:flex;flex-direction:column;gap:8px;font-size:13px">
+<sc-for list="{{ stepList }}" as="st" hint-placeholder-count="6">
+<button style="display:flex;gap:10px;align-items:baseline;cursor:pointer;background:none;border:0;padding:4px 0;font:inherit;text-align:left;color:{{ st.color }}" onClick="{{ st.go }}">
+<span style="font-family:var(--font-heading);font-size:12px;letter-spacing:0.06em;color:var(--color-accent-700)">{{ st.no }}</span>
+<span>{{ st.title }}</span>
+</button>
+</sc-for>
+</div>
+<div style="font-size:12px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 50%, transparent);border-top:1px solid var(--color-divider);padding-top:12px">The document view is a single Letter page, print-ready as it stands.</div>
+</div>
+
+</div>
+</sc-if>
+
+<sc-if value="{{ isDoc }}">
+<doc-page size="letter">
+<section class="page" data-screen-label="SOW page 1" style="display:flex;flex-direction:column;gap:8px;padding:26px 44px 22px;box-sizing:border-box;font-family:var(--font-body);color:var(--color-text)">
+
+<div style="background:var(--color-accent-900);color:var(--color-bg);padding:12px 22px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px">
+<div>
+<div style="font-size:10px;letter-spacing:0.16em;text-transform:uppercase;opacity:.72">Request for scope of work &amp; bid</div>
+<div style="font-family:var(--font-heading);font-size:31px;line-height:1.05;margin-top:5px">{{ dProject }}</div>
+</div>
+<div style="text-align:right;font-size:11px;line-height:1.6;opacity:.82;white-space:nowrap">
+<div>{{ ref }}</div>
+<div>Issued {{ today }}</div>
+<div>Bid due {{ dReturn }}</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.9fr 1fr;gap:14px">
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:7px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">01</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Project overview</span></div>
+<div style="font-size:13px;line-height:1.45;text-wrap:pretty;white-space:pre-wrap">{{ dOverview }}</div>
+</div>
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:7px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">02</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Site</span></div>
+<div style="font-size:13px;line-height:1.5">{{ dAddress }}</div>
+<div style="font-size:12px;line-height:1.5;margin-top:8px;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ dContact }}<br>{{ dPhone }}</div>
+</div>
+</div>
+
+<div class="blueprint" style="padding:12px 15px;display:flex;align-items:flex-start;gap:20px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;flex:none;width:150px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">03</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Materials in bid</span></div>
+<div style="flex:1;display:flex;align-items:baseline;gap:16px">
+<span style="font-family:var(--font-heading);font-size:20px;line-height:1.1;color:var(--color-accent-800);flex:none">{{ policyLabel }}</span>
+<span style="font-size:12px;line-height:1.4;color:color-mix(in srgb, var(--color-text) 68%, transparent);white-space:pre-wrap">{{ dPolicyNote }}</span>
+</div>
+</div>
+
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:9px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">04</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Materials needed</span></div>
+<table class="table" style="width:100%;font-size:{{ tableFont }}">
+<thead><tr>
+<th style="text-align:left;width:52px">Qty</th>
+<th style="text-align:left;width:70px">Unit</th>
+<th style="text-align:left">Item &amp; specification</th>
+<th style="text-align:left;width:96px">Supplied by</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ docMaterials }}" as="m" hint-placeholder-count="5">
+<tr style="padding:0"><td style="padding-top:{{ cellPad }};padding-bottom:{{ cellPad }}">{{ m.qty }}</td><td style="padding-top:{{ cellPad }};padding-bottom:{{ cellPad }}">{{ m.unit }}</td><td style="padding-top:{{ cellPad }};padding-bottom:{{ cellPad }}">{{ m.name }}<sc-if value="{{ m.added }}"><span style="font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700)"> · added by trade</span></sc-if></td><td style="padding-top:{{ cellPad }};padding-bottom:{{ cellPad }}">{{ m.src }}</td></tr>
+</sc-for>
+</tbody>
+</table>
+<sc-if value="{{ hasMore }}">
+<div style="font-size:11px;margin-top:5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ moreNote }}</div>
+</sc-if>
+</div>
+
+<div class="blueprint" style="padding:12px 15px;display:flex;align-items:flex-end;justify-content:space-between;gap:24px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;flex:none;width:150px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">05</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Project cost</span></div>
+<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:22px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;border-bottom:1px solid var(--color-divider);padding-bottom:4px">
+<span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Materials</span>
+<span style="font-family:var(--font-heading);font-size:17px;line-height:1">{{ dCostMaterials }}</span>
+</div>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;border-bottom:1px solid var(--color-divider);padding-bottom:4px">
+<span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Labor, plant &amp; other</span>
+<span style="font-family:var(--font-heading);font-size:17px;line-height:1">{{ dCostLabour }}</span>
+</div>
+</div>
+<div style="flex:none;text-align:right">
+<div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Total, USD excl. sales tax</div>
+<sc-if value="{{ hasTotal }}">
+<div style="font-family:var(--font-heading);font-size:28px;line-height:1.1;color:var(--color-accent-800)">{{ dTotal }}</div>
+</sc-if>
+<sc-if value="{{ noTotal }}">
+<div style="width:150px;border-bottom:1px solid var(--color-divider);height:24px"></div>
+</sc-if>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 0.72fr 1.1fr;gap:14px">
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:7px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">06</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Time to deliver</span></div>
+<div style="font-family:var(--font-heading);font-size:20px;line-height:1.1;color:var(--color-accent-800)">{{ daysLabel }}</div>
+<div style="font-size:12px;line-height:1.6;margin-top:7px;color:color-mix(in srgb, var(--color-text) 68%, transparent)">Start {{ dStart }}<br>Projected finish {{ dFinish }}<br>{{ shiftLabel }}</div>
+</div>
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:7px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">07</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Crew</span></div>
+<div style="display:flex;align-items:baseline;gap:6px"><span style="font-family:var(--font-heading);font-size:34px;line-height:1;color:var(--color-accent-800)">{{ f.workers }}</span><span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">on site</span></div>
+<div style="display:flex;gap:4px;margin-top:9px;flex-wrap:wrap">
+<sc-for list="{{ docPips }}" as="p" hint-placeholder-count="4">
+<span style="width:8px;height:15px;background:var(--color-accent-700)"></span>
+</sc-for>
+</div>
+<div style="font-size:12px;line-height:1.45;margin-top:8px;color:color-mix(in srgb, var(--color-text) 68%, transparent)">{{ dForeman }}</div>
+</div>
+<div class="blueprint" style="padding:12px 15px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;gap:8px;align-items:baseline;margin-bottom:7px"><span style="font-family:var(--font-heading);font-size:12px;color:var(--color-accent-700)">08</span><span style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase">Not in this scope</span></div>
+<div style="font-size:12px;line-height:1.45;white-space:pre-wrap;color:color-mix(in srgb, var(--color-text) 78%, transparent)">{{ dExclusions }}</div>
+</div>
+</div>
+
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+<div class="blueprint duotone" style="height:{{ photoH }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<image-slot id="sow-photo-1" shape="rect" placeholder="Site — wide"></image-slot></div>
+<div class="blueprint duotone" style="height:{{ photoH }}"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<image-slot id="sow-photo-2" shape="rect" placeholder="Detail / obstruction"></image-slot></div>
+</div>
+
+<div style="margin-top:auto;display:grid;grid-template-columns:1fr 1fr 150px;gap:14px;align-items:end;border-top:1px solid var(--color-divider);padding-top:9px">
+<div style="font-size:11px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Return a priced bid against this scope by {{ dReturn }}. Any assumption you price on must be written on the bid — unwritten assumptions are not part of the award.</div>
+<div><div style="border-bottom:1px solid var(--color-divider);height:26px"></div><div style="font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;margin-top:5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Trade signature</div></div>
+<div><div style="border-bottom:1px solid var(--color-divider);height:26px"></div><div style="font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;margin-top:5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Date</div></div>
+</div>
+
+</section>
+</doc-page>
+</sc-if>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const STEPS = [
+  { no: "01", title: "Project overview" },
+  { no: "02", title: "Materials in bid" },
+  { no: "03", title: "Materials needed" },
+  { no: "04", title: "Schedule" },
+  { no: "05", title: "Crew & exclusions" },
+  { no: "06", title: "Attach & issue" }
+];
+const POLICY = [
+  { key: "included", label: "Included in bid", hint: "Trade buys and prices every material listed." },
+  { key: "gc", label: "Supplied by GC", hint: "Materials free-issued to site. Price labor and plant only." },
+  { key: "client", label: "Supplied by client", hint: "Client procures and delivers. Trade takes receipt and installs." },
+  { key: "split", label: "Split — per line item", hint: "Supply is set item by item in the materials list." }
+];
+const SOURCES = ["Trade", "GC", "Client"];
+const MAX_ROWS = 6;
+const SHIFTS = ["Weekdays", "Incl. Saturdays", "Nights", "Single shift"];
+const EXCL = ["Making good", "Waste removal", "Temporary works", "Permits", "Final clean"];
+
+const num = (v) => {
+  const s = String(v == null ? "" : v).replace(/[^0-9.\-]/g, "");
+  return s === "" || isNaN(Number(s)) ? null : Number(s);
+};
+const money = (v) => {
+  const n = typeof v === "number" ? v : num(v);
+  return n === null ? "" : "$" + n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+};
+const addWorkingDays = (iso, n) => {
+  if (!iso || !n) return "";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return "";
+  let counted = 0;
+  while (counted < n) {
+    const wd = d.getDay();
+    if (wd !== 0 && wd !== 6) counted++;
+    if (counted < n) d.setDate(d.getDate() + 1);
+  }
+  return d.toISOString().slice(0, 10);
+};
+const fmt = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+};
+
+class Component extends DCLogic {
+  state = {
+    mode: "fill",
+    step: 0,
+    f: {
+      project: "Marlow Street — rear addition",
+      address: "1418 Marlow Street, Austin, TX 78704",
+      contact: "Dan Whitfield",
+      phone: "(512) 555-0118",
+      overview:
+        "Single-story rear addition, 14 ft × 20 ft, off an existing masonry wall. Slab and drainage are complete. This package covers the shell to dry-in: CMU work, steel bearing plates, roof framing, and rough openings. Access is through the side gate only; no crane. The adjoining wall is shared — protect it and record its condition before starting.",
+      policy: "split",
+      policyNote:
+        "The GC free-issues the steel beam and bearing plates from the yard. All CMU, ties, wrap and fasteners are priced by the trade; the client is supplying the housewrap.",
+      start: "2026-09-07",
+      returnBy: "2026-08-28",
+      costMaterials: "24,600",
+      costLabour: "31,200",
+      days: 14,
+      workers: 4,
+      foreman: "Foreman to be named on the bid",
+      shifts: ["Weekdays", "Single shift"],
+      exclusions:
+        "Electrical and plumbing rough-in. Drywall and finishes. Scaffold engineering and rental. Hauling spoil off site."
+    },
+    materials: [
+      { qty: "1,850", unit: "ea", name: "8 in. CMU, normal weight", src: "Trade", gc: true },
+      { qty: "42", unit: "bags", name: "Type S mortar mix", src: "Trade", gc: true },
+      { qty: "1", unit: "ea", name: "W10×22 steel beam, 15 ft", src: "GC", gc: true },
+      { qty: "180", unit: "ea", name: "Stainless wall ties, 9 in.", src: "Trade", gc: true },
+      { qty: "520", unit: "sq ft", name: "Housewrap and furring", src: "Client", gc: true }
+    ]
+  };
+  ref = "SOW-" + String(new Date().getFullYear()) + "-" + String(Math.floor(Math.random() * 900) + 100);
+
+  setF(k, v) { this.setState((s) => ({ f: Object.assign({}, s.f, { [k]: v }) })); }
+  onF(k) { return (e) => this.setF(k, e.target.value); }
+  bump(k, d, min, max) {
+    this.setState((s) => ({ f: Object.assign({}, s.f, { [k]: Math.max(min, Math.min(max, (Number(s.f[k]) || 0) + d)) }) }));
+  }
+
+  renderVals() {
+    const { mode, step, f, materials } = this.state;
+    const accent = "var(--color-accent-200)";
+    const policy = POLICY.find((p) => p.key === f.policy) || POLICY[0];
+    const filled = materials.filter((m) => (m.name || "").trim());
+    const shiftLabel = f.shifts.length ? f.shifts.join(" · ") : "Pattern not stated";
+    const rows = filled.slice(0, MAX_ROWS);
+    const dense = filled.length >= MAX_ROWS ? 1 : 0;
+    const finishIso = addWorkingDays(f.start, Number(f.days) || 0);
+    const cm = num(f.costMaterials), cl = num(f.costLabour);
+    const total = cm === null && cl === null ? null : (cm || 0) + (cl || 0);
+
+    return {
+      isFill: mode === "fill",
+      isDoc: mode === "doc",
+      fillBg: mode === "fill" ? accent : "transparent",
+      docBg: mode === "doc" ? accent : "transparent",
+      goFill: () => this.setState({ mode: "fill" }),
+      goDoc: () => this.setState({ mode: "doc" }),
+
+      f,
+      s0: step === 0, sBid: step === 1, sMaterials: step === 2, s3: step === 3, s4: step === 4, s5: step === 5,
+      stepTitle: STEPS[step].title,
+      stepCount: STEPS[step].no + " / 06",
+      pct: Math.round(((step + 1) / STEPS.length) * 100) + "%",
+      nextLabel: step === STEPS.length - 1 ? "Generate document" : "Continue",
+      next: () => step === STEPS.length - 1 ? this.setState({ mode: "doc" }) : this.setState({ step: step + 1 }),
+      back: () => this.setState({ step: Math.max(0, step - 1) }),
+      stepList: STEPS.map((s, i) => ({
+        no: s.no, title: s.title,
+        color: i === step ? "var(--color-text)" : "color-mix(in srgb, var(--color-text) 45%, transparent)",
+        go: () => this.setState({ step: i })
+      })),
+
+      onProject: this.onF("project"), onAddress: this.onF("address"), onContact: this.onF("contact"),
+      onPhone: this.onF("phone"), onOverview: this.onF("overview"), onPolicyNote: this.onF("policyNote"),
+      onStart: this.onF("start"), onReturnBy: this.onF("returnBy"),
+      onForeman: this.onF("foreman"), onExclusions: this.onF("exclusions"),
+      incD: () => this.bump("days", 1, 1, 260), decD: () => this.bump("days", -1, 1, 260),
+      incW: () => this.bump("workers", 1, 1, 40), decW: () => this.bump("workers", -1, 1, 40),
+
+      materials: materials.map((m, i) => ({
+        no: String(i + 1).padStart(2, "0"), qty: m.qty, unit: m.unit, name: m.name,
+        locked: !!m.gc, added: !m.gc, srcLabel: m.src || "Trade",
+        qtyLabel: (m.qty || "—") + " " + (m.unit || ""),
+        onQty: (e) => this.editMat(i, "qty", e.target.value),
+        onUnit: (e) => this.editMat(i, "unit", e.target.value),
+        onName: (e) => this.editMat(i, "name", e.target.value),
+        onRemove: () => this.setState((s) => ({ materials: s.materials.filter((_, j) => j !== i) })),
+        srcOpts: SOURCES.map((sname) => {
+          const on = (m.src || "Trade") === sname;
+          return {
+            label: sname,
+            bg: on ? "var(--color-accent-700)" : "transparent",
+            fg: on ? "var(--color-bg)" : "var(--color-text)",
+            border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+            select: () => this.editMat(i, "src", sname)
+          };
+        })
+      })),
+      addMat: () => this.setState((s) => ({ materials: s.materials.concat([{ qty: "", unit: "", name: "", src: "Trade", gc: false }]) })),
+      supplyTally: SOURCES.map((sname) => ({
+        label: sname,
+        count: filled.filter((m) => (m.src || "Trade") === sname).length
+      })),
+      onCostMaterials: this.onF("costMaterials"),
+      onCostLabour: this.onF("costLabour"),
+      dCostMaterials: money(f.costMaterials),
+      dCostLabour: money(f.costLabour),
+      dTotal: money(total),
+      hasTotal: total !== null,
+      noTotal: total === null,
+
+      policyOpts: POLICY.map((p) => ({
+        label: p.label, hint: p.hint,
+        bg: f.policy === p.key ? "var(--color-accent-100)" : "transparent",
+        border: f.policy === p.key ? "var(--color-accent-700)" : "var(--color-divider)",
+        dot: f.policy === p.key ? "var(--color-accent-700)" : "transparent",
+        select: () => this.setF("policy", p.key)
+      })),
+      shiftChips: SHIFTS.map((label) => {
+        const on = f.shifts.indexOf(label) > -1;
+        return {
+          label,
+          bg: on ? "var(--color-accent-700)" : "transparent",
+          fg: on ? "var(--color-bg)" : "var(--color-text)",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          toggle: () => this.setState((s) => {
+            const has = s.f.shifts.indexOf(label) > -1;
+            return { f: Object.assign({}, s.f, { shifts: has ? s.f.shifts.filter((x) => x !== label) : s.f.shifts.concat([label]) }) };
+          })
+        };
+      }),
+      exclChips: EXCL.map((label) => ({
+        label,
+        add: () => this.setState((s) => ({
+          f: Object.assign({}, s.f, {
+            exclusions: (s.f.exclusions || "").trim() ? s.f.exclusions.replace(/\s*$/, "") + " " + label + "." : label + "."
+          })
+        }))
+      })),
+      crewPips: Array.from({ length: Math.min(Number(f.workers) || 0, 20) }, () => ({ fill: "var(--color-accent-700)" })),
+      docPips: Array.from({ length: Math.min(Number(f.workers) || 0, 20) }, (_, i) => ({ i })),
+
+      policyLabel: policy.label,
+      policyHint: policy.hint,
+      addedCount: filled.filter((m) => !m.gc).length,
+      hasAdded: filled.filter((m) => !m.gc).length > 0,
+      daysLabel: (Number(f.days) || 0) + " working days",
+      crewLabel: (Number(f.workers) || 0) + " workers",
+      matCount: filled.length + " items",
+      shiftLabel,
+      ref: this.ref,
+      today: fmt(new Date().toISOString().slice(0, 10)),
+      dProject: f.project || "Untitled project",
+      dAddress: f.address || "Site address to be confirmed",
+      dContact: f.contact || "Site contact to be confirmed",
+      dPhone: f.phone || "",
+      dOverview: f.overview || "Overview to be issued.",
+      dPolicyNote: f.policyNote || "",
+      dExclusions: f.exclusions || "Nothing excluded — the trade prices the whole scope above.",
+      dForeman: f.foreman || "",
+      dStart: fmt(f.start), dFinish: fmt(finishIso), dReturn: fmt(f.returnBy),
+      finishNote: finishIso ? "Calculated from start plus " + (Number(f.days) || 0) + " working days" : "Set a start date to project the finish",
+      docMaterials: (rows.length ? rows : [{ qty: "—", unit: "—", name: "No materials listed", src: "—", gc: true }])
+        .map((m) => ({ qty: m.qty || "—", unit: m.unit || "—", name: m.name, src: m.src || "Trade", added: !m.gc })),
+      hasMore: filled.length > MAX_ROWS,
+      moreNote: "…and " + (filled.length - MAX_ROWS) + " further items — see the attached materials list.",
+      tableFont: dense >= 1 ? "12px" : "12.5px",
+      cellPad: dense >= 1 ? "4px" : "6px",
+      photoH: dense >= 1 ? "62px" : "76px"
+    };
+  }
+
+  editMat(i, k, v) {
+    this.setState((s) => ({ materials: s.materials.map((m, j) => (j === i ? Object.assign({}, m, { [k]: v }) : m)) }));
+  }
+}
+
+</script>
+</body>
+</html>

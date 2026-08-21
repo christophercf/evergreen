@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{margin:0;background:#f5f0e4}
+a{color:#56684a}
+a:hover{color:#3a2f25}
+</style>
+</helmet>
+
+<div style="min-height:100vh;background:#f5f0e4;color:#2c241c;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column">
+
+<div style="background:#3a2f25;color:#f5f0e4;padding:11px 22px;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:11px">
+<span style="font-family:Georgia,serif;font-size:17px">Evergreen AI</span>
+<span style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#b08a3e">Recommended flows — structural sketch</span>
+</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="6">
+<button style="cursor:pointer;font:inherit;font-size:12px;padding:6px 11px;border-radius:3px;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }}" onClick="{{ t.go }}">{{ t.label }}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="padding:22px;display:flex;flex-direction:column;gap:16px">
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;flex-wrap:wrap;max-width:1240px">
+<div>
+<div style="font-family:Georgia,serif;font-size:24px;line-height:1.1;color:#3a2f25">{{ title }}</div>
+<div style="font-size:13px;line-height:1.5;color:#7a6f60;margin-top:4px;max-width:60em">{{ blurb }}</div>
+</div>
+<sc-if value="{{ showRoles }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;align-items:center;gap:7px">
+<span style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Signed in as</span>
+<sc-for list="{{ roleOpts }}" as="r" hint-placeholder-count="4">
+<button style="cursor:pointer;font:inherit;font-size:12px;padding:6px 11px;border-radius:3px;background:{{ r.bg }};color:{{ r.fg }};border:1px solid {{ r.border }}" onClick="{{ r.go }}">{{ r.label }}</button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{ isNav }}" hint-placeholder-val="{{ true }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;max-width:1240px;align-items:start">
+
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">The waypoint — sessions 01–03</div>
+<div style="display:flex;border:1px solid #ddd2bd;border-radius:3px;overflow:hidden;background:#fffdf7">
+<div style="width:196px;background:#3a2f25;padding:14px 0;display:flex;flex-direction:column;gap:1px;flex:none">
+<sc-for list="{{ navA }}" as="n" hint-placeholder-count="9">
+<div style="padding:8px 15px;font-size:12.5px;color:{{ n.color }};background:{{ n.bg }};border-left:2px solid {{ n.mark }};display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span>{{ n.label }}</span>
+<sc-if value="{{ n.isNew }}"><span style="font-size:9px;letter-spacing:0.09em;text-transform:uppercase;color:#b08a3e">{{ n.tag }}</span></sc-if>
+</div>
+</sc-for>
+</div>
+<div style="flex:1;padding:15px 16px;display:flex;flex-direction:column;gap:10px;min-width:0">
+<div style="font-family:Georgia,serif;font-size:15px;color:#3a2f25">Ten items become eight</div>
+<div style="font-size:12px;line-height:1.5;color:#7a6f60">Two renames, one merge, one new list, one tab lifted out of a wizard. No schema change, no migration.</div>
+<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid #ddd2bd;padding-top:10px">
+<sc-for list="{{ aNotes }}" as="x" hint-placeholder-count="4">
+<div style="display:grid;grid-template-columns:12px 1fr;gap:8px;font-size:11.5px;line-height:1.45"><span style="color:#b08a3e">→</span><span>{{ x.text }}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<span style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Option B — the structure we are building</span>
+<span style="font-size:9.5px;letter-spacing:0.09em;text-transform:uppercase;color:#fffdf7;background:#6b7f5b;padding:3px 8px;border-radius:2px">Chosen</span>
+</div>
+<div style="display:flex;border:1px solid #ddd2bd;border-radius:3px;overflow:hidden;background:#fffdf7">
+<div style="width:196px;background:#3a2f25;padding:14px 0;display:flex;flex-direction:column;gap:1px;flex:none">
+<sc-for list="{{ navB }}" as="n" hint-placeholder-count="9">
+<div style="padding:8px 15px;font-size:12.5px;color:{{ n.color }};background:{{ n.bg }};border-left:2px solid {{ n.mark }};display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span>{{ n.label }}</span>
+<sc-if value="{{ n.isNew }}"><span style="font-size:9px;letter-spacing:0.09em;text-transform:uppercase;color:#b08a3e">{{ n.tag }}</span></sc-if>
+</div>
+</sc-for>
+<sc-if value="{{ navBEmpty }}">
+<div style="padding:10px 15px;font-size:11.5px;line-height:1.45;color:#7a6f60;font-style:italic">No nav. This role gets one screen.</div>
+</sc-if>
+</div>
+<div style="flex:1;padding:15px 16px;display:flex;flex-direction:column;gap:10px;min-width:0">
+<div style="font-family:Georgia,serif;font-size:15px;color:#3a2f25">{{ bTitle }}</div>
+<div style="font-size:12px;line-height:1.5;color:#7a6f60">{{ bBlurb }}</div>
+<div style="background:#e6ebdd;border-radius:3px;padding:10px 12px;font-size:11.5px;line-height:1.5">{{ bRule }}</div>
+</div>
+</div>
+</div>
+
+</div>
+<div style="max-width:1240px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:14px 16px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:6px">The test for anything added later</div>
+<div style="font-size:12.5px;line-height:1.55">In Option B a module is either <strong>a package</strong> or <strong>a cross-package view of packages</strong>. There is no third kind. If a proposed feature is neither, it is a tab on a package — which is where scope, the contract, the budget line and the material list all belong.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isToday }}">
+<div style="display:flex;border:1px solid #ddd2bd;border-radius:3px;overflow:hidden;background:#fffdf7;max-width:1240px">
+<div style="width:196px;background:#3a2f25;padding:14px 0;display:flex;flex-direction:column;gap:1px;flex:none">
+<sc-for list="{{ navB }}" as="n" hint-placeholder-count="8">
+<div style="padding:8px 15px;font-size:12.5px;color:{{ n.color }};background:{{ n.bg }};border-left:2px solid {{ n.mark }}">{{ n.label }}</div>
+</sc-for>
+</div>
+<div style="flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:16px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<div>
+<div style="font-family:Georgia,serif;font-size:23px;line-height:1.1;color:#3a2f25">Today</div>
+<div style="font-size:12.5px;color:#7a6f60;margin-top:3px">{{ todaySub }}</div>
+</div>
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">31810 Evergreen Rd · week 34</div>
+</div>
+<sc-for list="{{ todayGroups }}" as="g" hint-placeholder-count="3">
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:baseline;gap:9px;border-bottom:1px solid #ddd2bd;padding-bottom:5px">
+<span style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:{{ g.color }}">{{ g.label }}</span>
+<span style="font-size:11px;color:#7a6f60">{{ g.count }}</span>
+</div>
+<sc-for list="{{ g.items }}" as="i" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center;background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid {{ g.color }};border-radius:3px;padding:11px 13px">
+<div style="min-width:0">
+<div style="font-size:14px;line-height:1.35">{{ i.what }}</div>
+<div style="font-size:11.5px;color:#7a6f60;margin-top:2px">{{ i.meta }}</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;flex:none">
+<span style="font-family:Georgia,serif;font-size:15px;color:{{ i.figColor }}">{{ i.fig }}</span>
+<span style="font-size:12px;padding:6px 11px;border-radius:3px;background:{{ i.actionBg }};color:{{ i.actionFg }};border:1px solid {{ i.actionBorder }}">{{ i.action }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:#7a6f60;border-top:1px solid #ddd2bd;padding-top:11px">Grouped by <em>kind of attention</em>, not by module. Every row names the package it belongs to and goes straight there — the builder never assembles a picture from four screens.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPackage }}">
+<div style="display:flex;border:1px solid #ddd2bd;border-radius:3px;overflow:hidden;background:#fffdf7;max-width:1240px">
+<div style="width:196px;background:#3a2f25;padding:14px 0;display:flex;flex-direction:column;gap:1px;flex:none">
+<sc-for list="{{ navPkg }}" as="n" hint-placeholder-count="8">
+<div style="padding:8px 15px;font-size:12.5px;color:{{ n.color }};background:{{ n.bg }};border-left:2px solid {{ n.mark }}">{{ n.label }}</div>
+</sc-for>
+</div>
+<div style="flex:1;padding:20px 22px;display:flex;flex-direction:column;gap:16px;min-width:0">
+
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap">
+<div>
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:4px">Package 04 of 11</div>
+<div style="font-family:Georgia,serif;font-size:25px;line-height:1.06;color:#3a2f25">Masonry — chimney &amp; rear wall</div>
+<div style="font-size:12.5px;color:#7a6f60;margin-top:3px">Vega Masonry LLC · contract signed 14 Aug · Net 30</div>
+</div>
+<span style="font-size:11px;padding:6px 12px;border-radius:3px;background:#e6ebdd;color:#56684a;border:1px solid #6b7f5b">Awarded · in progress</span>
+</div>
+
+<div style="display:flex;gap:0;border:1px solid #ddd2bd;border-radius:3px;overflow:hidden">
+<sc-for list="{{ pkgTabs }}" as="t" hint-placeholder-count="6">
+<div style="flex:1;padding:9px 12px;font-size:12px;text-align:center;background:{{ t.bg }};color:{{ t.fg }};border-right:1px solid #ddd2bd">{{ t.label }}</div>
+</sc-for>
+</div>
+
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">The chain, on one page</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px">
+<sc-for list="{{ chain }}" as="c" hint-placeholder-count="4">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-top:3px solid {{ c.accent }};border-radius:3px;padding:12px 13px;display:flex;flex-direction:column;gap:5px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">{{ c.label }}</div>
+<div style="font-family:Georgia,serif;font-size:22px;line-height:1;color:{{ c.figColor }}">{{ c.fig }}</div>
+<div style="font-size:11.5px;line-height:1.45;color:#7a6f60">{{ c.note }}</div>
+</div>
+</sc-for>
+</div>
+
+<div style="background:#e6ebdd;border:1px solid #6b7f5b;border-radius:3px;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center">
+<div style="font-size:12.5px;line-height:1.5">The figure nobody can see in one place today: <strong>remaining and covered.</strong> $19,400 left on this line, and the owner's funding covers it — so this invoice can be paid without asking.</div>
+<span style="font-size:12px;padding:8px 14px;border-radius:3px;background:#6b7f5b;color:#fffdf7;border:1px solid #6b7f5b;flex:none">Approve draw 03</span>
+</div>
+
+<div style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
+<div style="border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:9px">Draws against this line</div>
+<div style="display:flex;flex-direction:column;gap:0">
+<sc-for list="{{ draws }}" as="d" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:1fr 92px 96px;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid #ddd2bd;font-size:12.5px">
+<span>{{ d.what }}<span style="display:block;font-size:11px;color:#7a6f60">{{ d.date }}</span></span>
+<span style="font-family:Georgia,serif;font-size:14px">{{ d.amount }}</span>
+<span style="font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:{{ d.color }}">{{ d.status }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:9px">Schedule &amp; materials</div>
+<div style="font-size:12.5px;line-height:1.6">
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#7a6f60">Duration, from the bid</span><span>14 working days</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#7a6f60">On site</span><span>1 Sep — 18 Sep</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#7a6f60">Crew</span><span>4</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:#7a6f60">Trade confirmed</span><span style="color:#5e7d4f">Yes, 16 Aug</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px;border-top:1px solid #ddd2bd;margin-top:7px;padding-top:7px"><span style="color:#7a6f60">Materials on this package</span><span>9 items · 2 late</span></div>
+</div>
+</div>
+</div>
+
+<div style="font-size:11.5px;line-height:1.5;color:#7a6f60;border-top:1px solid #ddd2bd;padding-top:11px">Nothing here is new data. The award figure, the budget line, the draws, the Gantt bar and the material list are already related — this page just stops making the user leave to follow the relationship.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPhone }}">
+<div style="display:flex;gap:34px;align-items:flex-start;flex-wrap:wrap">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="393px,852px">
+<div style="height:100%;display:flex;flex-direction:column;background:#f5f0e4;font-family:system-ui,-apple-system,sans-serif;color:#2c241c">
+
+<sc-if value="{{ isTrade }}" hint-placeholder-val="{{ true }}">
+<div style="padding:58px 18px 14px;background:#3a2f25;color:#f5f0e4">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#b08a3e">Vega Masonry · 31810 Evergreen Rd</div>
+<div style="font-family:Georgia,serif;font-size:24px;line-height:1.12;margin-top:5px">Your work here</div>
+</div>
+<div style="flex:1;overflow:auto;padding:15px 18px 24px;display:flex;flex-direction:column;gap:13px">
+<div style="background:#a8553c;color:#fffdf7;border-radius:4px;padding:13px 14px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;opacity:.82">Needs you</div>
+<div style="font-family:Georgia,serif;font-size:18px;line-height:1.2;margin-top:4px">Confirm your start date</div>
+<div style="font-size:12.5px;line-height:1.45;margin-top:5px;opacity:.9">Chimney &amp; rear wall, 1 Sep — 18 Sep, 4 crew.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px">
+<span style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#fffdf7;color:#a8553c;border-radius:3px;font-size:14px">That works</span>
+<span style="min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #fffdf7;border-radius:3px;font-size:14px">Propose another</span>
+</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:4px;padding:13px 14px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Your contract</div>
+<div style="font-family:Georgia,serif;font-size:26px;line-height:1;color:#3a2f25;margin-top:6px">$55,800</div>
+<div style="font-size:12.5px;line-height:1.5;color:#7a6f60;margin-top:6px">Masonry — chimney &amp; rear wall. Lump sum, materials split per line. Signed 14 Aug.</div>
+<div style="display:flex;justify-content:space-between;gap:10px;border-top:1px solid #ddd2bd;margin-top:10px;padding-top:9px;font-size:12.5px">
+<span style="color:#7a6f60">Paid to you</span><span>$18,000 of $55,800</span>
+</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:4px;padding:13px 14px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<span style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Your materials</span>
+<span style="font-size:11px;color:#a8553c">2 late</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:0;margin-top:7px">
+<sc-for list="{{ tradeMaterials }}" as="m" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid #ddd2bd;font-size:13px">
+<span>{{ m.name }}<span style="display:block;font-size:11.5px;color:#7a6f60">{{ m.who }}</span></span>
+<span style="font-family:Georgia,serif;font-size:13px;color:{{ m.color }}">{{ m.when }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:4px;padding:13px 14px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Messages with Aaron</div>
+<div style="font-size:13px;line-height:1.5;margin-top:7px;color:#2c241c">"Scaffold is up on the rear elevation, you're clear to start Monday."</div>
+<div style="font-size:11.5px;color:#7a6f60;margin-top:4px">Yesterday, 4:12pm</div>
+<div style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#6b7f5b;color:#fffdf7;border-radius:3px;font-size:14px;margin-top:11px">Reply — photo or voice</div>
+</div>
+<div style="font-size:11.5px;line-height:1.5;color:#7a6f60;text-align:center;padding:4px 6px">That is the whole app for a trade. No nav, no modules, nothing they cannot act on.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isOwner }}">
+<div style="padding:58px 18px 14px;background:#3a2f25;color:#f5f0e4">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#b08a3e">Emily · 31810 Evergreen Rd</div>
+<div style="font-family:Georgia,serif;font-size:24px;line-height:1.12;margin-top:5px">3 things need you</div>
+</div>
+<div style="flex:1;overflow:auto;padding:15px 18px 24px;display:flex;flex-direction:column;gap:13px">
+<sc-for list="{{ approvals }}" as="a" hint-placeholder-count="3">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid {{ a.accent }};border-radius:4px;padding:13px 14px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">{{ a.kind }}</div>
+<div style="font-family:Georgia,serif;font-size:18px;line-height:1.2;color:#3a2f25;margin-top:4px">{{ a.what }}</div>
+<div style="font-family:Georgia,serif;font-size:28px;line-height:1;color:{{ a.figColor }};margin-top:8px">{{ a.fig }}</div>
+<div style="font-size:12.5px;line-height:1.5;color:#7a6f60;margin-top:6px">{{ a.effect }}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:11px">
+<span style="min-height:44px;display:flex;align-items:center;justify-content:center;background:#6b7f5b;color:#fffdf7;border-radius:3px;font-size:14px">Approve</span>
+<span style="min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #ddd2bd;border-radius:3px;font-size:14px;color:#7a6f60">Ask a question</span>
+</div>
+</div>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:#7a6f60;text-align:center;padding:4px 6px">One card per decision, with the figure and what it does to the budget. No tables. When the queue empties, that is the screen.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMaterials }}">
+<div style="padding:58px 18px 13px;background:#3a2f25;color:#f5f0e4">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#b08a3e">Materials · 31810 Evergreen Rd</div>
+<div style="font-family:Georgia,serif;font-size:24px;line-height:1.12;margin-top:5px">9 items need you this week</div>
+<div style="display:flex;gap:6px;margin-top:11px;flex-wrap:wrap">
+<sc-for list="{{ matFilters }}" as="f" hint-placeholder-count="3">
+<span style="font-size:12px;padding:7px 11px;border-radius:3px;background:{{ f.bg }};color:{{ f.fg }};border:1px solid {{ f.border }}">{{ f.label }}</span>
+</sc-for>
+</div>
+</div>
+<div style="flex:1;overflow:auto;padding:14px 18px 24px;display:flex;flex-direction:column;gap:11px">
+<sc-for list="{{ matQueue }}" as="m" hint-placeholder-count="5">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid {{ m.accent }};border-radius:4px;padding:12px 13px">
+<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline">
+<div style="min-width:0">
+<div style="font-size:14.5px;line-height:1.3">{{ m.name }}</div>
+<div style="font-size:11.5px;color:#7a6f60;margin-top:2px">{{ m.meta }}</div>
+</div>
+<div style="text-align:right;flex:none">
+<div style="font-size:9.5px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Needed</div>
+<div style="font-family:Georgia,serif;font-size:17px;line-height:1.05;color:{{ m.dateColor }}">{{ m.needed }}</div>
+</div>
+</div>
+<div style="min-height:44px;display:flex;align-items:center;justify-content:center;border-radius:3px;font-size:14px;margin-top:10px;background:{{ m.actionBg }};color:{{ m.actionFg }};border:1px solid {{ m.actionBorder }}">{{ m.action }}</div>
+</div>
+</sc-for>
+<div style="min-height:44px;display:flex;align-items:center;justify-content:center;border:1px solid #ddd2bd;border-radius:3px;font-size:13.5px;color:#7a6f60">Show all 63 items</div>
+<div style="font-size:11.5px;line-height:1.5;color:#7a6f60;text-align:center;padding:4px 6px">The phone answers one question — what needs dealing with — and each card carries one action. The 12-column table stays on the desktop.</div>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+
+<div style="max-width:300px;display:flex;flex-direction:column;gap:11px">
+<div style="font-size:10px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Why this shape</div>
+<div style="font-size:13px;line-height:1.6;color:#2c241c">{{ phoneRationale }}</div>
+<div style="border-top:1px solid #ddd2bd;padding-top:11px;font-size:12px;line-height:1.55;color:#7a6f60">{{ phoneNote }}</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const TABS = [
+  { key: "nav", label: "Left nav — Option B" },
+  { key: "today", label: "Builder's Today" },
+  { key: "package", label: "Award → budget → draw" },
+  { key: "trade", label: "Trade's world" },
+  { key: "owner", label: "Owner approving" },
+  { key: "materials", label: "Materials on a phone" }
+];
+
+const NAV_A = [
+  { label: "Dashboard" },
+  { label: "Messenger" },
+  { label: "Packages", tag: "renamed" },
+  { label: "Money", tag: "merged" },
+  { label: "Timing" },
+  { label: "Materials" },
+  { label: "Vendors" },
+  { label: "Artifacts" },
+  { label: "⚙ Admin", dim: true }
+];
+
+const NAV_B = {
+  admin: [
+    { label: "Today", tag: "new" },
+    { label: "Packages", on: true },
+    { label: "Money" },
+    { label: "Schedule" },
+    { label: "Materials" },
+    { label: "Messages" },
+    { label: "Vendors" },
+    { label: "Files" },
+    { label: "⚙ Admin", dim: true }
+  ],
+  builder: [
+    { label: "Today", on: true },
+    { label: "Packages" },
+    { label: "Money" },
+    { label: "Schedule" },
+    { label: "Materials" },
+    { label: "Messages" },
+    { label: "Vendors" }
+  ],
+  owner: [
+    { label: "To approve", on: true, tag: "front door" },
+    { label: "Money" },
+    { label: "Schedule" },
+    { label: "Messages" },
+    { label: "Files" }
+  ],
+  trade: [],
+  viewer: [
+    { label: "Materials", on: true, tag: "front door" },
+    { label: "Packages" },
+    { label: "Schedule" },
+    { label: "Files" }
+  ]
+};
+
+const B_COPY = {
+  admin: {
+    title: "Chris — the whole app",
+    blurb: "Eight items, but the meaning changed: Money, Schedule and Materials are roll-ups across packages. Work itself happens on a package.",
+    rule: "Every module is either a package or a cross-package view of packages. Nothing else earns a nav slot."
+  },
+  builder: {
+    title: "Aaron — today, then packages",
+    blurb: "Files and Admin drop out. Today is the front door: what is waiting on him, what he is waiting on, what is late.",
+    rule: "Full density at the desk, the same lists without tables on site. Same app, same data, different pressure."
+  },
+  owner: {
+    title: "Emily — an approval queue",
+    blurb: "Her front door is the decision list, not a dashboard. Money in summary. Nothing about vendors, nothing about materials logistics.",
+    rule: "She opens the app to approve one thing. The first screen should be that thing."
+  },
+  trade: {
+    title: "Vega Masonry — one screen",
+    blurb: "No nav at all. Their contract, the dates to confirm, their materials, one thread. Everything else absent rather than disabled.",
+    rule: "Several trades have already failed to complete a login. A trade who only ever has one screen cannot get lost on it."
+  },
+  viewer: {
+    title: "The designer — read-only, with a queue",
+    blurb: "No money at all, rather than money greyed out. Her real job is choosing materials, so undecided items are her front door.",
+    rule: "A read-only role can still have a queue. Read-only is not the same as passive."
+  }
+};
+
+const TODAY = {
+  builder: [
+    {
+      label: "Waiting on me", color: "#a8553c", items: [
+        { what: "Vega Masonry draw 03 — chimney & rear wall", meta: "Package 04 · invoice received 15 Aug · $19,400 remaining on the line", fig: "$12,600", figColor: "#3a2f25", action: "Review", primary: true },
+        { what: "Rear window schedule needs a scope decision", meta: "Package 07 · blocks two bids · asked 3 days ago", fig: "", figColor: "#3a2f25", action: "Open scope", primary: true }
+      ]
+    },
+    {
+      label: "Waiting on someone else", color: "#b08a3e", items: [
+        { what: "Emily to approve the plaster change order", meta: "Package 09 · sent 16 Aug · she has not opened it", fig: "$4,150", figColor: "#b08a3e", action: "Nudge", primary: false },
+        { what: "Northline Roofing to confirm 8 Sep start", meta: "Package 06 · asked 14 Aug · bar unconfirmed on the Gantt", fig: "", figColor: "#3a2f25", action: "Nudge", primary: false }
+      ]
+    },
+    {
+      label: "Running late", color: "#a8553c", items: [
+        { what: "Reclaimed brick — 2 of 9 material items overdue", meta: "Package 04 · needed 12 Aug · supplier not confirmed", fig: "5 days", figColor: "#a8553c", action: "Chase", primary: false }
+      ]
+    }
+  ]
+};
+
+const CHAIN = [
+  { label: "Awarded", fig: "$55,800", note: "Vega Masonry, lump sum. The winning bid's total, unchanged.", accent: "#6b7f5b", figColor: "#3a2f25" },
+  { label: "Committed", fig: "$59,950", note: "Award plus one change order of $4,150 for the flue liner.", accent: "#b08a3e", figColor: "#3a2f25" },
+  { label: "Paid", fig: "$40,550", note: "Two draws released. A third is sitting with the builder.", accent: "#b08a3e", figColor: "#3a2f25" },
+  { label: "Remaining", fig: "$19,400", note: "Covered by funding source 02. Payable without asking the owner.", accent: "#6b7f5b", figColor: "#56684a" }
+];
+
+const DRAWS = [
+  { what: "Draw 01 — mobilisation", date: "18 Aug", amount: "$18,000", status: "Paid", color: "#5e7d4f" },
+  { what: "Draw 02 — chimney to eaves", date: "29 Aug", amount: "$22,550", status: "Paid", color: "#5e7d4f" },
+  { what: "Draw 03 — rear wall", date: "15 Sep", amount: "$12,600", status: "With builder", color: "#b08a3e" },
+  { what: "Retainage", date: "on completion", amount: "$6,800", status: "Held", color: "#7a6f60" }
+];
+
+const APPROVALS = [
+  {
+    kind: "Change order · package 09", what: "Plaster — lime render to the north wall",
+    fig: "$4,150", figColor: "#b08a3e", accent: "#b08a3e",
+    effect: "Takes the plaster line to $31,400. Still $2,900 under the ROM for that trade."
+  },
+  {
+    kind: "Draw request · package 04", what: "Vega Masonry, draw 03",
+    fig: "$12,600", figColor: "#3a2f25", accent: "#6b7f5b",
+    effect: "Rear wall complete and signed off. Leaves $6,800 retainage on the line."
+  },
+  {
+    kind: "Award · package 06", what: "Roofing — standing seam",
+    fig: "$62,800", figColor: "#3a2f25", accent: "#6b7f5b",
+    effect: "Northline Roofing, lowest of three comparable bids. $1,200 over the ROM."
+  }
+];
+
+const MATERIALS = [
+  { name: "Reclaimed brick, 1,850 no.", meta: "Package 04 · Vega buys · not ordered", needed: "12 Aug", late: true, action: "Chase supplier" },
+  { name: "Lime mortar, 42 bags", meta: "Package 04 · Vega buys · not ordered", needed: "14 Aug", late: true, action: "Chase supplier" },
+  { name: "Flue liner, 6.5 m", meta: "Package 04 · we buy · quote in hand", needed: "22 Aug", late: false, action: "Mark ordered" },
+  { name: "Sash windows, 4 no. — rear", meta: "Package 07 · owner-selected · awaiting decision", needed: "28 Aug", late: false, action: "Ask Emily" },
+  { name: "Standing seam zinc, 48 m²", meta: "Package 06 · Northline buys · ordered", needed: "1 Sep", late: false, action: "Mark delivered" }
+];
+
+const TRADE_MATERIALS = [
+  { name: "Reclaimed brick, 1,850 no.", who: "You buy", when: "12 Aug", late: true },
+  { name: "Lime mortar, 42 bags", who: "You buy", when: "14 Aug", late: true },
+  { name: "Flue liner, 6.5 m", who: "Builder supplies", when: "22 Aug", late: false },
+  { name: "Stainless ties, 180 no.", who: "You buy", when: "25 Aug", late: false }
+];
+
+const PHONE_COPY = {
+  trade: {
+    rationale: "A trade's whole world is four facts and one action: what am I contracted for, what date do you need from me, what am I buying, and who do I talk to. Everything else in the app is somebody else's job.",
+    note: "The red card is the only thing that ever leads: whatever we need from them, first, in the one colour that means act. When nothing is needed, the contract card leads instead and the screen is calm."
+  },
+  owner: {
+    rationale: "Emily opens the app in the evening to approve one thing. So the queue is the app — one card per decision, carrying the figure, what it is against, and what approving does to the budget.",
+    note: "Two buttons only. 'Ask a question' posts into Messenger against that package, which is how a decision becomes a conversation without leaving the queue."
+  },
+  materials: {
+    rationale: "Sixty-three rows and twelve columns is a desktop answer. On a phone the question is always 'what needs dealing with', so the phone gets a filtered queue and leads with the count.",
+    note: "One card, one action. Late items take the rust border and a rust date — the only decoration on the screen, so it means something. The full table is one tap away and stays on the desktop."
+  }
+};
+
+class Component extends DCLogic {
+  state = { view: "nav", role: "admin", matFilter: "This week" };
+
+  navRow(n, dimAll) {
+    return {
+      label: n.label,
+      color: n.dim ? "#7a6f60" : n.on ? "#f5f0e4" : "#d9cfbb",
+      bg: n.on ? "#2c241c" : "transparent",
+      mark: n.on ? "#6b7f5b" : "transparent",
+      isNew: !!n.tag, tag: n.tag || ""
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const phone = s.view === "trade" || s.view === "owner" || s.view === "materials";
+    const navBList = NAV_B[s.role] || NAV_B.admin;
+    const copy = B_COPY[s.role] || B_COPY.admin;
+    const titles = {
+      nav: "Option B, and the same nav per role",
+      today: "The builder's front door",
+      package: "One package, the whole chain",
+      trade: "A trade's whole world",
+      owner: "The owner's approval queue",
+      materials: "Sixty-three rows, on a phone"
+    };
+    const blurbs = {
+      nav: "The package is the spine. The left pane is the waypoint you pass through in the first three sessions; the right is where it lands. Switch the role to see what the same nav gives each person — a trade gets no nav at all.",
+      today: "Grouped by kind of attention rather than by module. Every row belongs to a package and links straight into it.",
+      package: "Scope, bids, contract, budget line, draws, schedule and materials as tabs on one object. The seams in the brief are seams only because this page does not exist yet.",
+      trade: "One screen, no nav, nothing they cannot act on. This is the change most likely to fix the failed logins.",
+      owner: "A queue of decisions, phone-first, money in summary. An empty queue is a good state, not a blank page.",
+      materials: "The phone gets a queue and a count, not the table. Each card carries one action."
+    };
+
+    return {
+      tabs: TABS.map((t) => ({
+        label: t.label,
+        bg: s.view === t.key ? "#f5f0e4" : "transparent",
+        fg: s.view === t.key ? "#3a2f25" : "#d9cfbb",
+        border: s.view === t.key ? "#f5f0e4" : "#7a6f60",
+        go: () => this.setState({ view: t.key })
+      })),
+      title: titles[s.view],
+      blurb: blurbs[s.view],
+
+      isNav: s.view === "nav",
+      isToday: s.view === "today",
+      isPackage: s.view === "package",
+      isPhone: phone,
+      isTrade: s.view === "trade",
+      isOwner: s.view === "owner",
+      isMaterials: s.view === "materials",
+
+      showRoles: s.view === "nav",
+      roleOpts: [
+        { key: "admin", label: "Chris" },
+        { key: "builder", label: "Aaron" },
+        { key: "owner", label: "Emily" },
+        { key: "trade", label: "A trade" },
+        { key: "viewer", label: "Designer" }
+      ].map((r) => ({
+        label: r.label,
+        bg: s.role === r.key ? "#6b7f5b" : "transparent",
+        fg: s.role === r.key ? "#fffdf7" : "#2c241c",
+        border: s.role === r.key ? "#6b7f5b" : "#ddd2bd",
+        go: () => this.setState({ role: r.key })
+      })),
+
+      navA: NAV_A.map((n) => this.navRow(n)),
+      navB: navBList.map((n) => this.navRow(n)),
+      navBEmpty: navBList.length === 0,
+      bTitle: copy.title, bBlurb: copy.blurb, bRule: copy.rule,
+      aNotes: [
+        { text: "Every change here is a step towards Option B — nothing needs undoing later." },
+        { text: "Bid Management becomes Packages, and gains a list of all eleven at once — the sidebar select goes." },
+        { text: "Scope lifts out of step 02 and onto the package, where materials and timing already point at it." },
+        { text: "Project Budget, Payment & Draw and Owners Funding become Committed · Paid · Funded." },
+        { text: "Trade stops being a container word. Vendor, package, contract — three words, used strictly." }
+      ],
+
+      navPkg: NAV_B.admin.map((n) => this.navRow(Object.assign({}, n, { on: n.label === "Packages" }))),
+      todaySub: "Two things waiting on you, two on someone else, one late.",
+      todayGroups: TODAY.builder.map((g) => ({
+        label: g.label, color: g.color, count: g.items.length === 1 ? "1 item" : g.items.length + " items",
+        items: g.items.map((i) => ({
+          what: i.what, meta: i.meta, fig: i.fig, figColor: i.figColor, action: i.action,
+          actionBg: i.primary ? "#6b7f5b" : "transparent",
+          actionFg: i.primary ? "#fffdf7" : "#56684a",
+          actionBorder: i.primary ? "#6b7f5b" : "#ddd2bd"
+        }))
+      })),
+
+      pkgTabs: ["Scope", "Bids", "Contract", "Budget line", "Draws", "Schedule"].map((l, i) => ({
+        label: l,
+        bg: i === 3 ? "#e6ebdd" : "#fffdf7",
+        fg: i === 3 ? "#3a2f25" : "#7a6f60"
+      })),
+      chain: CHAIN,
+      draws: DRAWS,
+
+      approvals: APPROVALS,
+      tradeMaterials: TRADE_MATERIALS.map((m) => ({
+        name: m.name, who: m.who, when: m.when, color: m.late ? "#a8553c" : "#2c241c"
+      })),
+      matFilters: ["This week", "Mine", "All 63"].map((f) => ({
+        label: f,
+        bg: s.matFilter === f ? "#f5f0e4" : "transparent",
+        fg: s.matFilter === f ? "#3a2f25" : "#d9cfbb",
+        border: s.matFilter === f ? "#f5f0e4" : "#7a6f60"
+      })),
+      matQueue: MATERIALS.map((m) => ({
+        name: m.name, meta: m.meta, needed: m.needed,
+        accent: m.late ? "#a8553c" : "#ddd2bd",
+        dateColor: m.late ? "#a8553c" : "#3a2f25",
+        action: m.action,
+        actionBg: m.late ? "#a8553c" : "transparent",
+        actionFg: m.late ? "#fffdf7" : "#56684a",
+        actionBorder: m.late ? "#a8553c" : "#ddd2bd"
+      })),
+      phoneRationale: (PHONE_COPY[s.view] || PHONE_COPY.trade).rationale,
+      phoneNote: (PHONE_COPY[s.view] || PHONE_COPY.trade).note
+    };
+  }
+}
+
+</script>
+</body>
+</html>

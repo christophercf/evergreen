@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/styles.css">
+<script src="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/_ds_bundle.js"></script>
+</helmet>
+
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);display:flex;flex-direction:column">
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 22px;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:12px">
+<span style="font-family:var(--font-heading);font-size:19px;letter-spacing:-0.01em">Marlow Street — rear addition</span>
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700)">Bid intake</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="background:{{ deskBg }}" onClick="{{ goDesktop }}">Desktop</button>
+<button class="btn btn-secondary" style="background:{{ mobBg }}" onClick="{{ goMobile }}">Mobile</button>
+</div>
+</div>
+
+<div style="flex:1;display:grid;grid-template-columns:222px 1fr">
+
+<div style="border-right:1px solid var(--color-divider);padding:20px 18px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:5px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Package</span>
+<span style="font-size:13px;line-height:1.45">{{ tradeLabel }}</span>
+<span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ inviteLabel }}</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="6">
+<button style="display:flex;gap:9px;align-items:baseline;text-align:left;cursor:pointer;border:0;padding:7px 8px;font:inherit;font-size:13px;background:{{ n.bg }};color:{{ n.color }}" onClick="{{ n.go }}">
+<span style="font-family:var(--font-heading);font-size:11px;letter-spacing:0.06em;color:var(--color-accent-700)">{{ n.no }}</span>
+<span>{{ n.title }}</span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top:auto;font-size:11.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 50%, transparent);border-top:1px solid var(--color-divider);padding-top:12px">Every bid lands on the same five fields, whichever way it arrives. Mismatches are flagged, never silently corrected.</div>
+</div>
+
+<div style="padding:26px 28px 40px;min-width:0">
+
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="393px,852px">
+<div style="height:100%;display:flex;flex-direction:column;background:var(--color-bg);font-family:var(--font-body)">
+<div style="padding:60px 18px 12px;border-bottom:1px solid var(--color-divider)">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Bid intake</div>
+<div style="font-family:var(--font-heading);font-size:25px;line-height:1.1;margin-top:4px">{{ screenTitle }}</div>
+</div>
+<div style="flex:1;overflow:auto;padding:16px 18px 22px;display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ mobileRows }}" as="r" hint-placeholder-count="4">
+<div class="blueprint" style="padding:12px;display:flex;flex-direction:column;gap:6px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<span style="font-family:var(--font-heading);font-size:17px">{{ r.title }}</span>
+<span style="font-size:12px;color:var(--color-accent-800)">{{ r.value }}</span>
+</div>
+<span style="font-size:12px;line-height:1.4;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ r.meta }}</span>
+<sc-if value="{{ r.flagged }}">
+<span class="tag tag-outline" style="align-self:flex-start;font-size:11px">{{ r.flag }}</span>
+</sc-if>
+</div>
+</sc-for>
+</div>
+<div style="padding:12px 18px 20px;border-top:1px solid var(--color-divider);display:flex;gap:10px">
+<button class="btn btn-secondary" style="min-height:46px;flex:0 0 92px" onClick="{{ prevScreen }}">Back</button>
+<button class="btn btn-primary" style="min-height:46px;flex:1" onClick="{{ nextScreen }}">{{ mobileCta }}</button>
+</div>
+</div>
+</x-import>
+<div style="max-width:280px;display:flex;flex-direction:column;gap:12px">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">On the phone</div>
+<div style="font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 70%, transparent)">The phone carries triage — choose the trade, pick who bids, set how each one submits, and read the comparison. Extraction review and the award decision stay on desktop, where the source document sits beside the fields.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:22px;max-width:1180px">
+
+<sc-if value="{{ sc1 }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">Which trades is this package for?</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">Pick one or several. Bids still only compare inside a trade — each one gets its own column set.</div>
+</div>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ toContacts }}">{{ tradeCta }}</button>
+</div>
+<div style="display:grid;grid-template-columns:repeat(4, minmax(0,1fr));gap:16px">
+<sc-for list="{{ trades }}" as="t" hint-placeholder-count="8">
+<button class="blueprint" style="text-align:left;padding:14px;cursor:pointer;font:inherit;color:inherit;display:flex;flex-direction:column;gap:6px;background:{{ t.bg }};border-color:{{ t.border }}" onClick="{{ t.select }}">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ t.name }}</span>
+<span style="width:16px;height:16px;border:1px solid var(--color-accent-700);flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--color-accent-800)">{{ t.mark }}</span>
+</span>
+<span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 58%, transparent)">{{ t.count }} saved contacts</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc2 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">Who should bid this?</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">Everyone in the directory is here. The ones who cover this package sit on top.</div>
+</div>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ toPaths }}">{{ inviteCta }}</button>
+</div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">{{ matchedLabel }}</span>
+<div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px">
+<sc-for list="{{ contacts }}" as="c" hint-placeholder-count="4">
+<button class="blueprint" style="text-align:left;padding:14px 16px;cursor:pointer;font:inherit;color:inherit;display:flex;gap:14px;align-items:center;background:{{ c.bg }};border-color:{{ c.border }}" onClick="{{ c.toggle }}">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="width:18px;height:18px;border:1px solid var(--color-accent-700);flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-accent-800)">{{ c.mark }}</span>
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ c.co }}</span>
+<span style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ c.person }} · {{ c.phone }}</span>
+<span style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+<span style="font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ c.trade }}</span>
+<sc-if value="{{ c.isMulti }}"><span class="tag tag-outline" style="font-size:10px">{{ c.multi }}</span></sc-if>
+</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+<sc-if value="{{ hasOthers }}">
+<div style="display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--color-divider);padding-top:16px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 45%, transparent)">{{ othersLabel }}</span>
+<div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px">
+<sc-for list="{{ otherContacts }}" as="c" hint-placeholder-count="4">
+<button class="blueprint" style="text-align:left;padding:14px 16px;cursor:pointer;font:inherit;color:inherit;display:flex;gap:14px;align-items:center;background:{{ c.bg }};border-color:{{ c.border }}" onClick="{{ c.toggle }}">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="width:18px;height:18px;border:1px solid var(--color-accent-700);flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--color-accent-800)">{{ c.mark }}</span>
+<span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ c.co }}</span>
+<span style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ c.person }} · {{ c.phone }}</span>
+<span style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+<span style="font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ c.trade }}</span>
+<sc-if value="{{ c.isMulti }}"><span class="tag tag-outline" style="font-size:10px">{{ c.multi }}</span></sc-if>
+</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc3 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">How does each one submit?</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">Three routes in, one set of fields out. Pick the route each contact actually works in.</div>
+</div>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ toIntake }}">Issue request</button>
+</div>
+<div class="blueprint" style="padding:14px 16px;display:grid;grid-template-columns:1fr 1.5fr;gap:20px;align-items:center">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;flex-direction:column;gap:4px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Pricing basis — set before the request goes out</span>
+<span style="font-size:12.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ basisNote }}</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<sc-for list="{{ basisOpts }}" as="p" hint-placeholder-count="2">
+<button class="btn" style="min-height:58px;padding:8px 10px;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:{{ p.bg }};color:{{ p.fg }};border:1px solid {{ p.border }}" onClick="{{ p.select }}">
+<span style="font-family:var(--font-heading);font-size:14px">{{ p.label }}</span>
+<span style="font-family:var(--font-body);font-size:11px;line-height:1.3;opacity:.78;white-space:normal">{{ p.hint }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ invited }}" as="v" hint-placeholder-count="3">
+<div class="blueprint" style="padding:14px 16px;display:grid;grid-template-columns:1fr 1.5fr;gap:20px;align-items:center">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ v.co }}</span>
+<span style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ v.person }} · {{ v.phone }}</span>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3, minmax(0,1fr));gap:8px">
+<sc-for list="{{ v.paths }}" as="p" hint-placeholder-count="3">
+<button class="btn" style="min-height:58px;padding:8px 10px;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:{{ p.bg }};color:{{ p.fg }};border:1px solid {{ p.border }}" onClick="{{ p.select }}">
+<span style="font-family:var(--font-heading);font-size:14px">{{ p.label }}</span>
+<span style="font-family:var(--font-body);font-size:11px;line-height:1.3;opacity:.78;white-space:normal">{{ p.hint }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc4 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">Bids received</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">{{ intakeSummary }}</div>
+</div>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ toCompare }}">Compare bids</button>
+</div>
+<div style="display:grid;grid-template-columns:1.15fr 1fr;gap:18px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ intakeRows }}" as="b" hint-placeholder-count="4">
+<button class="blueprint" style="text-align:left;padding:13px 15px;cursor:pointer;font:inherit;color:inherit;display:flex;flex-direction:column;gap:7px;background:{{ b.bg }};border-color:{{ b.border }}" onClick="{{ b.open }}">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ b.co }}</span>
+<span style="font-family:var(--font-heading);font-size:17px;color:var(--color-accent-800)">{{ b.total }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+<span style="font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ b.pathLabel }}</span>
+<span class="tag" style="font-size:11px;background:{{ b.statusBg }};color:{{ b.statusFg }};border:1px solid {{ b.statusBorder }}">{{ b.status }}</span>
+</div>
+<span style="font-size:12px;line-height:1.4;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ b.detail }}</span>
+<sc-if value="{{ b.isUpload }}">
+<span style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;margin-top:2px">
+<sc-for list="{{ b.uploadRoutes }}" as="u" hint-placeholder-count="2">
+<span class="btn" style="min-height:36px;font-size:12.5px;cursor:pointer;background:{{ u.bg }};color:{{ u.fg }};border:1px solid {{ u.border }}" onClick="{{ u.select }}">{{ u.label }}</span>
+</sc-for>
+</span>
+</sc-if>
+</button>
+</sc-for>
+</div>
+<div class="blueprint" style="padding:16px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Confirm extracted fields</span>
+<span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ extractSource }}</span>
+</div>
+<div style="font-family:var(--font-heading);font-size:20px;line-height:1.15;margin-bottom:4px">{{ extractCo }}</div>
+<div style="font-size:12.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-bottom:14px">{{ extractNote }}</div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ extractFields }}" as="x" hint-placeholder-count="5">
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ x.label }}</span>
+<span class="tag" style="font-size:10.5px;background:{{ x.confBg }};color:{{ x.confFg }};border:1px solid {{ x.confBorder }}">{{ x.conf }}</span>
+</div>
+<input class="input" style="min-height:38px" placeholder="{{ x.placeholder }}" value="{{ x.value }}" onChange="{{ x.onChange }}">
+</div>
+</sc-for>
+</div>
+<button class="btn btn-block" style="min-height:42px;margin-top:16px;background:{{ confirmBg }};color:{{ confirmFg }};border:1px solid {{ confirmBorder }}" disabled="{{ confirmDisabled }}" onClick="{{ confirmExtract }}">{{ confirmLabel }}</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc5 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-family:var(--font-heading);font-size:27px;line-height:1.1">{{ compareHeading }}</span><span class="tag tag-outline" style="font-size:11px">{{ compareBasis }}</span></div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">{{ compareSub }}</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="background:{{ matrixBg }}" onClick="{{ goMatrix }}">Matrix</button>
+<button class="btn btn-secondary" style="background:{{ cardBg }}" onClick="{{ goCards }}">Scorecards</button>
+<button class="btn btn-primary" onClick="{{ toAward }}">Award</button>
+</div>
+</div>
+
+<sc-if value="{{ isMatrix }}">
+<div class="blueprint" style="padding:2px 0 0;overflow-x:auto">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<table class="table" style="width:100%;font-size:13px">
+<thead><tr>
+<th style="text-align:left;width:168px">Criterion</th>
+<sc-for list="{{ bids }}" as="b" hint-placeholder-count="4">
+<th style="text-align:left">{{ b.co }}<br><span style="font-family:var(--font-body);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700)">{{ b.pathShort }}</span></th>
+</sc-for>
+</tr></thead>
+<tbody>
+<sc-for list="{{ matrixRows }}" as="r" hint-placeholder-count="6">
+<tr>
+<td style="color:color-mix(in srgb, var(--color-text) 62%, transparent);font-size:12px;letter-spacing:0.06em;text-transform:uppercase">{{ r.label }}</td>
+<sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="4">
+<td style="background:{{ c.bg }}"><span style="font-family:{{ c.font }};font-size:{{ c.size }};color:{{ c.color }}">{{ c.value }}</span><sc-if value="{{ c.hasNote }}"><span style="display:block;font-size:11px;line-height:1.35;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ c.note }}</span></sc-if></td>
+</sc-for>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:14px">
+<sc-for list="{{ mismatches }}" as="m" hint-placeholder-count="2">
+<div class="blueprint" style="padding:12px 14px;display:flex;flex-direction:column;gap:5px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Not like-for-like — {{ m.co }}</span>
+<span style="font-size:13px;line-height:1.45">{{ m.text }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCards }}">
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(228px,1fr));gap:16px">
+<sc-for list="{{ bids }}" as="b" hint-placeholder-count="4">
+<div class="blueprint" style="padding:14px 15px;display:flex;flex-direction:column;gap:10px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;flex-direction:column;gap:2px">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ b.co }}</span>
+<span style="font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ b.pathShort }}</span>
+</div>
+<div>
+<div style="font-family:var(--font-heading);font-size:29px;line-height:1;color:{{ b.totalColor }}">{{ b.totalLabel }}</div>
+<div style="height:5px;background:color-mix(in srgb, var(--color-text) 10%, transparent);margin-top:7px"><div style="height:5px;background:var(--color-accent-700);width:{{ b.barPct }}"></div></div>
+<div style="font-size:11px;margin-top:5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ b.perDayLabel }}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;border-top:1px solid var(--color-divider);padding-top:9px">
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Labor line</span><span>{{ b.laborLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Working days</span><span>{{ b.daysLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Pricing basis</span><span>{{ b.basisLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Crew rate</span><span>{{ b.rateLabel }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Materials in bid</span><span>{{ b.policy }}</span></div>
+<div style="display:flex;justify-content:space-between;gap:10px"><span style="color:color-mix(in srgb, var(--color-text) 55%, transparent)">Crew</span><span>{{ b.crewLabel }}</span></div>
+</div>
+<div style="border-top:1px solid var(--color-divider);padding-top:9px;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">Internal review</span>
+<span style="font-family:var(--font-heading);font-size:14px">{{ b.stars }}</span>
+</div>
+<span style="font-size:12px;line-height:1.4;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ b.reviewNote }}</span>
+<span style="font-size:10.5px;color:color-mix(in srgb, var(--color-text) 45%, transparent)">{{ b.reviewSource }}</span>
+</div>
+<sc-if value="{{ b.hasFlag }}">
+<span class="tag tag-outline" style="align-self:flex-start;font-size:11px;line-height:1.35;white-space:normal;text-align:left">{{ b.flag }}</span>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc6 }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">Shortlist and award</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">{{ awardSub }}</div>
+</div>
+<div style="display:grid;grid-template-columns:1.5fr 1fr;gap:18px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:12px">
+<sc-for list="{{ bids }}" as="b" hint-placeholder-count="4">
+<div class="blueprint" style="padding:13px 15px;display:grid;grid-template-columns:1fr auto auto;gap:14px;align-items:center;background:{{ b.awardBg }};border-color:{{ b.awardBorder }}">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+<span style="font-family:var(--font-heading);font-size:18px;line-height:1.15">{{ b.co }}</span>
+<span style="font-size:12px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ b.awardLine }}</span>
+</div>
+<button class="btn btn-secondary" style="min-height:38px;background:{{ b.shortBg }}" onClick="{{ b.toggleShort }}">{{ b.shortLabel }}</button>
+<button class="btn" style="min-height:38px;background:{{ b.awardBtnBg }};color:{{ b.awardBtnFg }};border:1px solid {{ b.awardBtnBorder }}" onClick="{{ b.award }}">{{ b.awardLabel }}</button>
+</div>
+</sc-for>
+</div>
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Decision record</span>
+<div style="font-family:var(--font-heading);font-size:22px;line-height:1.15">{{ awardedCo }}</div>
+<div style="font-size:12.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 65%, transparent)">{{ awardedLine }}</div>
+<div class="field"><label>Why this bid</label>
+<textarea class="input" style="min-height:96px;line-height:1.5" placeholder="One line the team can read in six months." value="{{ awardReason }}" onChange="{{ onAwardReason }}"></textarea>
+</div>
+<div style="font-size:11.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 50%, transparent);border-top:1px solid var(--color-divider);padding-top:10px">{{ awardGuard }}</div>
+</div>
+</div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const NAV = [
+  { no: "01", title: "Trade category" },
+  { no: "02", title: "Contacts" },
+  { no: "03", title: "How they bid" },
+  { no: "04", title: "Intake & extract" },
+  { no: "05", title: "Compare" },
+  { no: "06", title: "Award" }
+];
+const TRADES = [
+  { key: "concrete", name: "Concrete & sitework", count: 6 },
+  { key: "framing", name: "Framing", count: 5 },
+  { key: "masonry", name: "Masonry", count: 4 },
+  { key: "roofing", name: "Roofing", count: 3 },
+  { key: "electrical", name: "Electrical", count: 7 },
+  { key: "plumbing", name: "Plumbing", count: 5 },
+  { key: "hvac", name: "HVAC", count: 4 },
+  { key: "drywall", name: "Drywall & finishes", count: 6 }
+];
+const CONTACTS = [
+  { id: "vega", co: "Vega Masonry LLC", person: "Luis Vega", phone: "(512) 555-0142", trades: ["masonry", "concrete"] },
+  { id: "hill", co: "Hill Country Block Co.", person: "Dana Reyes", phone: "(512) 555-0187", trades: ["masonry"] },
+  { id: "ferro", co: "Ferro & Sons Masonry", person: "Tony Ferro", phone: "(737) 555-0119", trades: ["masonry", "concrete"] },
+  { id: "stone", co: "Austin Stoneworks", person: "Priya Nair", phone: "(512) 555-0164", trades: ["masonry"] },
+  { id: "delgado", co: "Delgado Concrete", person: "Ana Delgado", phone: "(737) 555-0155", trades: ["concrete"] },
+  { id: "bravo", co: "Bravo Framing Co.", person: "Marcus Bell", phone: "(512) 555-0133", trades: ["framing", "drywall"] },
+  { id: "sundry", co: "Sundry Interiors", person: "Kim Vo", phone: "(512) 555-0109", trades: ["drywall", "framing"] },
+  { id: "northline", co: "Northline Roofing", person: "Sam Ortiz", phone: "(512) 555-0176", trades: ["roofing"] },
+  { id: "quill", co: "Quill Electric", person: "Ray Quill", phone: "(512) 555-0121", trades: ["electrical"] },
+  { id: "trestle", co: "Trestle Mechanical", person: "Jo Park", phone: "(737) 555-0198", trades: ["hvac", "plumbing"] }
+];
+const TRADE_NAME = {};
+const BASES = [
+  { key: "lump", label: "Lump sum", hint: "One fixed price against this scope" },
+  { key: "tm", label: "Time & materials", hint: "Crew rate plus materials, to a not-to-exceed" }
+];
+const PATHS = [
+  { key: "app", label: "They fill it in", hint: "Link to the mobile form" },
+  { key: "gc", label: "We fill it in", hint: "Priced over the phone" },
+  { key: "upload", label: "They upload", hint: "Their own template" }
+];
+const PATH_LABEL = {
+  app: "Filled in the app by the trade",
+  gc: "Keyed by the GC on their behalf",
+  upload: "Vendor's own template, fields extracted"
+};
+const PATH_SHORT = { app: "Filled in app", gc: "Keyed by GC", upload: "Uploaded + extracted" };
+
+const BIDS = [
+  {
+    id: "vega", co: "Vega Masonry LLC", path: "app", basis: "lump", rate: 78, nte: null, total: 55800, materials: 24600, labor: 31200,
+    days: 14, crew: 4, policy: "Split — per line", flag: "",
+    stars: "4.5", reviewNote: "Ran clean on the Lamar duplex; two days lost to rain, no claim.", jobs: "3 past jobs"
+  },
+  {
+    id: "hill", co: "Hill Country Block Co.", path: "gc", basis: "lump", rate: 85, nte: null, total: 61400, materials: 26900, labor: 34500,
+    days: 12, crew: 5, policy: "Included in bid", flag: "",
+    stars: "4.0", reviewNote: "Strong crew. Invoices creep on extras — hold the change order line.", jobs: "5 past jobs"
+  },
+  {
+    id: "ferro", co: "Ferro & Sons Masonry", path: "upload", basis: "tm", rate: 72, nte: 52000, total: 47200, materials: null, labor: 47200,
+    days: 16, crew: 3, policy: "Excluded", flag: "Materials excluded — add ~$24,600 to compare against the others.",
+    stars: "3.0", reviewNote: "Workmanship fine, slow on RFIs.", jobs: "2 past jobs"
+  },
+  {
+    id: "stone", co: "Austin Stoneworks", path: "upload", basis: "lump", rate: 80, nte: null, total: 52900, materials: 22400, labor: 30500,
+    days: null, crew: null, policy: "Included in bid", flag: "Crew size and duration not stated in their document.",
+    stars: "", reviewNote: "No internal history — first time bidding with us.", jobs: "First-time bidder"
+  }
+];
+
+const money = (n) => n === null || n === undefined || n === "" ? "—" : "$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const num = (v) => {
+  const s = String(v == null ? "" : v).replace(/[^0-9.\-]/g, "");
+  return s === "" || isNaN(Number(s)) ? null : Number(s);
+};
+
+class Component extends DCLogic {
+  state = {
+    device: "desktop",
+    screen: 0,
+    trades: ["masonry"],
+    basis: "lump",
+    uploadBy: { ferro: "trade", stone: "gc" },
+    picked: ["vega", "hill", "ferro", "stone"],
+    paths: { vega: "app", hill: "gc", ferro: "upload", stone: "upload" },
+    openBid: "stone",
+    draft: { total: "52,900", materials: "22,400", labor: "30,500", days: "", crew: "" },
+    confirmed: [],
+    variant: "matrix",
+    shortlist: ["vega", "hill"],
+    awarded: "",
+    reason: ""
+  };
+
+  bid(id) { return BIDS.filter((b) => b.id === id)[0]; }
+  card(c, picks, tint) {
+    const on = this.state.picked.indexOf(c.id) > -1;
+    const names = c.trades.map((t) => TRADE_NAME[t]);
+    return {
+      co: c.co, person: c.person, phone: c.phone, mark: on ? "✕" : "",
+      trade: names.join(" · "),
+      multi: names.length > 1 ? names.length + " trades" : "",
+      isMulti: names.length > 1,
+      bg: on ? tint : "transparent",
+      border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+      toggle: () => this.setState((st) => ({
+        picked: on ? st.picked.filter((x) => x !== c.id) : st.picked.concat([c.id])
+      }))
+    };
+  }
+  isComplete(b) {
+    return b.total !== null && b.labor !== null && b.days !== null && b.crew !== null;
+  }
+  missingDraft() {
+    const d = this.state.draft;
+    return [["total", "total cost"], ["labor", "labor line"], ["days", "working days"], ["crew", "crew on site"]]
+      .filter((f) => num(d[f[0]]) === null).map((f) => f[1]);
+  }
+
+  renderVals() {
+    const s = this.state;
+    TRADES.forEach((t) => { TRADE_NAME[t.key] = t.name; });
+    const picks = s.trades.length ? s.trades : ["masonry"];
+    const tradeName = picks.map((k) => TRADE_NAME[k]).join(" · ");
+    const basis = BASES.filter((b) => b.key === s.basis)[0];
+    const matched = CONTACTS.filter((c) => c.trades.some((t) => picks.indexOf(t) > -1));
+    const others = CONTACTS.filter((c) => !c.trades.some((t) => picks.indexOf(t) > -1));
+    const accent = "var(--color-accent-200)";
+    const tint = "var(--color-accent-100)";
+    let live = BIDS.map((b) => {
+      if (b.id !== "stone") return b;
+      const c = s.confirmed.indexOf("stone") > -1;
+      const days = c ? num(s.draft.days) : null;
+      const crew = c ? num(s.draft.crew) : null;
+      return Object.assign({}, b, {
+        total: c ? num(s.draft.total) : b.total,
+        labor: c ? num(s.draft.labor) : b.labor,
+        materials: c ? num(s.draft.materials) : b.materials,
+        days: days, crew: crew,
+        flag: days !== null && crew !== null ? "" : b.flag
+      });
+    });
+    live = live.map((b) => b.basis === s.basis ? b : Object.assign({}, b, {
+      flag: (b.flag ? b.flag + " " : "") + "Priced as " + (b.basis === "tm" ? "time & materials" : "lump sum") + ", not the " + basis.label.toLowerCase() + " basis this package was issued on."
+    }));
+    const maxTotal = Math.max.apply(null, live.map((b) => b.total || 0));
+    const minTotal = Math.min.apply(null, live.map((b) => b.total || Infinity));
+    const openBid = this.bid(s.openBid) || BIDS[3];
+    const stoneConfirmed = s.confirmed.indexOf("stone") > -1;
+    const pending = live.filter((b) => !this.isComplete(b)).length;
+    const missing = this.missingDraft();
+    const flagged = live.filter((b) => b.flag);
+
+    const bids = live.map((b) => {
+      const flagged = !!b.flag;
+      const perDay = b.days ? Math.round(b.total / b.days) : null;
+      return {
+        id: b.id, co: b.co, pathShort: PATH_SHORT[b.path], policy: b.policy,
+        basisLabel: b.basis === "tm" ? "Time & materials" : "Lump sum",
+        rateLabel: b.rate ? "$" + b.rate + "/hr" : "—",
+        nteLabel: b.nte ? money(b.nte) : "—",
+        totalLabel: money(b.total),
+        totalColor: b.total === minTotal ? "var(--color-accent-800)" : "var(--color-text)",
+        barPct: Math.round(((b.total || 0) / maxTotal) * 100) + "%",
+        perDayLabel: perDay ? money(perDay) + " per working day" : "Duration not stated",
+        laborLabel: money(b.labor),
+        daysLabel: b.days ? b.days + " days" : "—",
+        crewLabel: b.crew ? b.crew + " on site" : "—",
+        stars: b.stars ? b.stars + " / 5" : "No history",
+        reviewNote: b.reviewNote,
+        reviewSource: "From vendor manager · " + b.jobs,
+        hasFlag: flagged, flag: b.flag,
+        awardLine: money(b.total) + " · " + (b.days ? b.days + " days" : "duration not stated") + " · " + b.policy,
+        awardBg: s.awarded === b.id ? tint : "transparent",
+        awardBorder: s.awarded === b.id ? "var(--color-accent-700)" : "var(--color-divider)",
+        awardLabel: s.awarded === b.id ? "Awarded" : "Award",
+        awardBtnBg: s.awarded === b.id ? "var(--color-accent)" : "transparent",
+        awardBtnFg: s.awarded === b.id ? "var(--color-bg)" : "var(--color-text)",
+        awardBtnBorder: s.awarded === b.id ? "var(--color-accent)" : "var(--color-divider)",
+        award: () => this.setState({ awarded: b.id }),
+        shortLabel: s.shortlist.indexOf(b.id) > -1 ? "Shortlisted" : "Shortlist",
+        shortBg: s.shortlist.indexOf(b.id) > -1 ? accent : "transparent",
+        toggleShort: () => this.setState((st) => ({
+          shortlist: st.shortlist.indexOf(b.id) > -1 ? st.shortlist.filter((x) => x !== b.id) : st.shortlist.concat([b.id])
+        }))
+      };
+    });
+
+    const cell = (v, note, best) => ({
+      value: v, note: note || "", hasNote: !!note,
+      bg: best ? tint : "transparent",
+      font: best ? "var(--font-heading)" : "var(--font-body)",
+      size: best ? "17px" : "13px",
+      color: best ? "var(--color-accent-800)" : "var(--color-text)"
+    });
+    const minDays = Math.min.apply(null, live.map((b) => b.days || Infinity));
+    const minLabor = Math.min.apply(null, live.map((b) => b.labor || Infinity));
+
+    const matrixRows = [
+      { label: "Total project cost", cells: live.map((b) => cell(money(b.total), b.total === minTotal ? "lowest" : "", b.total === minTotal)) },
+      { label: "Labor line", cells: live.map((b) => cell(money(b.labor), "", b.labor === minLabor)) },
+      { label: "Working days", cells: live.map((b) => cell(b.days ? b.days + " days" : "Not stated", b.days ? "" : "field missing", b.days === minDays)) },
+      { label: "Cost per day", cells: live.map((b) => cell(b.days ? money(Math.round(b.total / b.days)) : "—", "", false)) },
+      { label: "Pricing basis", cells: live.map((b) => cell(b.basis === "tm" ? "Time & materials" : "Lump sum", b.basis === s.basis ? "" : "off-basis", false)) },
+      { label: "Crew rate", cells: live.map((b) => cell(b.rate ? "$" + b.rate + "/hr" : "—", b.nte ? "cap " + money(b.nte) : "", false)) },
+      { label: "Materials in bid", cells: live.map((b) => cell(b.policy, b.materials === null ? "no materials priced" : money(b.materials), false)) },
+      { label: "Crew on site", cells: live.map((b) => cell(b.crew ? b.crew + "" : "Not stated", "", false)) },
+      { label: "Internal review", cells: live.map((b) => cell(b.stars ? b.stars + " / 5" : "No history", b.reviewNote, false)) },
+      { label: "Like-for-like", cells: live.map((b) => cell(b.flag ? "Flagged" : "Comparable", b.flag ? "" : "", false)) }
+    ];
+
+    const fields = [
+      { key: "total", label: "Total cost", placeholder: "$" },
+      { key: "materials", label: "Materials line", placeholder: "$" },
+      { key: "labor", label: "Labor line", placeholder: "$" },
+      { key: "days", label: "Working days", placeholder: "Not found" },
+      { key: "crew", label: "Crew on site", placeholder: "Not found" }
+    ];
+    const conf = (k) => {
+      const v = s.draft[k];
+      if (!String(v).trim()) return { conf: "Not found", bg: "transparent", fg: "var(--color-accent-800)", border: "var(--color-accent-700)" };
+      return { conf: k === "materials" ? "Medium" : "High", bg: tint, fg: "var(--color-accent-800)", border: "var(--color-divider)" };
+    };
+
+    const mobileScreens = {
+      0: TRADES.map((t) => ({ title: t.name, value: t.count + "", meta: "saved contacts", flagged: false, flag: "" })),
+      1: CONTACTS.map((c) => ({ title: c.co, value: s.picked.indexOf(c.id) > -1 ? "Invited" : "", meta: c.person + " · " + c.phone, flagged: false, flag: "" })),
+      2: s.picked.map((id) => {
+        const c = CONTACTS.filter((x) => x.id === id)[0];
+        return { title: c.co, value: "", meta: PATH_LABEL[s.paths[id]], flagged: false, flag: "" };
+      }),
+      3: live.map((b) => ({
+        title: b.co, value: money(b.total), meta: PATH_SHORT[b.path],
+        flagged: !this.isComplete(b), flag: "Needs review on desktop"
+      })),
+      4: bids.map((b) => ({
+        title: b.co, value: b.totalLabel,
+        meta: b.daysLabel + " · " + b.laborLabel + " labor · " + b.policy,
+        flagged: b.hasFlag, flag: b.flag
+      })),
+      5: bids.map((b) => ({
+        title: b.co, value: s.awarded === b.id ? "Awarded" : "",
+        meta: b.awardLine, flagged: false, flag: ""
+      }))
+    };
+
+    return {
+      isDesktop: s.device === "desktop",
+      isMobile: s.device === "mobile",
+      deskBg: s.device === "desktop" ? accent : "transparent",
+      mobBg: s.device === "mobile" ? accent : "transparent",
+      goDesktop: () => this.setState({ device: "desktop" }),
+      goMobile: () => this.setState({ device: "mobile" }),
+
+      tradeLabel: tradeName,
+      inviteLabel: s.picked.length + " invited · " + live.length + " bids in",
+      nav: NAV.map((n, i) => ({
+        no: n.no, title: n.title,
+        bg: i === s.screen ? tint : "transparent",
+        color: i === s.screen ? "var(--color-text)" : "color-mix(in srgb, var(--color-text) 55%, transparent)",
+        go: () => this.setState({ screen: i })
+      })),
+      sc1: s.screen === 0, sc2: s.screen === 1, sc3: s.screen === 2,
+      sc4: s.screen === 3, sc5: s.screen === 4, sc6: s.screen === 5,
+      screenTitle: NAV[s.screen].title,
+      mobileRows: mobileScreens[s.screen] || [],
+      mobileCta: s.screen === 5 ? "Record decision" : "Continue",
+      nextScreen: () => this.setState({ screen: Math.min(5, s.screen + 1) }),
+      prevScreen: () => this.setState({ screen: Math.max(0, s.screen - 1) }),
+
+      trades: TRADES.map((t) => {
+        const on = picks.indexOf(t.key) > -1;
+        return {
+          name: t.name, count: t.count, mark: on ? "✕" : "",
+          bg: on ? tint : "transparent",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          select: () => this.setState((st) => ({
+            trades: st.trades.indexOf(t.key) > -1 ? st.trades.filter((x) => x !== t.key) : st.trades.concat([t.key])
+          }))
+        };
+      }),
+      tradeCta: picks.length > 1 ? "Continue with " + picks.length + " trades" : "Continue with 1 trade",
+      toContacts: () => this.setState({ screen: 1 }),
+      basisOpts: BASES.map((b) => {
+        const on = s.basis === b.key;
+        return {
+          label: b.label, hint: b.hint,
+          bg: on ? "var(--color-accent-700)" : "transparent",
+          fg: on ? "var(--color-bg)" : "var(--color-text)",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          select: () => this.setState({ basis: b.key })
+        };
+      }),
+      basisLabel: basis.label,
+      basisNote: s.basis === "tm"
+        ? "Every trade prices a crew rate and a not-to-exceed. The comparison ranks on rate and cap, not on a single figure."
+        : "Every trade returns one fixed figure against this scope.",
+      contacts: matched.map((c) => this.card(c, picks, tint)),
+      otherContacts: others.map((c) => this.card(c, picks, tint)),
+      hasOthers: others.length > 0,
+      matchedLabel: matched.length + " cover " + (picks.length > 1 ? "these trades" : TRADE_NAME[picks[0]]),
+      othersLabel: others.length + " other contacts — outside this package",
+      inviteCta: s.picked.length ? "Continue with " + s.picked.length : "Pick at least one",
+      toPaths: () => this.setState({ screen: 2 }),
+      invited: s.picked.map((id) => {
+        const c = CONTACTS.filter((x) => x.id === id)[0];
+        return {
+          co: c.co, person: c.person, phone: c.phone,
+          paths: PATHS.map((p) => {
+            const on = s.paths[id] === p.key;
+            return {
+              label: p.label, hint: p.hint,
+              bg: on ? "var(--color-accent-700)" : "transparent",
+              fg: on ? "var(--color-bg)" : "var(--color-text)",
+              border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+              select: () => this.setState((st) => ({ paths: Object.assign({}, st.paths, { [id]: p.key }) }))
+            };
+          })
+        };
+      }),
+      toIntake: () => this.setState({ screen: 3 }),
+      toCompare: () => this.setState({ screen: 4 }),
+      toAward: () => this.setState({ screen: 5 }),
+
+      intakeSummary: pending
+        ? pending + " of " + live.length + " bids still " + (pending === 1 ? "needs" : "need") + " a field confirmed before they compare like-for-like."
+        : "All " + live.length + " bids carry the five required fields.",
+      intakeRows: live.map((b) => {
+        const ok = this.isComplete(b);
+        return {
+          co: b.co, total: money(b.total), pathLabel: PATH_LABEL[b.path],
+          status: ok ? "Complete" : "Needs review",
+          statusBg: ok ? tint : "transparent",
+          statusFg: "var(--color-accent-800)",
+          statusBorder: ok ? "var(--color-divider)" : "var(--color-accent-700)",
+          detail: b.flag ? b.flag : (b.days ? b.days + " days · " + b.crew + " on site · " + b.policy : b.policy),
+          bg: s.openBid === b.id ? tint : "transparent",
+          border: s.openBid === b.id ? "var(--color-accent-700)" : "var(--color-divider)",
+          open: () => this.setState({ openBid: b.id }),
+          isUpload: b.path === "upload",
+          uploadRoutes: [
+            { key: "trade", label: "Trade uploaded" },
+            { key: "gc", label: "Emailed to us — we upload" }
+          ].map((u) => {
+            const on = s.uploadBy[b.id] === u.key;
+            return {
+              label: u.label,
+              bg: on ? "var(--color-accent-700)" : "transparent",
+              fg: on ? "var(--color-bg)" : "var(--color-text)",
+              border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+              select: () => this.setState((st) => ({ uploadBy: Object.assign({}, st.uploadBy, { [b.id]: u.key }), openBid: b.id }))
+            };
+          })
+        };
+      }),
+      extractCo: openBid.co,
+      extractSource: openBid.path === "upload"
+        ? openBid.id + "-bid.pdf · " + (s.uploadBy[openBid.id] === "gc" ? "uploaded by us" : "uploaded by the trade")
+        : "No document — keyed directly",
+      extractNote: openBid.path === "upload"
+        ? "Read from their own template. Two fields were not found in the document; the rest need a glance before this bid enters the comparison."
+        : "This bid was entered on the app's own form, so every field is already in place.",
+      extractFields: fields.map((f) => {
+        const c = conf(f.key);
+        return {
+          label: f.label, placeholder: f.placeholder, value: s.draft[f.key],
+          conf: c.conf, confBg: c.bg, confFg: c.fg, confBorder: c.border,
+          onChange: (e) => this.setState((st) => ({ draft: Object.assign({}, st.draft, { [f.key]: e.target.value }) }))
+        };
+      }),
+      confirmLabel: missing.length
+        ? "Still empty: " + missing.join(", ")
+        : stoneConfirmed ? "Confirmed — enters the comparison" : "Confirm fields",
+      confirmDisabled: missing.length > 0,
+      confirmBg: missing.length ? "transparent" : "var(--color-accent)",
+      confirmFg: missing.length ? "color-mix(in srgb, var(--color-text) 55%, transparent)" : "var(--color-bg)",
+      confirmBorder: missing.length ? "var(--color-divider)" : "var(--color-accent)",
+      confirmExtract: () => {
+        if (this.missingDraft().length) return;
+        this.setState((st) => ({ confirmed: st.confirmed.indexOf("stone") > -1 ? st.confirmed : st.confirmed.concat(["stone"]) }));
+      },
+
+      bids,
+      matrixRows,
+      mismatches: flagged.map((b) => ({ co: b.co, text: b.flag })),
+      isMatrix: s.variant === "matrix",
+      isCards: s.variant === "cards",
+      matrixBg: s.variant === "matrix" ? accent : "transparent",
+      cardBg: s.variant === "cards" ? accent : "transparent",
+      goMatrix: () => this.setState({ variant: "matrix" }),
+      goCards: () => this.setState({ variant: "cards" }),
+      compareHeading: tradeName + " — " + live.length + " bids",
+      compareBasis: basis.label + " basis",
+      compareSub: flagged.length
+        ? (flagged.length === 1 ? "One bid is" : flagged.length + " bids are") + " flagged as not like-for-like. Figures are shown as bid; nothing is silently adjusted."
+        : "All " + live.length + " bids arrived on the same five fields. Lowest figure in each row is tinted.",
+
+      awardSub: s.shortlist.length + " shortlisted. Internal reviews are pulled from the vendor manager, read-only.",
+      awardedCo: s.awarded ? this.bid(s.awarded).co : "No award yet",
+      awardedLine: s.awarded
+        ? money(this.bid(s.awarded).total) + " · " + PATH_LABEL[this.bid(s.awarded).path]
+        : "Pick a bid on the left. The record travels with the package.",
+      awardReason: s.reason,
+      onAwardReason: (e) => this.setState({ reason: e.target.value }),
+      awardGuard: "Ferro & Sons is the lowest figure but excludes materials. Flagged, not adjusted — read it against the others before awarding."
+    };
+  }
+}
+
+</script>
+</body>
+</html>

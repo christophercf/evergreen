@@ -90,6 +90,11 @@ next action is not obvious, not reachable, or silently does nothing.
    the empty chart to pan.
 9. **Materials** — add a material, set its status through to delivered.
 10. **Messages** — start a new chat, set a subject, reply, react, pin, archive.
+11. **Help** — every numbered step's *Take me there* lands on a real screen, and
+    a step this seat cannot reach says so rather than linking into a refusal.
+12. **Feedback** — file with an empty description and with a bug that has no
+    expectation; both must refuse in words. Then file a real one and confirm the
+    brief carries seat, device, ROM phase and screen.
 
 Record: the step number, what stalled, and what you expected.
 
@@ -147,20 +152,21 @@ after each switch so load-time device gates re-run.
 
 ## 6. Cross-user change signals
 
-Two clients, two users. Make a change as one and confirm the other sees it
-without a manual refresh, and that the nav shows a **green bubble with a count**
-on the module that changed.
+Two clients, two users. Make a change as one and confirm the other sees it, and
+that the nav shows a **green bubble with a count** on the module that changed.
 
-- Messages → unread count on Messages.
-- A draw approved by the GC → count on Draw Management for the owner.
+- Messages → unread count on Messages. It clears when the CONVERSATION is
+  opened, not when the module is — opening the inbox must never mark every
+  thread read.
 - A contract issued → count on Contracts for the vendor.
-- Opening the module clears its count for that user only, never for anyone else.
+- A draw reopened for approval → count on Draw Management for the builder.
+- A report filed in Help → count on Help for the admin.
+- Clearing a count writes only to the reader: a notification addressed to a
+  ROLE reaches several people, and `readBy` must gain one id, never set the
+  shared `read` flag.
 
-> **Status: not built.** The nav has no per-module change badges today, and
-> notifications (`db.notifications`, with `read` per user) are the data that
-> would feed them. This section is the specification; until it ships, the check
-> is expected to fail and should not be filed as a new bug each run.
-
+Prove the isolation, do not assume it: read `notifications[].readBy` after
+opening a module and confirm it holds exactly the one user id.
 ---
 
 ## 7. Regression watchlist

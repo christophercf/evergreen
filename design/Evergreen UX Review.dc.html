@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./doc-page.js"></script>
+<style>
+doc-page:not(:defined){visibility:hidden}
+body{margin:0;background:#f5f0e4}
+a{color:#56684a}
+a:hover{color:#3a2f25}
+</style>
+</helmet>
+
+<doc-page size="letter">
+
+<div slot="header" style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;font-family:system-ui,-apple-system,sans-serif;font-size:9px;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;padding-bottom:6px;border-bottom:1px solid #ddd2bd">
+<span>Evergreen AI — end-to-end UX review</span>
+<span>31810 Evergreen Rd</span>
+</div>
+
+<div slot="footer" style="display:flex;align-items:baseline;justify-content:space-between;gap:20px;font-family:system-ui,-apple-system,sans-serif;font-size:9px;letter-spacing:0.11em;text-transform:uppercase;color:#7a6f60;padding-top:6px;border-top:1px solid #ddd2bd">
+<span>Structural review — not a visual refresh</span>
+<span>August 2026</span>
+</div>
+
+<div style="font-family:system-ui,-apple-system,sans-serif;color:#2c241c;font-size:11.5pt;line-height:1.62;text-wrap:pretty">
+
+<div style="border-bottom:2px solid #3a2f25;padding-bottom:16px;margin-bottom:22px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:9px">UX &amp; workflow review</div>
+<div style="font-family:Georgia,serif;font-size:30pt;line-height:1.06;color:#3a2f25;margin-bottom:12px">Ten modules, one house</div>
+<div style="font-size:12pt;line-height:1.5;color:#7a6f60;max-width:34em">Where the structure works against the six people using it, what I would merge, and the order a single developer can land it in.</div>
+</div>
+
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:14px 16px;margin-bottom:24px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:7px">What this is based on</div>
+<div style="font-size:10.5pt;line-height:1.55">The written brief, and the bid-management design work this review builds on. <strong>I have not seen the running app.</strong> Everything about structure, language and flow below stands on its own; anything that depends on how a real screen behaves is marked <em>needs a look</em>. Twenty minutes on the award → budget → draw path with real data would confirm or kill three of these recommendations, and I have named which.</div>
+<div style="font-size:10.5pt;line-height:1.55;margin-top:9px;border-top:1px solid #ddd2bd;padding-top:9px">Two things the public sign-in page did tell me. Login is <strong>email-only — there is no password field</strong>, so the "invite email → set password" step in pain point (g) may already be gone; if a password is still set after first auth, that step is the one to remove. And the marketing copy names <strong>"Live Gantt with QC sign-off"</strong>, a workflow absent from the ten modules. QC sign-off is a state change on a package that gates a draw — it belongs on the package page, not in a module of its own.</div>
+</div>
+
+<div style="font-family:Georgia,serif;font-size:17pt;line-height:1.2;color:#3a2f25;margin:0 0 10px">The verdict</div>
+
+<p style="margin:0 0 12px">The app is shaped like its database. Ten modules describe where data lives — bids, budget, draws, funding, timing, materials, vendors, artifacts — and a user is expected to assemble the actual job out of them. That worked while Chris was the only person holding the whole model in his head. It stops working the moment five other people need to do one thing each.</p>
+
+<p style="margin:0 0 12px">Bid Management is the proof that this team can build the other way round. It is organised by what a person is doing, in order, with one way forward and a rule that refuses to let an incomplete thing look complete. It is the newest module and the only one shaped like work rather than storage. The answer to "should its discipline spread" is yes, but not as seven-step wizards everywhere — what should spread is the underlying move: <strong>name the object the work actually revolves around, and make the modules facets of it.</strong></p>
+
+<p style="margin:0 0 12px">On this project that object is the <strong>package</strong>: a scope of work on this house, awarded to one vendor, carrying a price, a duration, a set of materials and a pile of documents. Scope, bid, contract, budget line, Gantt bar and material list are not six modules that need wiring together. They are six views of one package. Every seam described in the brief as "bolted on one at a time" is a seam only because no such object exists in the interface.</p>
+
+<p style="margin:0 0 20px">Two other things are structurally wrong and cheap to fix: money is one thing split across three modules, and the phone is being served the desktop's layout instead of the phone's question. Neither needs a migration.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 01</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">The nav is a filing cabinet, and scope has no home because the package doesn't exist</div>
+</div>
+
+<p style="margin:0 0 12px">The brief asks whether the IA has grown by accretion. It has, but the count is not the problem. Ten items for six users would be survivable if each item were somewhere a person goes to do something. The problem is that the ten are storage locations, so the work of the project — bidding a trade, paying a vendor, confirming a date — is spread across them, and the user does the joining.</p>
+
+<p style="margin:0 0 12px">This is exactly why scope has no home. Scope is not a step inside bidding; it is the definition of the package, written before bids and referenced forever after by materials, timing and change orders. Putting it at step 02 of a wizard means the one artifact everything else points at is reachable only by re-entering a flow that has already finished.</p>
+
+<p style="margin:0 0 14px">Make the package a real screen. One package, one page, with the chain laid out in the order it happens:</p>
+
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:15px 17px;margin-bottom:16px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:10px">One package, one page</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;font-size:10pt;line-height:1.45">
+<div style="border-left:2px solid #6b7f5b;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Scope</strong><br><span style="color:#7a6f60">What the work is. Written once, referenced by everything downstream.</span></div>
+<div style="border-left:2px solid #6b7f5b;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Bids</strong><br><span style="color:#7a6f60">Who was invited, how each submitted, the five fields, the comparison.</span></div>
+<div style="border-left:2px solid #6b7f5b;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Contract</strong><br><span style="color:#7a6f60">Who won, at what price, on what basis. The signed document.</span></div>
+<div style="border-left:2px solid #b08a3e;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Budget line</strong><br><span style="color:#7a6f60">The awarded figure, change orders against it, what remains.</span></div>
+<div style="border-left:2px solid #b08a3e;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Draws</strong><br><span style="color:#7a6f60">Invoices and payments against that line, and what is left to pay.</span></div>
+<div style="border-left:2px solid #b08a3e;padding-left:9px"><strong style="font-family:Georgia,serif;font-size:11.5pt">Schedule &amp; materials</strong><br><span style="color:#7a6f60">The duration from the winning bid as a bar, the items that hang off it, and the QC sign-off that releases the next draw.</span></div>
+</div>
+</div>
+
+<p style="margin:0 0 12px">Nothing in that list is new work. Every one of those relationships is already wired. What changes is that the user stops navigating between modules to follow one job, and the seams stop being seams. "What landed in Project Budget after the award" is no longer a question you answer by leaving the screen.</p>
+
+<p style="margin:0 0 18px">The package list then replaces the sidebar <code style="font-family:ui-monospace,monospace;font-size:9.5pt;background:#efe8d6;padding:1px 4px;border-radius:2px">&lt;select&gt;</code>, which is the right instinct in the brief — a switcher with no overview means you can only see the package you already chose. Seven steps is not too deep for bidding a trade; it is too deep as the <em>only</em> door to a package. Keep the seven steps as the path through an unbid package, and give a bid package a page you can land on directly.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 02</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">The structure, and the waypoint on the way to it</div>
+</div>
+
+<p style="margin:0 0 14px"><strong>Decided: the re-cut.</strong> Both structures are set out below because the incremental one is not an alternative — it is the first three sessions of the re-cut, stopped early. Nothing in the left column has to be undone to reach the right, which is what makes this safe to do in sessions against live data.</p>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:14px 15px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:4px">The waypoint — sessions 01–03</div>
+<div style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25;margin-bottom:9px">Keep the shape, fix the seams</div>
+<div style="font-size:9.5pt;line-height:1.75;color:#2c241c">
+<div>Dashboard</div>
+<div>Messenger</div>
+<div style="color:#a8553c">Packages <span style="color:#7a6f60">(was Bid Management, + overview list, + Scope tab)</span></div>
+<div style="color:#a8553c">Money <span style="color:#7a6f60">(Budget · Draws · Funding as three tabs)</span></div>
+<div>Timing</div>
+<div>Materials</div>
+<div>Vendors</div>
+<div>Artifacts</div>
+<div style="color:#7a6f60">⚙ Admin</div>
+</div>
+<div style="border-top:1px solid #ddd2bd;margin-top:10px;padding-top:9px;font-size:9.5pt;line-height:1.5;color:#7a6f60">Ten items become eight. No data migration, no new objects. Two renames, one merge, one new list view, one tab moved out of a wizard.</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #6b7f5b;border-radius:3px;padding:14px 15px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px">
+<span style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Option B — the target</span>
+<span style="font-size:8.5pt;letter-spacing:0.09em;text-transform:uppercase;color:#fffdf7;background:#6b7f5b;padding:2px 7px;border-radius:2px">Chosen</span>
+</div>
+<div style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25;margin-bottom:9px">The package is the spine</div>
+<div style="font-size:9.5pt;line-height:1.75;color:#2c241c">
+<div style="color:#a8553c">Today <span style="color:#7a6f60">(role-shaped front door)</span></div>
+<div style="color:#a8553c">Packages <span style="color:#7a6f60">(scope → bids → contract → line → draws → schedule → materials)</span></div>
+<div>Money <span style="color:#7a6f60">(roll-up across packages)</span></div>
+<div>Schedule <span style="color:#7a6f60">(Gantt across packages)</span></div>
+<div>Materials <span style="color:#7a6f60">(queue across packages)</span></div>
+<div>Messages</div>
+<div>Vendors <span style="color:#7a6f60">(the roster)</span></div>
+<div>Files</div>
+<div style="color:#7a6f60">⚙ Admin</div>
+</div>
+<div style="border-top:1px solid #ddd2bd;margin-top:10px;padding-top:9px;font-size:9.5pt;line-height:1.5;color:#7a6f60">Same eight-plus-admin count, different meaning: Money, Schedule and Materials become <em>roll-ups across packages</em>, not separate places where work happens. Work happens on a package.</div>
+</div>
+</div>
+
+<p style="margin:0 0 12px">The distinction that matters: in Option B, a module is either <strong>a package</strong> or <strong>a cross-package view of packages</strong>. There is no third kind of thing. That is the test to apply to anything anyone wants to add later — if it is neither, it is a tab on a package.</p>
+
+<p style="margin:0 0 18px"><strong>The route is B, arrived at through the waypoint.</strong> Ship the four waypoint changes first: they are independently useful, they require no migration, and they tell you whether the package page is carrying the weight before you re-root the whole nav around it. If the package page does not earn its keep in session 03, stop there — you will still be better off than you are now, which is the property that makes this worth doing in this order.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 03</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Money is one object seen at three moments</div>
+</div>
+
+<p style="margin:0 0 12px">Yes, the three money modules should be one. The argument is not tidiness, it is that no real question a user asks lives inside just one of them.</p>
+
+<p style="margin:0 0 14px">"Can I pay the mason's invoice?" requires the committed line (Budget), what has already been drawn against it (Payment &amp; Draw), and whether the owner's money has landed to cover it (Owners Funding). Today that is three screens and a mental reconciliation. It is also the single most consequential question in the app — it is the one where being wrong costs real money.</p>
+
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:15px 17px;margin-bottom:16px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:10px">One Money module, three views on the same line</div>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;font-size:10pt;line-height:1.45">
+<div><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#3a2f25">Committed</strong><br><span style="color:#7a6f60">The ROM, then the awarded figure, then change orders. What we have promised to spend.</span></div>
+<div><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#3a2f25">Paid</strong><br><span style="color:#7a6f60">Invoices and draws against each line. What has actually left.</span></div>
+<div><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#3a2f25">Funded</strong><br><span style="color:#7a6f60">Where the owner's money comes from, and what is available to draw on.</span></div>
+</div>
+<div style="border-top:1px solid #ddd2bd;margin-top:12px;padding-top:10px;font-size:10pt;line-height:1.5">One figure belongs on every row of all three views, and it is the one nobody can currently see in one place: <strong style="color:#8f6f2e">remaining and covered</strong> — committed minus paid, and whether funding exists for the rest.</div>
+</div>
+
+<p style="margin:0 0 18px">Keep the three as tabs rather than collapsing them into one mega-table. The owner cares about Funded, the builder about Paid, Chris about all three; tabs let the role-aware shell open the right one by default. <em>Needs a look:</em> if Owners Funding is largely static — a handful of sources set up once — it may be an Admin page rather than a tab.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 04</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Four front doors, one app</div>
+</div>
+
+<p style="margin:0 0 12px">Same app with a role-aware shell is the right call, and it is a bigger idea than filtering the nav. A role's front door should be the thing that role does most — not a dashboard of everything they are permitted to see. Permission decides what is reachable. The shell decides what is <em>first</em>.</p>
+
+<div style="display:grid;grid-template-columns:1fr;gap:11px;margin-bottom:16px">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid #6b7f5b;border-radius:3px;padding:12px 15px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:5px">
+<span style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25">Trade — no nav at all</span>
+<span style="font-size:9pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Phone, on site</span>
+</div>
+<div style="font-size:10pt;line-height:1.5;color:#2c241c">One screen: their contract, the dates they need to confirm, their materials, one message thread. Everything else <strong>absent, not greyed out</strong>. A trade should never see a nav item they cannot use — that is what has been costing you logins. If they only ever have one screen, they cannot get lost on it.</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid #b08a3e;border-radius:3px;padding:12px 15px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:5px">
+<span style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25">Owner — an approval queue</span>
+<span style="font-size:9pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Phone, evenings</span>
+</div>
+<div style="font-size:10pt;line-height:1.5;color:#2c241c">Emily opens the app to approve one thing. Her front door is a queue of decisions, one card each, with the figure, what it is against, what it does to the budget, and two buttons. Money in summary, never in a table. When the queue is empty, that is the screen — an empty queue is a good state, not a blank page.</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid #3a2f25;border-radius:3px;padding:12px 15px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:5px">
+<span style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25">Builder — today, then packages</span>
+<span style="font-size:9pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Desk + site</span>
+</div>
+<div style="font-size:10pt;line-height:1.5;color:#2c241c">The only role that needs the whole app. Front door is what needs attention, grouped by what kind of attention: waiting on someone, waiting on me, running late. Full density on desktop; on a phone the same list, no tables.</div>
+</div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-left:3px solid #7a6f60;border-radius:3px;padding:12px 15px">
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:5px">
+<span style="font-family:Georgia,serif;font-size:13pt;color:#3a2f25">Viewer — the project, read-only</span>
+<span style="font-size:9pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e">Designer, architect</span>
+</div>
+<div style="font-size:10pt;line-height:1.5;color:#2c241c">Scope, schedule, materials and files. No money at all, rather than money greyed out. The designer's real job is picking materials, so their front door is the materials list filtered to undecided items — a read-only role can still have a queue.</div>
+</div>
+</div>
+
+<p style="margin:0 0 18px">One rule holds the whole thing together: <strong>a role never sees a control it cannot use.</strong> Not disabled, not hidden behind a tooltip — absent. Six users and per-package vendor visibility do not need a per-module access matrix; four presets plus "which packages is this vendor on" covers every case in the brief, and it is a matrix you can hold in your head.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 05</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Sixty-three rows is a desktop answer to a phone question</div>
+</div>
+
+<p style="margin:0 0 12px">Materials at 63 × 12 with a sticky first column is not a mobile layout, it is a desktop layout that has been made to survive. The fix is not a better table. It is to notice that nobody on a phone wants 63 rows — they want the answer to one question, and on a phone that question is nearly always <em>what do I need to deal with this week?</em></p>
+
+<p style="margin:0 0 14px">Three moves, in order of value:</p>
+
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:15px 17px;margin-bottom:16px">
+<div style="display:flex;flex-direction:column;gap:11px;font-size:10pt;line-height:1.5">
+<div style="display:grid;grid-template-columns:26px 1fr;gap:11px"><span style="font-family:Georgia,serif;font-size:13pt;color:#b08a3e">1</span><span><strong>The phone gets a queue, not the table.</strong> Default to what is needed in the next fourteen days and assigned to me. Lead with the count — "9 items need you this week" — and put the other 54 behind "show all 63". The desktop keeps its table; the phone is not a narrower desktop.</span></div>
+<div style="display:grid;grid-template-columns:26px 1fr;gap:11px"><span style="font-family:Georgia,serif;font-size:13pt;color:#b08a3e">2</span><span><strong>A row becomes a card with one job.</strong> Item, the needed-by date as the loud figure, who is buying it, and a single action — mark ordered, mark delivered. The other nine columns live behind a tap. If a card needs two actions, it needs two states, not two buttons.</span></div>
+<div style="display:grid;grid-template-columns:26px 1fr;gap:11px"><span style="font-family:Georgia,serif;font-size:13pt;color:#b08a3e">3</span><span><strong>No horizontal scroll on a phone, ever.</strong> A sticky first column is a compromise that reads as a broken page. The same applies to the budget and the Gantt: on a phone, the Gantt is a list of what is happening this week, not a chart you pan.</span></div>
+</div>
+</div>
+
+<p style="margin:0 0 18px">This is also the answer for the budget on a phone. The owner does not need 12 columns; she needs the line, the committed figure, the remaining figure, and whether anything is over. Four facts on a card, sorted by which needs her.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 06</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">One sentence per notification channel</div>
+</div>
+
+<p style="margin:0 0 14px">Three channels with no rule means everything ends up in all three or none. Give each one job, and enforce it in code rather than convention:</p>
+
+<div style="display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:16px">
+<div style="display:grid;grid-template-columns:130px 1fr;gap:14px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 15px;font-size:10pt;line-height:1.5">
+<div style="font-family:Georgia,serif;font-size:12.5pt;color:#3a2f25">Messenger</div>
+<div><strong>Humans talking.</strong> Field updates, photos, voice-to-text, questions. Never system-generated — the moment the app posts into Messenger, people stop trusting that a message means a person.</div>
+</div>
+<div style="display:grid;grid-template-columns:130px 1fr;gap:14px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 15px;font-size:10pt;line-height:1.5">
+<div style="font-family:Georgia,serif;font-size:12.5pt;color:#3a2f25">In-app</div>
+<div><strong>A state change that needs you to act.</strong> Links to the exact thing, clears when acted on. If it needs no action it is not a notification — it is a change-log entry on the package.</div>
+</div>
+<div style="display:grid;grid-template-columns:130px 1fr;gap:14px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 15px;font-size:10pt;line-height:1.5">
+<div style="font-family:Georgia,serif;font-size:12.5pt;color:#3a2f25">Email</div>
+<div><strong>The only channel that reaches someone who is not in the app.</strong> Three triggers, nothing else: an invite, an approval that has waited more than a day, and money leaving. For trades, email means "we need something from you" — never a digest.</div>
+</div>
+</div>
+
+<p style="margin:0 0 18px">The test for any new notification: name which of the three it is and why it is not one of the others. If that sentence is hard to write, the notification should not exist.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 07</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Say vendor, package, contract — and stop saying trade</div>
+</div>
+
+<p style="margin:0 0 12px">The data model is fixed but the language still leaks, and language is what made users invent "Windows — Diverse" and "Windows — Builder". Three words, used consistently, close it permanently:</p>
+
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:15px 17px;margin-bottom:14px;font-size:10pt;line-height:1.55">
+<div style="display:grid;grid-template-columns:110px 1fr;gap:12px;padding-bottom:9px;border-bottom:1px solid #ddd2bd"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Vendor</strong><span>A company. Lives in the roster, covers one or more trades, exists independently of this house.</span></div>
+<div style="display:grid;grid-template-columns:110px 1fr;gap:12px;padding:9px 0;border-bottom:1px solid #ddd2bd"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Package</strong><span>A scope of work on this house. Has one budget line, one bar on the Gantt, its own materials.</span></div>
+<div style="display:grid;grid-template-columns:110px 1fr;gap:12px;padding-top:9px"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Contract</strong><span>A vendor awarded a package, at a price. The thing "Current Contract" already means.</span></div>
+</div>
+
+<p style="margin:0 0 18px"><strong>Trade</strong> survives as one thing only: a category label on a vendor, used to decide who gets invited to bid. It is never a container, never a nav item, never a thing with a contract. Two vendors on windows is either two packages or one package with two contracts — both expressible, neither requiring a duplicate category. This is a rename pass plus a rule, and it is the cheapest high-value change on the list.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 08</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Should the five-fields discipline spread?</div>
+</div>
+
+<p style="margin:0 0 12px">Yes, but read what the rule actually is. It is not "require five fields". It is: <strong>completeness is derived from the values, never from a flag, and a mismatch is flagged rather than silently corrected.</strong> That generalises everywhere and costs almost nothing.</p>
+
+<p style="margin:0 0 12px">Materials: an item is not "ordered" because someone ticked ordered — it is ordered when it has a supplier, a date and a cost. Timing: a bar is not confirmed because the builder says so — it is confirmed when the trade has confirmed it, and an unconfirmed bar should look unconfirmed on the Gantt rather than identical to a confirmed one. Budget: a line is not locked because it was locked, it is locked when it carries an awarded contract.</p>
+
+<p style="margin:0 0 18px">Bidding is not special. It was simply built after the lesson had been learned. The one thing not to copy is the seven-step wizard — the discipline is the derivation rule, not the step count.</p>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:18px;margin-bottom:8px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">Finding 09</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">What I would delete</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:10pt;line-height:1.5">
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 14px"><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#a8553c">The per-module access matrix</strong><br><span style="color:#7a6f60">Four role presets plus per-package vendor visibility covers every case in the brief. A matrix for six users is a maintenance surface with no payoff.</span></div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 14px"><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#a8553c">The sidebar package <code style="font-family:ui-monospace,monospace;font-size:9pt">&lt;select&gt;</code></strong><br><span style="color:#7a6f60">Replaced by the package list. A switcher with no overview can only move you between things you already knew about.</span></div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 14px"><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#a8553c">Non-actionable in-app notifications</strong><br><span style="color:#7a6f60">They train people to ignore the badge. Move them to a change log on the package they belong to.</span></div>
+<div style="background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:12px 14px"><strong style="font-family:Georgia,serif;font-size:11.5pt;color:#a8553c">The room × trade scope matrix <span style="font-size:9pt;color:#7a6f60">— needs a look</span></strong><br><span style="color:#7a6f60">If it exists to answer "who is doing what where", the package's scope does that better. If it is load-bearing for something else, tell me what.</span></div>
+</div>
+
+<p style="margin:0 0 18px">One thing I would <em>not</em> delete: Messenger. Photos and voice-to-text from a phone on site is the one feature that meets the trades where they actually are, and it is doing more work for adoption than any screen in the app.</p>
+
+<div style="border-top:2px solid #3a2f25;padding-top:18px;margin-bottom:10px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:5px">The plan</div>
+<div style="font-family:Georgia,serif;font-size:19pt;line-height:1.18;color:#3a2f25">Five sessions, each one shippable on its own</div>
+</div>
+
+<p style="margin:0 0 14px">Ordered so that nothing later depends on a migration, and each session is worth having even if the next never happens.</p>
+
+<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+<div style="display:grid;grid-template-columns:30px 1fr;gap:13px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<span style="font-family:Georgia,serif;font-size:16pt;color:#b08a3e;line-height:1">01</span>
+<div style="font-size:10pt;line-height:1.5"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Language and the role-aware shell.</strong> The vendor/package/contract rename, and a nav that is reordered and re-rooted per role with nothing visible a role cannot use. No schema change. Biggest perceived improvement per hour of work, and it makes the trade login problem measurably better on its own.</div>
+</div>
+<div style="display:grid;grid-template-columns:30px 1fr;gap:13px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<span style="font-family:Georgia,serif;font-size:16pt;color:#b08a3e;line-height:1">02</span>
+<div style="font-size:10pt;line-height:1.5"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Money becomes one module, three tabs.</strong> Committed · Paid · Funded, with remaining-and-covered on every row. Read-only reshuffle of existing data — no numbers move.</div>
+</div>
+<div style="display:grid;grid-template-columns:30px 1fr;gap:13px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<span style="font-family:Georgia,serif;font-size:16pt;color:#b08a3e;line-height:1">03</span>
+<div style="font-size:10pt;line-height:1.5"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">The package page and the package list.</strong> Scope out of step 02 and onto the package. The seven-step flow stays as the path through an unbid package. This is the session that makes the seams disappear.</div>
+</div>
+<div style="display:grid;grid-template-columns:30px 1fr;gap:13px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<span style="font-family:Georgia,serif;font-size:16pt;color:#b08a3e;line-height:1">04</span>
+<div style="font-size:10pt;line-height:1.5"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">The phone, properly.</strong> The trade's single screen, the owner's approval queue, and the materials queue replacing the table. Three new views, no new data.</div>
+</div>
+<div style="display:grid;grid-template-columns:30px 1fr;gap:13px;background:#fffdf7;border:1px solid #ddd2bd;border-radius:3px;padding:13px 15px">
+<span style="font-family:Georgia,serif;font-size:16pt;color:#b08a3e;line-height:1">05</span>
+<div style="font-size:10pt;line-height:1.5"><strong style="font-family:Georgia,serif;font-size:12pt;color:#3a2f25">Notifications and the invite.</strong> One rule per channel, enforced in code. Magic-link invite with no password, landing the trade on their one screen. Retire the notifications that fail the test.</div>
+</div>
+</div>
+
+<div style="background:#e6ebdd;border:1px solid #ddd2bd;border-radius:3px;padding:14px 16px;margin-bottom:18px">
+<div style="font-size:9.5pt;letter-spacing:0.11em;text-transform:uppercase;color:#8f6f2e;margin-bottom:7px">What would change my mind</div>
+<div style="font-size:10pt;line-height:1.55">Three recommendations rest on assumptions I could not check without the running app. <strong>The package page</strong> assumes a package genuinely maps one-to-one onto a budget line and a Gantt bar; if one package routinely spans several lines, it becomes a grouping rather than a page. <strong>Folding Owners Funding into a tab</strong> assumes funding sources are few and change rarely. <strong>Deleting the room × trade matrix</strong> assumes it duplicates scope. Twenty minutes on the award → budget → draw path with real data settles all three.</div>
+</div>
+
+<div style="border-top:1px solid #ddd2bd;padding-top:14px;font-size:9.5pt;line-height:1.55;color:#7a6f60">
+Prototypes accompany this document: the recommended left nav in both structures, the builder's Today, the award → budget → draw chain on one package page, and three phone screens — a trade's whole world, the owner's approval queue, and materials as a queue. They are structural sketches in your existing palette, not a visual proposal.
+</div>
+
+</div>
+</doc-page>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}"></script>
+</body>
+</html>

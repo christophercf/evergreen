@@ -9,6 +9,9 @@ const base = (p: SVGProps<SVGSVGElement>) => ({
 export const ClipboardIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M9 4h6v3H9z" /><path d="M15 4h3a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3" /><path d="M8.5 12l2.2 2.2L15.5 9.5" /></svg>
 );
+export const HelpIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><circle cx="12" cy="12" r="9" /><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.3-2.6 4" /><path d="M12 17.3h.01" /></svg>
+);
 export const GearIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><circle cx="12" cy="12" r="3.2" /><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.5-2.4 1a7.7 7.7 0 0 0-2.6-1.5L14 2.5h-4L9.6 5a7.7 7.7 0 0 0-2.6 1.5l-2.4-1-2 3.5 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.5 2.4-1a7.7 7.7 0 0 0 2.6 1.5l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 2.6-1.5l2.4 1 2-3.5Z" /></svg>
 );

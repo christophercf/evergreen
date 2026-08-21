@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/styles.css">
+<script src="_ds/industry-85f4b614-dd5e-4dc8-be7c-5976c2e407c4/_ds_bundle.js"></script>
+</helmet>
+
+<div style="min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);display:flex;flex-direction:column">
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 22px;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+<div style="display:flex;align-items:baseline;gap:12px">
+<span style="font-family:var(--font-heading);font-size:19px;letter-spacing:-0.01em">Trade vendor management</span>
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-accent-700)">{{ rosterKicker }}</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="background:{{ deskBg }}" onClick="{{ goDesktop }}">Desktop</button>
+<button class="btn btn-secondary" style="background:{{ mobBg }}" onClick="{{ goMobile }}">Mobile lookup</button>
+</div>
+</div>
+
+<div style="flex:1;display:grid;grid-template-columns:222px 1fr">
+
+<div style="border-right:1px solid var(--color-divider);padding:20px 18px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;flex-direction:column;gap:7px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Roster</span>
+<sc-for list="{{ rosters }}" as="r" hint-placeholder-count="2">
+<button style="text-align:left;cursor:pointer;border:1px solid {{ r.border }};background:{{ r.bg }};padding:8px 10px;font:inherit;display:flex;flex-direction:column;gap:2px" onClick="{{ r.select }}">
+<span style="font-size:13px">{{ r.name }}</span>
+<span style="font-size:11px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ r.meta }}</span>
+</button>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px">
+<sc-for list="{{ nav }}" as="n" hint-placeholder-count="3">
+<button style="display:flex;gap:9px;align-items:baseline;text-align:left;cursor:pointer;border:0;padding:7px 8px;font:inherit;font-size:13px;background:{{ n.bg }};color:{{ n.color }}" onClick="{{ n.go }}">
+<span style="font-family:var(--font-heading);font-size:11px;letter-spacing:0.06em;color:var(--color-accent-700)">{{ n.no }}</span>
+<span>{{ n.title }}</span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top:auto;font-size:11.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 50%, transparent);border-top:1px solid var(--color-divider);padding-top:12px">Rosters stay separate. A vendor is shared to a project, not to another company's list — sharing never moves the record.</div>
+</div>
+
+<div style="padding:26px 28px 40px;min-width:0">
+
+<sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="393px,852px">
+<div style="height:100%;display:flex;flex-direction:column;background:var(--color-bg);font-family:var(--font-body)">
+<div style="padding:60px 18px 12px;border-bottom:1px solid var(--color-divider);display:flex;flex-direction:column;gap:10px">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">{{ rosterKicker }}</div>
+<div style="font-family:var(--font-heading);font-size:25px;line-height:1.1">Look up a trade</div>
+<input class="input" style="min-height:44px" placeholder="Company, trade or contact" value="{{ query }}" onChange="{{ onQuery }}">
+</div>
+<div style="flex:1;overflow:auto;padding:14px 18px 22px;display:flex;flex-direction:column;gap:10px">
+<sc-for list="{{ results }}" as="v" hint-placeholder-count="5">
+<div class="blueprint" style="padding:12px;display:flex;flex-direction:column;gap:7px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+<span style="font-family:var(--font-heading);font-size:17px;line-height:1.15">{{ v.co }}</span>
+<span style="font-size:12px;color:var(--color-accent-800)">{{ v.ratingLabel }}</span>
+</div>
+<span style="font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--color-accent-700)">{{ v.tradeLine }}</span>
+<span style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ v.person }} · {{ v.phone }}</span>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<span class="tag tag-outline" style="font-size:10.5px">{{ v.glTag }}</span>
+<span class="tag tag-outline" style="font-size:10.5px">{{ v.wcTag }}</span>
+</div>
+</div>
+</sc-for>
+</div>
+</div>
+</x-import>
+<div style="max-width:280px;display:flex;flex-direction:column;gap:12px">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">On the phone</div>
+<div style="font-size:13px;line-height:1.55;color:color-mix(in srgb, var(--color-text) 70%, transparent)">Lookup only: who covers this trade, who to call, and what dates are on file. Editing the record, adding vendors and sharing to a project happen on desktop.</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:20px;max-width:1180px">
+
+<sc-if value="{{ sc1 }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">{{ rosterName }}</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">{{ rosterSub }}</div>
+</div>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ toAdd }}">Add a vendor</button>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center">
+<input class="input" style="min-height:38px;max-width:320px" placeholder="Search company, trade or contact" value="{{ query }}" onChange="{{ onQuery }}">
+<div style="display:flex;align-items:center;gap:8px">
+<span style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Sort</span>
+<sc-for list="{{ sorts }}" as="s" hint-placeholder-count="3">
+<button class="btn btn-secondary" style="min-height:34px;font-size:12.5px;background:{{ s.bg }}" onClick="{{ s.select }}">{{ s.label }}</button>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap">
+<sc-for list="{{ tradeChips }}" as="t" hint-placeholder-count="9">
+<button class="tag" style="cursor:pointer;font:inherit;font-size:12px;min-height:32px;padding:0 11px;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }}" onClick="{{ t.select }}">{{ t.label }}</button>
+</sc-for>
+</div>
+</div>
+
+<div class="blueprint" style="padding:2px 0 0;overflow-x:auto">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<table class="table" style="width:100%;font-size:13px">
+<thead><tr>
+<th style="text-align:left">Company</th>
+<th style="text-align:left;width:180px">Trades</th>
+<th style="text-align:left;width:180px">Contact</th>
+<th style="text-align:left;width:84px">Rating</th>
+<th style="text-align:left;width:206px">Documents on file</th>
+<th style="text-align:left;width:146px">Last job</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ results }}" as="v" hint-placeholder-count="8">
+<tr style="cursor:pointer;background:{{ v.rowBg }}" onClick="{{ v.open }}">
+<td><span style="font-family:var(--font-heading);font-size:16px">{{ v.co }}</span><span style="display:block;font-size:11.5px;color:color-mix(in srgb, var(--color-text) 52%, transparent)">{{ v.city }} · {{ v.terms }}</span></td>
+<td style="font-size:12px">{{ v.tradeLine }}</td>
+<td style="font-size:12.5px">{{ v.person }}<span style="display:block;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ v.phone }}</span></td>
+<td><span style="font-family:var(--font-heading);font-size:15px;color:var(--color-accent-800)">{{ v.ratingLabel }}</span><span style="display:block;font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ v.jobsLabel }}</span></td>
+<td style="font-size:11.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 68%, transparent)">GL exp. {{ v.glShort }} · WC exp. {{ v.wcShort }}<span style="display:block">Lic. {{ v.licNo }} exp. {{ v.licShort }}</span></td>
+<td style="font-size:12px">{{ v.lastJob }}<span style="display:block;font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ v.lastJobDate }}</span></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<div style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ countLine }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc2 }}">
+<div style="display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div style="display:flex;flex-direction:column;gap:7px">
+<button class="btn btn-ghost" style="align-self:flex-start;font-size:12px;padding:0" onClick="{{ toRoster }}">← {{ rosterName }}</button>
+<div style="font-family:var(--font-heading);font-size:31px;line-height:1.05">{{ v.co }}</div>
+<div style="display:flex;gap:7px;flex-wrap:wrap">
+<sc-for list="{{ v.tradeTags }}" as="t" hint-placeholder-count="2">
+<span class="tag tag-accent" style="font-size:11.5px">{{ t.label }}</span>
+</sc-for>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:8px">
+<button class="btn btn-secondary" style="min-height:40px" onClick="{{ toRoster }}">Back to roster</button>
+<button class="btn btn-primary" style="min-height:40px" onClick="{{ shareToggle }}">{{ shareCta }}</button>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1.05fr 1fr;gap:18px;align-items:start">
+
+<div class="blueprint" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Contact</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;line-height:1.5">
+<div><div style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Primary</div>{{ v.person }}<div style="color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ v.phone }}<br>{{ v.email }}</div></div>
+<div><div style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Office</div>{{ v.city }}<div style="color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ v.address }}</div></div>
+</div>
+<div style="border-top:1px solid var(--color-divider);padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+<div><div style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Payment terms</div>{{ v.terms }}</div>
+<div><div style="font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Trades</div>{{ v.tradeLine }}</div>
+</div>
+</div>
+
+<div class="blueprint" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Insurance &amp; license on file</span>
+<span style="font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">Dates as supplied</span>
+</div>
+<sc-for list="{{ v.docs }}" as="d" hint-placeholder-count="3">
+<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;border-bottom:1px solid var(--color-divider);padding-bottom:8px">
+<div>
+<div style="font-size:13px">{{ d.label }}</div>
+<div style="font-size:11.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ d.detail }}</div>
+</div>
+<div style="text-align:right">
+<div style="font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent)">Expires</div>
+<div style="font-family:var(--font-heading);font-size:15px">{{ d.expires }}</div>
+</div>
+</div>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ v.docNote }}</div>
+</div>
+
+<div class="blueprint" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Internal rating &amp; notes</span>
+<div style="display:flex;align-items:center;gap:14px">
+<div style="display:flex;gap:5px">
+<sc-for list="{{ ratingDots }}" as="d" hint-placeholder-count="5">
+<button style="width:22px;height:22px;border:1px solid var(--color-accent-700);background:{{ d.fill }};cursor:pointer;padding:0" onClick="{{ d.set }}"></button>
+</sc-for>
+</div>
+<span style="font-family:var(--font-heading);font-size:20px">{{ v.ratingLabel }}</span>
+<span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ v.jobsLabel }}</span>
+</div>
+<div class="field"><label>Notes — internal, never shared</label>
+<textarea class="input" style="min-height:104px;line-height:1.5" placeholder="What the next person on this project needs to know." value="{{ noteText }}" onChange="{{ onNote }}"></textarea>
+</div>
+</div>
+
+<div class="blueprint" style="padding:15px 16px;display:flex;flex-direction:column;gap:12px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Shared to projects</span>
+<div style="font-size:12.5px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ shareNote }}</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<sc-for list="{{ projectShares }}" as="p" hint-placeholder-count="3">
+<button style="display:flex;align-items:center;gap:11px;text-align:left;cursor:pointer;font:inherit;padding:9px 11px;background:{{ p.bg }};border:1px solid {{ p.border }}" onClick="{{ p.toggle }}">
+<span style="width:17px;height:17px;border:1px solid var(--color-accent-700);flex:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--color-accent-800)">{{ p.mark }}</span>
+<span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+<span style="font-size:13px">{{ p.name }}</span>
+<span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ p.meta }}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</div>
+
+<div class="blueprint" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px;grid-column:span 2">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Past jobs &amp; bid history</span>
+<span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ v.winRate }}</span>
+</div>
+<table class="table" style="width:100%;font-size:12.5px">
+<thead><tr>
+<th style="text-align:left">Package</th>
+<th style="text-align:left;width:110px">Date</th>
+<th style="text-align:left;width:120px">Bid</th>
+<th style="text-align:left;width:120px">Outcome</th>
+<th style="text-align:left;width:210px">Note</th>
+</tr></thead>
+<tbody>
+<sc-for list="{{ v.history }}" as="j" hint-placeholder-count="4">
+<tr>
+<td>{{ j.pkg }}</td>
+<td>{{ j.date }}</td>
+<td style="font-family:var(--font-heading);font-size:14px">{{ j.amount }}</td>
+<td><span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:{{ j.color }}">{{ j.outcome }}</span></td>
+<td style="color:color-mix(in srgb, var(--color-text) 62%, transparent)">{{ j.note }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ sc3 }}">
+<div style="display:flex;flex-direction:column;gap:16px;max-width:840px">
+<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap">
+<div>
+<div style="font-family:var(--font-heading);font-size:27px;line-height:1.1">Add a vendor to {{ rosterName }}</div>
+<div style="font-size:13.5px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 62%, transparent);margin-top:5px">Enter what you know now. Insurance and license dates can come later, from you or from them.</div>
+</div>
+<button class="btn btn-secondary" style="min-height:40px" onClick="{{ toRoster }}">Cancel</button>
+</div>
+
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Company &amp; contact</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div class="field"><label>Company</label><input class="input" style="min-height:40px" placeholder="Legal or trading name" value="{{ nv.co }}" onChange="{{ onNewCo }}"></div>
+<div class="field"><label>City</label><input class="input" style="min-height:40px" placeholder="Austin, TX" value="{{ nv.city }}" onChange="{{ onNewCity }}"></div>
+<div class="field"><label>Primary contact</label><input class="input" style="min-height:40px" placeholder="Name" value="{{ nv.person }}" onChange="{{ onNewPerson }}"></div>
+<div class="field"><label>Phone</label><input class="input" style="min-height:40px" placeholder="(512) 555-0000" value="{{ nv.phone }}" onChange="{{ onNewPhone }}"></div>
+<div class="field"><label>Email</label><input class="input" style="min-height:40px" placeholder="name@company.com" value="{{ nv.email }}" onChange="{{ onNewEmail }}"></div>
+<div class="field"><label>Payment terms</label><input class="input" style="min-height:40px" placeholder="Net 30" value="{{ nv.terms }}" onChange="{{ onNewTerms }}"></div>
+</div>
+</div>
+
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">What can they work on?</span>
+<div style="display:flex;gap:7px;flex-wrap:wrap">
+<sc-for list="{{ newTrades }}" as="t" hint-placeholder-count="9">
+<button class="tag" style="cursor:pointer;font:inherit;font-size:12.5px;min-height:34px;padding:0 12px;background:{{ t.bg }};color:{{ t.fg }};border:1px solid {{ t.border }}" onClick="{{ t.toggle }}">{{ t.label }}</button>
+</sc-for>
+</div>
+<span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">{{ newTradeNote }}</span>
+</div>
+
+<div class="blueprint" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+<i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+<span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-accent-700)">Insurance &amp; license</span>
+<span style="font-size:11px;color:color-mix(in srgb, var(--color-text) 50%, transparent)">Optional now</span>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+<div class="field"><label>General liability expires</label><input class="input" type="date" style="min-height:40px" value="{{ nv.gl }}" onChange="{{ onNewGl }}"></div>
+<div class="field"><label>Workers' comp expires</label><input class="input" type="date" style="min-height:40px" value="{{ nv.wc }}" onChange="{{ onNewWc }}"></div>
+<div class="field"><label>License number</label><input class="input" style="min-height:40px" placeholder="TX-000000" value="{{ nv.licNo }}" onChange="{{ onNewLicNo }}"></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent)">How do the documents arrive?</span>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<sc-for list="{{ docRoutes }}" as="r" hint-placeholder-count="2">
+<button class="btn" style="min-height:54px;padding:8px 11px;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;background:{{ r.bg }};color:{{ r.fg }};border:1px solid {{ r.border }}" onClick="{{ r.select }}">
+<span style="font-family:var(--font-heading);font-size:14px">{{ r.label }}</span>
+<span style="font-family:var(--font-body);font-size:11px;line-height:1.3;opacity:.78;white-space:normal">{{ r.hint }}</span>
+</button>
+</sc-for>
+</div>
+</div>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+<span style="font-size:12px;line-height:1.45;color:color-mix(in srgb, var(--color-text) 55%, transparent);max-width:460px">{{ saveNote }}</span>
+<button class="btn" style="min-height:42px;background:{{ saveBg }};color:{{ saveFg }};border:1px solid {{ saveBorder }}" disabled="{{ saveDisabled }}" onClick="{{ saveVendor }}">{{ saveLabel }}</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</sc-if>
+
+</div>
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const NAV = [
+  { no: "01", title: "Roster" },
+  { no: "02", title: "Vendor profile" },
+  { no: "03", title: "Add a vendor" }
+];
+const ROSTERS = [
+  { key: "gc", name: "Whitfield Builders", meta: "GC roster · 42 vendors" },
+  { key: "owner", name: "Marlow Holdings", meta: "Owner roster · 11 vendors" }
+];
+const TRADES = ["Concrete & sitework", "Framing", "Masonry", "Roofing", "Electrical", "Plumbing", "HVAC", "Drywall & finishes", "Landscape"];
+const PROJECTS = [
+  { key: "marlow", name: "Marlow Street — rear addition", meta: "Bidding · masonry, framing" },
+  { key: "lamar", name: "Lamar duplex", meta: "In progress · shell complete" },
+  { key: "cedar", name: "Cedar Ridge — 6 units", meta: "Preconstruction" }
+];
+const DOC_ROUTES = [
+  { key: "gc", label: "We hold them", hint: "You upload the COI and license" },
+  { key: "vendor", label: "Ask the vendor", hint: "They get a link to upload and set dates" }
+];
+
+const VENDORS = [
+  {
+    id: "vega", roster: "gc", co: "Vega Masonry LLC", person: "Luis Vega", phone: "(512) 555-0142",
+    email: "luis@vegamasonry.com", city: "Austin, TX", address: "2210 E 6th St, Austin, TX 78702",
+    trades: ["Masonry", "Concrete & sitework"], rating: 4.5, jobs: 3, terms: "Net 30",
+    gl: "2027-03-14", glDetail: "Sentry Casualty · $2M / $1M · GL-4471902",
+    wc: "2026-11-30", wcDetail: "Texas Mutual · statutory · WC-88214",
+    licNo: "TX-118204", lic: "2027-01-31", licDetail: "State masonry registration",
+    lastJob: "Lamar duplex", lastJobDate: "Apr 2026", winRate: "2 of 3 bids won",
+    note: "Ran clean on the Lamar duplex; two days lost to rain, no claim. Foreman Ruben is the one to call.",
+    shared: ["marlow", "lamar"],
+    history: [
+      { pkg: "Marlow St — masonry", date: "Aug 2026", amount: "$55,800", outcome: "Bidding", note: "Filled the app form on site" },
+      { pkg: "Lamar duplex — masonry", date: "Apr 2026", amount: "$38,400", outcome: "Won", note: "Two-day rain overrun, no claim" },
+      { pkg: "Cedar Ridge — CMU", date: "Nov 2025", amount: "$91,200", outcome: "Lost", note: "Priced above Hill Country by 9%" }
+    ]
+  },
+  {
+    id: "hill", roster: "gc", co: "Hill Country Block Co.", person: "Dana Reyes", phone: "(512) 555-0187",
+    email: "dana@hcblock.com", city: "Dripping Springs, TX", address: "88 Ranch Rd 12, Dripping Springs, TX 78620",
+    trades: ["Masonry"], rating: 4.0, jobs: 5, terms: "Net 45",
+    gl: "2026-09-01", glDetail: "Cincinnati Ins. · $2M / $1M · GL-2210447",
+    wc: "2027-02-18", wcDetail: "Texas Mutual · statutory · WC-51190",
+    licNo: "TX-100392", lic: "2026-12-31", licDetail: "State masonry registration",
+    lastJob: "Cedar Ridge — CMU", lastJobDate: "Feb 2026", winRate: "3 of 5 bids won",
+    note: "Strong crew. Invoices creep on extras — hold the change order line and get every add in writing.",
+    shared: ["marlow", "cedar"],
+    history: [
+      { pkg: "Marlow St — masonry", date: "Aug 2026", amount: "$61,400", outcome: "Bidding", note: "Priced over the phone" },
+      { pkg: "Cedar Ridge — CMU", date: "Feb 2026", amount: "$88,600", outcome: "Won", note: "Three change orders on lintels" },
+      { pkg: "Lamar duplex — masonry", date: "Apr 2026", amount: "$41,900", outcome: "Lost", note: "Vega came in lower" }
+    ]
+  },
+  {
+    id: "ferro", roster: "gc", co: "Ferro & Sons Masonry", person: "Tony Ferro", phone: "(737) 555-0119",
+    email: "tony@ferrosons.com", city: "Round Rock, TX", address: "410 Commerce Dr, Round Rock, TX 78664",
+    trades: ["Masonry", "Concrete & sitework"], rating: 3.0, jobs: 2, terms: "Net 30",
+    gl: "2026-10-05", glDetail: "Nationwide · $1M / $1M · GL-7788120",
+    wc: "2026-10-05", wcDetail: "Texas Mutual · statutory · WC-33017",
+    licNo: "TX-140771", lic: "2027-06-30", licDetail: "State masonry registration",
+    lastJob: "Shoal Creek retaining", lastJobDate: "Sep 2025", winRate: "1 of 2 bids won",
+    note: "Workmanship fine, slow on RFIs. Prices time & materials by default — ask for lump sum in writing.",
+    shared: ["marlow"],
+    history: [
+      { pkg: "Marlow St — masonry", date: "Aug 2026", amount: "$47,200", outcome: "Bidding", note: "Uploaded own template, T&M" },
+      { pkg: "Shoal Creek retaining", date: "Sep 2025", amount: "$27,500", outcome: "Won", note: "Ran two weeks long" }
+    ]
+  },
+  {
+    id: "stone", roster: "gc", co: "Austin Stoneworks", person: "Priya Nair", phone: "(512) 555-0164",
+    email: "priya@austinstoneworks.com", city: "Austin, TX", address: "1500 S Congress Ave, Austin, TX 78704",
+    trades: ["Masonry"], rating: 0, jobs: 0, terms: "Net 30",
+    gl: "2027-05-22", glDetail: "Travelers · $2M / $2M · GL-9910238",
+    wc: "2027-05-22", wcDetail: "Texas Mutual · statutory · WC-77104",
+    licNo: "TX-152880", lic: "2028-02-28", licDetail: "State masonry registration",
+    lastJob: "—", lastJobDate: "No history", winRate: "First bid outstanding",
+    note: "First time bidding with us. Referred by the Cedar Ridge architect.",
+    shared: ["marlow"],
+    history: [
+      { pkg: "Marlow St — masonry", date: "Aug 2026", amount: "$52,900", outcome: "Bidding", note: "Emailed their own template" }
+    ]
+  },
+  {
+    id: "delgado", roster: "gc", co: "Delgado Concrete", person: "Ana Delgado", phone: "(737) 555-0155",
+    email: "ana@delgadoconcrete.com", city: "Pflugerville, TX", address: "77 Industry Way, Pflugerville, TX 78660",
+    trades: ["Concrete & sitework"], rating: 4.5, jobs: 7, terms: "Net 30",
+    gl: "2027-01-09", glDetail: "Sentry Casualty · $2M / $1M · GL-6620991",
+    wc: "2026-12-15", wcDetail: "Texas Mutual · statutory · WC-19983",
+    licNo: "TX-090114", lic: "2027-04-30", licDetail: "State contractor registration",
+    lastJob: "Marlow St — slab", lastJobDate: "Jun 2026", winRate: "5 of 7 bids won",
+    note: "Best slab crew we have. Books up eight weeks out — call early.",
+    shared: ["marlow", "lamar", "cedar"],
+    history: [
+      { pkg: "Marlow St — slab & drainage", date: "Jun 2026", amount: "$34,800", outcome: "Won", note: "On time, no punch items" },
+      { pkg: "Cedar Ridge — sitework", date: "Jan 2026", amount: "$122,400", outcome: "Won", note: "Rock excavation change order" }
+    ]
+  },
+  {
+    id: "bravo", roster: "gc", co: "Bravo Framing Co.", person: "Marcus Bell", phone: "(512) 555-0133",
+    email: "marcus@bravoframing.com", city: "Austin, TX", address: "3300 Airport Blvd, Austin, TX 78722",
+    trades: ["Framing", "Drywall & finishes"], rating: 4.0, jobs: 4, terms: "Net 30",
+    gl: "2026-08-29", glDetail: "Hartford · $1M / $1M · GL-4410772",
+    wc: "2027-03-03", wcDetail: "Texas Mutual · statutory · WC-60228",
+    licNo: "TX-133019", lic: "2027-09-30", licDetail: "State contractor registration",
+    lastJob: "Lamar duplex — framing", lastJobDate: "May 2026", winRate: "3 of 4 bids won",
+    note: "Tight framing, good layout. Their drywall sub is weaker than their carpenters.",
+    shared: ["lamar"],
+    history: [
+      { pkg: "Lamar duplex — framing", date: "May 2026", amount: "$76,300", outcome: "Won", note: "Two-day delay on trusses" },
+      { pkg: "Cedar Ridge — framing", date: "Mar 2026", amount: "$210,500", outcome: "Lost", note: "Capacity, withdrew" }
+    ]
+  },
+  {
+    id: "quill", roster: "gc", co: "Quill Electric", person: "Ray Quill", phone: "(512) 555-0121",
+    email: "ray@quillelectric.com", city: "Austin, TX", address: "620 W Oltorf St, Austin, TX 78704",
+    trades: ["Electrical"], rating: 5.0, jobs: 9, terms: "Net 15",
+    gl: "2027-07-01", glDetail: "Travelers · $2M / $2M · GL-1180334",
+    wc: "2027-07-01", wcDetail: "Texas Mutual · statutory · WC-40119",
+    licNo: "TX-EL-22890", lic: "2027-05-31", licDetail: "Master electrician license",
+    lastJob: "Marlow St — rough-in", lastJobDate: "Jul 2026", winRate: "7 of 9 bids won",
+    note: "Never had to chase them. Prices fairly, catches design gaps before they cost money.",
+    shared: ["marlow", "lamar", "cedar"],
+    history: [
+      { pkg: "Marlow St — electrical", date: "Jul 2026", amount: "$29,700", outcome: "Won", note: "Flagged panel undersizing early" },
+      { pkg: "Lamar duplex — electrical", date: "Feb 2026", amount: "$44,100", outcome: "Won", note: "Clean inspection first pass" }
+    ]
+  },
+  {
+    id: "trestle", roster: "gc", co: "Trestle Mechanical", person: "Jo Park", phone: "(737) 555-0198",
+    email: "jo@trestlemech.com", city: "Cedar Park, TX", address: "9 Anderson Mill Rd, Cedar Park, TX 78613",
+    trades: ["HVAC", "Plumbing"], rating: 3.5, jobs: 6, terms: "Net 30",
+    gl: "2026-09-20", glDetail: "Cincinnati Ins. · $1M / $1M · GL-5541028",
+    wc: "2026-09-20", wcDetail: "Texas Mutual · statutory · WC-71155",
+    licNo: "TX-M-40118", lic: "2027-08-31", licDetail: "Master plumber license",
+    lastJob: "Cedar Ridge — MEP", lastJobDate: "Mar 2026", winRate: "4 of 6 bids won",
+    note: "Fine on plumbing, thin on HVAC commissioning. Ask who is actually doing the balance report.",
+    shared: ["cedar"],
+    history: [
+      { pkg: "Cedar Ridge — MEP", date: "Mar 2026", amount: "$188,900", outcome: "Won", note: "Commissioning ran late" },
+      { pkg: "Lamar duplex — plumbing", date: "Jan 2026", amount: "$51,200", outcome: "Won", note: "No issues" }
+    ]
+  },
+  {
+    id: "northline", roster: "gc", co: "Northline Roofing", person: "Sam Ortiz", phone: "(512) 555-0176",
+    email: "sam@northlineroof.com", city: "Georgetown, TX", address: "44 Leander Rd, Georgetown, TX 78628",
+    trades: ["Roofing"], rating: 4.0, jobs: 3, terms: "Net 30",
+    gl: "2027-04-11", glDetail: "Nationwide · $2M / $1M · GL-3390120",
+    wc: "2026-10-31", wcDetail: "Texas Mutual · statutory · WC-28840",
+    licNo: "TX-127740", lic: "2027-03-31", licDetail: "State contractor registration",
+    lastJob: "Lamar duplex — roof", lastJobDate: "Jun 2026", winRate: "2 of 3 bids won",
+    note: "Good standing-seam work. Only two crews, so schedule slips when it rains for a week.",
+    shared: ["lamar"],
+    history: [
+      { pkg: "Lamar duplex — roofing", date: "Jun 2026", amount: "$62,800", outcome: "Won", note: "Standing seam, clean detail" }
+    ]
+  },
+  {
+    id: "sundry", roster: "owner", co: "Sundry Interiors", person: "Kim Vo", phone: "(512) 555-0109",
+    email: "kim@sundryinteriors.com", city: "Austin, TX", address: "1201 W 5th St, Austin, TX 78703",
+    trades: ["Drywall & finishes", "Framing"], rating: 4.5, jobs: 2, terms: "Net 30",
+    gl: "2027-02-02", glDetail: "Hartford · $1M / $1M · GL-8812004",
+    wc: "2027-02-02", wcDetail: "Texas Mutual · statutory · WC-90021",
+    licNo: "TX-149002", lic: "2027-11-30", licDetail: "State contractor registration",
+    lastJob: "Owner's office fitout", lastJobDate: "Dec 2025", winRate: "2 of 2 bids won",
+    note: "Owner's preferred finisher. Brought in by Marlow Holdings, shared to projects on request.",
+    shared: ["marlow"],
+    history: [
+      { pkg: "Owner office fitout", date: "Dec 2025", amount: "$48,600", outcome: "Won", note: "Owner-directed award" }
+    ]
+  },
+  {
+    id: "verde", roster: "owner", co: "Verde Landscape", person: "Elena Cruz", phone: "(512) 555-0188",
+    email: "elena@verdeland.com", city: "Austin, TX", address: "700 Barton Springs Rd, Austin, TX 78704",
+    trades: ["Landscape"], rating: 4.0, jobs: 1, terms: "Net 30",
+    gl: "2026-12-01", glDetail: "Travelers · $1M / $1M · GL-2201889",
+    wc: "2026-12-01", wcDetail: "Texas Mutual · statutory · WC-11209",
+    licNo: "—", lic: "", licDetail: "No license required for scope",
+    lastJob: "Marlow St — planting", lastJobDate: "Aug 2026", winRate: "1 of 1 bids won",
+    note: "Owner's landscape architect works with them directly. Coordinate irrigation with the plumber.",
+    shared: ["marlow"],
+    history: [
+      { pkg: "Marlow St — planting", date: "Aug 2026", amount: "$18,300", outcome: "Won", note: "Owner-directed award" }
+    ]
+  }
+];
+
+const fmt = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" });
+};
+const short = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+};
+
+class Component extends DCLogic {
+  state = {
+    device: "desktop",
+    screen: 0,
+    roster: "gc",
+    query: "",
+    trade: "All trades",
+    sort: "az",
+    openId: "vega",
+    ratings: {},
+    notes: {},
+    shares: {},
+    nv: { co: "", city: "", person: "", phone: "", email: "", terms: "", gl: "", wc: "", licNo: "", trades: [] },
+    docRoute: "vendor",
+    saved: false
+  };
+
+  vendor(id) { return VENDORS.filter((v) => v.id === id)[0]; }
+  ratingOf(v) { const r = this.state.ratings[v.id]; return r === undefined ? v.rating : r; }
+  sharesOf(v) { const s = this.state.shares[v.id]; return s === undefined ? v.shared : s; }
+
+  renderVals() {
+    const s = this.state;
+    const tint = "var(--color-accent-100)";
+    const accent = "var(--color-accent-200)";
+    const roster = ROSTERS.filter((r) => r.key === s.roster)[0];
+    const q = s.query.trim().toLowerCase();
+
+    let list = VENDORS.filter((v) => v.roster === s.roster);
+    if (s.trade !== "All trades") list = list.filter((v) => v.trades.indexOf(s.trade) > -1);
+    if (q) list = list.filter((v) =>
+      (v.co + " " + v.person + " " + v.trades.join(" ") + " " + v.city).toLowerCase().indexOf(q) > -1);
+    if (s.sort === "az") list = list.slice().sort((a, b) => a.co.localeCompare(b.co));
+    if (s.sort === "rating") list = list.slice().sort((a, b) => this.ratingOf(b) - this.ratingOf(a));
+    if (s.sort === "recent") list = list.slice().sort((a, b) => (b.jobs || 0) - (a.jobs || 0));
+
+    const rowOf = (v) => {
+      const rating = this.ratingOf(v);
+      return {
+        co: v.co, person: v.person, phone: v.phone, city: v.city, terms: v.terms,
+        tradeLine: v.trades.join(" · "),
+        ratingLabel: rating ? rating.toFixed(1) + " / 5" : "New",
+        jobsLabel: v.jobs ? v.jobs + " jobs" : "no history",
+        glShort: short(v.gl), wcShort: short(v.wc), licShort: short(v.lic), licNo: v.licNo,
+        glTag: "GL to " + short(v.gl), wcTag: "WC to " + short(v.wc),
+        lastJob: v.lastJob, lastJobDate: v.lastJobDate,
+        rowBg: s.openId === v.id ? tint : "transparent",
+        open: () => this.setState({ openId: v.id, screen: 1 })
+      };
+    };
+
+    const v = this.vendor(s.openId) || VENDORS[0];
+    const rating = this.ratingOf(v);
+    const shares = this.sharesOf(v);
+    const noteText = s.notes[v.id] === undefined ? v.note : s.notes[v.id];
+    const nv = s.nv;
+    const ready = nv.co.trim() && nv.person.trim() && nv.trades.length > 0;
+
+    return {
+      isDesktop: s.device === "desktop",
+      isMobile: s.device === "mobile",
+      deskBg: s.device === "desktop" ? accent : "transparent",
+      mobBg: s.device === "mobile" ? accent : "transparent",
+      goDesktop: () => this.setState({ device: "desktop" }),
+      goMobile: () => this.setState({ device: "mobile" }),
+
+      rosterKicker: roster.key === "gc" ? "GC roster" : "Owner roster",
+      rosterName: roster.name,
+      rosterSub: list.length + " of " + VENDORS.filter((x) => x.roster === s.roster).length +
+        " vendors shown · " + (s.trade === "All trades" ? "all trades" : s.trade),
+      rosters: ROSTERS.map((r) => ({
+        name: r.name, meta: r.meta,
+        bg: s.roster === r.key ? tint : "transparent",
+        border: s.roster === r.key ? "var(--color-accent-700)" : "var(--color-divider)",
+        select: () => this.setState({ roster: r.key, screen: 0, query: "", trade: "All trades" })
+      })),
+      nav: NAV.map((n, i) => ({
+        no: n.no, title: n.title,
+        bg: i === s.screen ? tint : "transparent",
+        color: i === s.screen ? "var(--color-text)" : "color-mix(in srgb, var(--color-text) 55%, transparent)",
+        go: () => this.setState({ screen: i })
+      })),
+      sc1: s.screen === 0, sc2: s.screen === 1, sc3: s.screen === 2,
+      toRoster: () => this.setState({ screen: 0 }),
+      toAdd: () => this.setState({ screen: 2, saved: false }),
+
+      query: s.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      results: list.map(rowOf),
+      countLine: list.length === 1 ? "1 vendor" : list.length + " vendors · click a row for the full record",
+      tradeChips: ["All trades"].concat(TRADES).map((t) => {
+        const on = s.trade === t;
+        return {
+          label: t,
+          bg: on ? "var(--color-accent-700)" : "transparent",
+          fg: on ? "var(--color-bg)" : "var(--color-text)",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          select: () => this.setState({ trade: t })
+        };
+      }),
+      sorts: [
+        { key: "az", label: "A–Z" },
+        { key: "rating", label: "Rating" },
+        { key: "recent", label: "Most used" }
+      ].map((o) => ({
+        label: o.label,
+        bg: s.sort === o.key ? accent : "transparent",
+        select: () => this.setState({ sort: o.key })
+      })),
+
+      v: {
+        co: v.co, person: v.person, phone: v.phone, email: v.email, city: v.city, address: v.address,
+        terms: v.terms, tradeLine: v.trades.join(" · "),
+        tradeTags: v.trades.map((t) => ({ label: t })),
+        ratingLabel: rating ? rating.toFixed(1) + " / 5" : "Not rated",
+        jobsLabel: v.jobs ? v.jobs + " jobs with us" : "no history yet",
+        winRate: v.winRate,
+        docNote: "Documents are stored as supplied — this roster records dates, it does not judge them.",
+        docs: [
+          { label: "General liability", detail: v.glDetail, expires: fmt(v.gl) },
+          { label: "Workers' compensation", detail: v.wcDetail, expires: fmt(v.wc) },
+          { label: "License · " + v.licNo, detail: v.licDetail, expires: fmt(v.lic) }
+        ],
+        history: v.history.map((j) => ({
+          pkg: j.pkg, date: j.date, amount: j.amount, outcome: j.outcome, note: j.note,
+          color: j.outcome === "Won" ? "var(--color-accent-800)" : "color-mix(in srgb, var(--color-text) 55%, transparent)"
+        }))
+      },
+      ratingDots: [1, 2, 3, 4, 5].map((n) => ({
+        fill: rating >= n ? "var(--color-accent-700)" : "transparent",
+        set: () => this.setState((st) => ({ ratings: Object.assign({}, st.ratings, { [v.id]: n }) }))
+      })),
+      noteText: noteText,
+      onNote: (e) => this.setState((st) => ({ notes: Object.assign({}, st.notes, { [v.id]: e.target.value }) })),
+
+      projectShares: PROJECTS.map((p) => {
+        const on = shares.indexOf(p.key) > -1;
+        return {
+          name: p.name, meta: p.meta, mark: on ? "✕" : "",
+          bg: on ? tint : "transparent",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          toggle: () => this.setState((st) => {
+            const cur = st.shares[v.id] === undefined ? v.shared : st.shares[v.id];
+            const next = cur.indexOf(p.key) > -1 ? cur.filter((x) => x !== p.key) : cur.concat([p.key]);
+            return { shares: Object.assign({}, st.shares, { [v.id]: next }) };
+          })
+        };
+      }),
+      shareNote: shares.length
+        ? "Shared to " + shares.length + " of " + PROJECTS.length + " projects. The other party sees the record on those projects only — contact, trades and document dates, never your rating or notes."
+        : "Not shared. This vendor is visible to your team only.",
+      shareCta: shares.length ? "Sharing on " + shares.length + " projects" : "Share to a project",
+      shareToggle: () => this.setState((st) => {
+        const cur = st.shares[v.id] === undefined ? v.shared : st.shares[v.id];
+        const next = cur.length ? [] : PROJECTS.map((p) => p.key);
+        return { shares: Object.assign({}, st.shares, { [v.id]: next }) };
+      }),
+
+      nv: nv,
+      onNewCo: (e) => this.setNv("co", e.target.value),
+      onNewCity: (e) => this.setNv("city", e.target.value),
+      onNewPerson: (e) => this.setNv("person", e.target.value),
+      onNewPhone: (e) => this.setNv("phone", e.target.value),
+      onNewEmail: (e) => this.setNv("email", e.target.value),
+      onNewTerms: (e) => this.setNv("terms", e.target.value),
+      onNewGl: (e) => this.setNv("gl", e.target.value),
+      onNewWc: (e) => this.setNv("wc", e.target.value),
+      onNewLicNo: (e) => this.setNv("licNo", e.target.value),
+      newTrades: TRADES.map((t) => {
+        const on = nv.trades.indexOf(t) > -1;
+        return {
+          label: t,
+          bg: on ? "var(--color-accent-700)" : "transparent",
+          fg: on ? "var(--color-bg)" : "var(--color-text)",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          toggle: () => this.setState((st) => {
+            const cur = st.nv.trades;
+            const next = cur.indexOf(t) > -1 ? cur.filter((x) => x !== t) : cur.concat([t]);
+            return { nv: Object.assign({}, st.nv, { trades: next }) };
+          })
+        };
+      }),
+      newTradeNote: nv.trades.length
+        ? nv.trades.length + " selected — they will appear in every one of those trade lists when a package goes out."
+        : "Pick at least one. This is what decides which packages they show up for.",
+      docRoutes: DOC_ROUTES.map((r) => {
+        const on = s.docRoute === r.key;
+        return {
+          label: r.label, hint: r.hint,
+          bg: on ? "var(--color-accent-700)" : "transparent",
+          fg: on ? "var(--color-bg)" : "var(--color-text)",
+          border: on ? "var(--color-accent-700)" : "var(--color-divider)",
+          select: () => this.setState({ docRoute: r.key })
+        };
+      }),
+      saveLabel: s.saved ? "Added to " + roster.name : ready ? "Add to roster" : "Company, contact and one trade required",
+      saveDisabled: !ready,
+      saveBg: ready ? "var(--color-accent)" : "transparent",
+      saveFg: ready ? "var(--color-bg)" : "color-mix(in srgb, var(--color-text) 55%, transparent)",
+      saveBorder: ready ? "var(--color-accent)" : "var(--color-divider)",
+      saveNote: s.docRoute === "vendor"
+        ? "The vendor gets a link to upload their COI and license and set the expiry dates themselves. You can enter dates now and let them replace the documents later."
+        : "You hold the documents. Enter the dates you have; anything blank stays blank until someone fills it.",
+      saveVendor: () => { if (ready) this.setState({ saved: true }); }
+    };
+  }
+
+  setNv(k, val) { this.setState((st) => ({ nv: Object.assign({}, st.nv, { [k]: val }) })); }
+}
+
+</script>
+</body>
+</html>
