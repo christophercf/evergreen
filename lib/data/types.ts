@@ -340,8 +340,51 @@ export interface VendorSig {
 
 // Per-trade vendor agreement, signed in two rounds:
 //  round1 = scope + total cost; round2 = draw schedule + start/finish dates.
+/** One revision pushed onto a live contract by an approved change order. The
+ *  original is never rewritten — a contract that quietly changes after signing
+ *  is not a contract. Each revision is an amendment with its own signatures. */
+export interface ContractRevision {
+  id: string;
+  at: string;
+  by: string;
+  changeOrderId: string;
+  exhibit: string;
+  title: string;
+  /** Signed delta: positive for a change order, negative for a saving. */
+  delta: number;
+  /** The contract's new total, cost before fee. */
+  newAmount: number;
+}
+
+/** The contract an award creates: a frozen summary of what was awarded plus the
+ *  terms in force, between the vendor and whoever contracts with them. Frozen
+ *  because the budget line keeps moving and a signed document must not. */
+export interface IssuedContract {
+  packageId?: string;
+  lineId?: string;
+  vendorName: string;
+  /** Awarded cost before the builder's fee. */
+  amount: number;
+  materialsCost?: number;
+  laborCost?: number;
+  workingDays?: number;
+  crewSize?: number;
+  pricingBasis?: string;
+  /** Who the vendor is contracting with — the GC, or the homeowner direct. */
+  counterparty: "builder" | "owner";
+  /** Scope as it read at issue, so the signed document does not drift. */
+  scope: string;
+  rooms: string[];
+  exclusions?: string;
+  issuedAt: string;
+  issuedBy: string;
+  revisions?: ContractRevision[];
+}
+
 export interface VendorAgreement {
   tradeId: string;
+  /** Created by awarding a bid. Its presence is what "under contract" means. */
+  contract?: IssuedContract;
   /** Vendor's requested draw parameters — advises the builder's draw plan. */
   drawRequest?: string;
   startDate?: string;

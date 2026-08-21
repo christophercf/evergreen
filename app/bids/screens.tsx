@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/types";
 import { tradeName } from "@/lib/data/money";
 import { storeFile, fileToBase64Payload } from "../ui/upload";
+import { ContractCard } from "./contract-card";
 import {
   Kicker, ScreenHead, Tag, Tile, Triage, contactOf, flagsFor, materialsPolicy, money, num, useNarrow, vendorReview,
   type TriageRow,
@@ -406,8 +407,17 @@ export function AwardScreen({ p, ro, onBack }: { p: BidPackage; ro: boolean; onB
   const cheapest = priced.length ? priced.reduce((a, b) => (b.amount! < a.amount! ? b : a)) : undefined;
   const cheapestFlags = cheapest ? flagsFor(p, cheapest) : [];
 
+  // Awarding is not the end of the flow: the decision has to become a document
+  // before anything can be drawn against it. Highlighting the contract card is
+  // what turns "awarded" into "now create the contract".
+  const [justAwarded, setJustAwarded] = useState(false);
   const award = (b: VendorBid) => {
-    if (confirm(`Award ${b.vendorName} at ${money(b.amount)}? This locks the price into Budget Management.`)) store.awardBid(p.id, b.id);
+    if (confirm(`Award ${b.vendorName} at ${money(b.amount)}?
+
+This locks the price into Budget Management and creates the contract to be signed.`)) {
+      store.awardBid(p.id, b.id);
+      setJustAwarded(true);
+    }
   };
 
   const head = (
@@ -485,6 +495,7 @@ export function AwardScreen({ p, ro, onBack }: { p: BidPackage; ro: boolean; onB
           )}
           {awarded && !ro && <ToTiming p={p} b={awarded} />}
         </div>
+        {awarded ? <ContractCard p={p} ro={ro} highlight={justAwarded} /> : null}
       </div>
     </>
   );

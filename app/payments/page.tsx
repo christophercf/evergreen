@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { accessFor, DRAW_STATUS_LABEL, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
-import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid, isLocked } from "@/lib/data/money";
+import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid } from "@/lib/data/money";
+import { lineContractState, lineDrawable, contractMissingSigs } from "@/lib/data/contract";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
@@ -26,7 +27,7 @@ export default function PaymentsPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "payments");
   const [dragLine, setDragLine] = useState<string | null>(null);
-  if (access === "none") return <NoAccess module="Budget Management" />;
+  if (access === "none") return <NoAccess module="Draw Management" />;
   const ro = access !== "edit";
 
   const t = totals(db.costLines);
@@ -49,7 +50,7 @@ export default function PaymentsPage() {
   return (
     <>
       <PageHeader
-        title="Budget Management"
+        title="Draw Management"
         subtitle="What has actually left. Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then send it to the client. A draw runs Saved → Client approved → Client paid, and paid draws move to the archive; the budget on the left tracks total → drawn → remaining live."
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
@@ -66,7 +67,7 @@ export default function PaymentsPage() {
         <div>
           <SectionTitle>Budget</SectionTitle>
           <div className="card" style={{ padding: 10, maxHeight: "74vh", overflow: "auto" }}>
-            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "Only 🔒 locked lines can be drawn. Drag a locked line into a draw → · click to see its scope."}</div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "A line opens up once its contract is signed. Drag one into a draw → · click to see its scope."}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {lines.map((l) => <BudgetLine key={l.id} line={l} ro={ro} dragLine={dragLine} setDragLine={setDragLine} />)}
             </div>
@@ -106,8 +107,15 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
   const allocUnpaid = Math.max(0, drawn - paid); // allocated to a draw but not yet paid
   const unpaidLeft = lineUnpaid(db, line);
   const scope = lineScope(db, line);
-  const locked = isLocked(line);
-  const canDrag = locked && !ro;
+  // A line opens up to be drawn against when the contract behind it is signed
+  // — not when a price is typed in. The lock is the price; the signature is the
+  // agreement, and only one of those is a promise to pay.
+  const cstate = lineContractState(db, line);
+  const drawable = lineDrawable(db, line);
+  const canDrag = drawable && !ro;
+  const waiting = cstate === "issued" && !drawable
+    ? `Contract issued — waiting on ${contractMissingSigs(db, line.tradeId).map((p) => p === "trade" ? "the vendor" : p === "owner" ? "the homeowner" : "the GC").join(" and ")} to sign.`
+    : null;
   const [hover, setHover] = useState(false);
 
   return (
@@ -115,23 +123,26 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
       draggable={canDrag}
       onDragStart={(e) => { if (!canDrag) { e.preventDefault(); return; } e.dataTransfer.setData("text/plain", line.id); setDragLine(line.id); }}
       onDragEnd={() => setDragLine(null)}
-      onMouseEnter={() => !locked && setHover(true)}
+      onMouseEnter={() => !drawable && setHover(true)}
       onMouseLeave={() => setHover(false)}
-      title={!locked && !ro ? "🔒 Lock in pricing with this vendor before assigning a draw (Budget Management → Lock cost)." : undefined}
+      title={!drawable && !ro ? (waiting ?? "Award this work and get the contract signed before drawing against it.") : undefined}
       className="card"
-      style={{ position: "relative", padding: "8px 10px", cursor: canDrag ? "grab" : (locked ? "default" : "not-allowed"), opacity: dragLine === line.id ? 0.5 : locked ? 1 : 0.62, background: "var(--paper)", borderLeft: locked ? "3px solid var(--ok)" : "3px solid var(--line)" }}>
-      {/* floating note for non-locked lines */}
-      {!locked && hover && !ro && (
+      style={{ position: "relative", padding: "8px 10px", cursor: canDrag ? "grab" : (drawable ? "default" : "not-allowed"), opacity: dragLine === line.id ? 0.5 : drawable ? 1 : 0.62, background: "var(--paper)", borderLeft: `3px solid ${drawable ? "var(--ok)" : cstate === "issued" ? "var(--brass)" : "var(--line)"}` }}>
+      {/* Why this line can't be dragged yet — said where the hand already is. */}
+      {!drawable && hover && !ro && (
         <div style={{ position: "absolute", left: 8, right: 8, bottom: "100%", marginBottom: 4, zIndex: 5, background: "var(--walnut)", color: "#fff", fontSize: 11.5, padding: "6px 9px", borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
-          🔒 Lock in pricing with this vendor before assigning a draw.
-          <Link href="/costs" style={{ color: "#ffe6b8", marginLeft: 6, fontWeight: 600 }}>Lock it →</Link>
+          {waiting ?? "No contract yet — award the work in Bid and Package Management."}
+          <Link href={waiting ? "/vendors" : "/bids"} style={{ color: "#ffe6b8", marginLeft: 6, fontWeight: 600 }}>{waiting ? "Sign it →" : "Open packages →"}</Link>
         </div>
       )}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         {canDrag && <span style={{ color: "var(--muted)", fontSize: 13 }}>⋮⋮</span>}
         <button onClick={() => setOpen((v) => !v)} title="Show scope" style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 11, padding: 0 }}>{open ? "▾" : "▸"}</button>
         <span style={{ fontWeight: 600, fontSize: 12.5, flex: 1 }}>{line.name}</span>
-        {locked ? <Pill color="#fff" bg="var(--ok)">🔒 Locked</Pill> : <Pill color="var(--muted)">not locked</Pill>}
+        {cstate === "signed" || drawable
+          ? <Pill color="#fff" bg="var(--ok)">{cstate === "signed" ? "Contract signed" : "Contract issued"}</Pill>
+          : cstate === "issued" ? <Pill color="#fff" bg="var(--brass)">Contract issued</Pill>
+          : <Pill color="var(--muted)">No contract</Pill>}
       </div>
       <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36, flexWrap: "wrap" }}>
         <span>Total <strong style={{ color: "var(--ink)" }}>{fmt(total)}</strong></span>

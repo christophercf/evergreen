@@ -6,6 +6,7 @@ import { accessFor, type CostOwner, type MacroCategory } from "@/lib/data/types"
 import { fmt, romRows, romTotals, romCanLock, type RomRow, macroOrder } from "@/lib/data/money";
 import { Pill, StatCard, TextInput, NumInput } from "../ui/bits";
 import { ChangeOrders } from "./line-parts";
+import { contractState, lineContractState, CONTRACT_STATE_LABEL } from "@/lib/data/contract";
 
 // ---------------------------------------------------------------------------
 // Budget lines.
@@ -179,7 +180,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
           bg={r.state === "active" ? (r.lockedCount > 0 ? "var(--sage-tint)" : undefined) : CELL_BG[r.state]}
           title={r.state === "removed" ? "Removed — counts towards nothing"
             : r.state === "hold" ? "On hold"
-            : r.lockedCount > 0 ? `Under contract${r.lockedCount < r.lines.length ? ` — ${r.lockedCount} of ${r.lines.length} lines` : ""}` : "Not yet contracted"} />
+            : r.lockedCount > 0 ? `${CONTRACT_STATE_LABEL[contractState(db, r.tradeId) === "none" ? "issued" : contractState(db, r.tradeId)]}${r.lockedCount < r.lines.length ? ` — ${r.lockedCount} of ${r.lines.length} lines` : ""}` : "No contract yet"} />
         <Num v={r.changeOrders} />
         <Num v={r.builderFee} />
         <Num v={r.total} bold />
@@ -270,7 +271,9 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                       </>
                     ) : (
                       <>
-                        <Pill color="#fff" bg={l.locked ? "var(--sage)" : "var(--cream-2)"}>{l.locked ? "under contract" : "not contracted"}</Pill>
+                        <Pill color="#fff" bg={lineContractState(db, l) === "signed" ? "var(--ok)" : l.locked ? "var(--sage)" : "var(--cream-2)"}>
+                          {CONTRACT_STATE_LABEL[lineContractState(db, l)]}
+                        </Pill>
                         <span style={{ color: MUTED }}>{l.lockedCost ? fmt(l.lockedCost) : "—"}</span>
                       </>
                     )}

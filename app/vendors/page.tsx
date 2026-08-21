@@ -7,6 +7,7 @@ import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
 import { accessFor, DRAW_STATUS_LABEL, isOwnerManaged, type ContactSheet, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
 import { renderTerms } from "@/lib/data/terms";
+import { contractOf, contractAmount, renderContract } from "@/lib/data/contract";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
 import { jsPDF } from "jspdf";
 
@@ -168,6 +169,9 @@ function VendorCard({ tradeId }: { tradeId: string }) {
   // The other party isn't an approver and doesn't co-sign.
   const ownerManaged = isOwnerManaged(db.trades.find((t) => t.id === tradeId));
   const manager: "builder" | "owner" = ownerManaged ? "owner" : "builder";
+  // The contract an award created, if there is one. Signing Round 1 is signing
+  // this document — the sum here is the contract's, amendments included.
+  const issued = contractOf(db, tradeId);
   const canManagerSign = role === manager || role === "full_admin";
   const canTradeSign = isAssignedTrade || role === "full_admin";
   const canEditRequest = !ro || isAssignedTrade;
@@ -263,10 +267,32 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <strong style={{ fontSize: 13 }}>Round 1 — Scope &amp; Total Cost</strong>
           {r1Done && <Pill color="#fff" bg="var(--ok)">executed</Pill>}
+          {issued && !r1Done ? <Pill color="#fff" bg="var(--brass)">Contract issued</Pill> : null}
         </div>
-        <p style={{ fontSize: 12.5, margin: "6px 0", color: "var(--muted)" }}>
-          Vendor agrees to the scope above{canSeeCosts ? <> for a total of <strong style={{ color: "var(--ink)" }}>{fmt(cost)}</strong></> : null}. Terms &amp; conditions apply.
-        </p>
+        {issued ? (
+          <>
+            {/* The document itself, not a description of it. What the award froze
+                is what the signature lands on. */}
+            <p style={{ fontSize: 12.5, margin: "6px 0", color: "var(--muted)" }}>
+              Awarded to <strong style={{ color: "var(--ink)" }}>{issued.vendorName}</strong>, issued {issued.issuedAt} by {issued.issuedBy}
+              {canSeeCosts ? <> at <strong style={{ color: "var(--ink)" }}>{fmt(contractAmount(issued))}</strong></> : null}
+              {(issued.revisions ?? []).length ? ` · ${issued.revisions!.length} amendment${issued.revisions!.length === 1 ? "" : "s"}` : ""}.
+            </p>
+            {(issued.revisions ?? []).map((rv) => (
+              <div key={rv.id} style={{ fontSize: 11.5, color: "var(--brass-2)" }}>
+                {rv.exhibit} — {rv.title}: {rv.delta < 0 ? "−" : "+"}{fmt(Math.abs(rv.delta))} → {fmt(rv.newAmount)} ({rv.at})
+              </div>
+            ))}
+            <details style={{ fontSize: 12, color: "var(--muted)", marginTop: 6 }}>
+              <summary style={{ cursor: "pointer" }}>Read the contract</summary>
+              <pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{renderContract(db, tradeId, issued)}</pre>
+            </details>
+          </>
+        ) : (
+          <p style={{ fontSize: 12.5, margin: "6px 0", color: "var(--muted)" }}>
+            Vendor agrees to the scope above{canSeeCosts ? <> for a total of <strong style={{ color: "var(--ink)" }}>{fmt(cost)}</strong></> : null}. Terms &amp; conditions apply.
+          </p>
+        )}
         <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Full terms &amp; conditions</summary><pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{terms}</pre></details>
         <BindingBlock canEdit={canManagerSign && !ro} />
         <SignRow round={1} agreement={agreement} parties={[manager, "trade"]} canManager={canManagerSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />

@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { BID_REQ_DEFAULT } from "./types";
 import { buildDB } from "./seed";
+import { contractFromAward } from "./contract";
 import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage, categoryUsage, MACRO_ORDER, MACRO_COLOR } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
@@ -686,13 +687,18 @@ class Store {
   }
 
   // ---- Change orders (contract exhibits) ----
-  addChangeOrder(lineId: string, co: Omit<ChangeOrder, "id" | "exhibit">) {
+  /** Returns the new change order's id so the caller can carry it straight
+   *  onto the contract without hunting for it again. */
+  addChangeOrder(lineId: string, co: Omit<ChangeOrder, "id" | "exhibit">): string | undefined {
+    let out: string | undefined;
     this.mutate((db) => {
       const l = db.costLines.find((x) => x.id === lineId);
       if (!l) return;
       const exhibit = `Exhibit ${String.fromCharCode(65 + l.changeOrders.length)}`;
-      l.changeOrders.push({ id: newId("co"), exhibit, ...co });
+      out = newId("co");
+      l.changeOrders.push({ id: out, exhibit, ...co });
     });
+    return out;
   }
   updateChangeOrder(lineId: string, coId: string, patch: Partial<ChangeOrder>) {
     this.mutate((db) => {
@@ -769,27 +775,13 @@ class Store {
         d.approvedBy = this.session.displayName; // who recorded it
         d.approvedDate = today;
         d.pushedDate = d.pushedDate ?? today;
-        this.issueDrawContracts(db, d);
+        this.notify(db, { toRole: "builder", kind: "info", message: `✓ "${d.name}" is client-approved — ready to be paid.` });
       }
       if (status === "paid") d.paidDate = d.paidDate ?? today;
       if (status === "planned") { d.approvedBy = undefined; d.approvedDate = undefined; }
     }, status === "pushed" ? "Approved draw" : status === "paid" ? "Marked draw paid" : "Draw back to saved");
   }
 
-  /** The client's approval is what puts the trades in a draw under contract —
-   *  this is the same moment the old "push" was, under the name the job
-   *  actually uses for it. */
-  private issueDrawContracts(db: DB, d: Draw) {
-    const byName = this.session.displayName;
-    const tradeIds = [...new Set(d.allocations.map((a) => db.costLines.find((l) => l.id === a.lineId)?.tradeId).filter(Boolean) as string[])];
-    for (const tradeId of tradeIds) {
-      const ag = this.ensureAgreement(db, tradeId);
-      if (!ag.round1.some((x) => x.party === "builder")) ag.round1.push({ party: "builder", name: byName, at: new Date().toISOString() });
-      const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
-      this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", message: `📄 Contract issued for "${d.name}". Please review & sign Round 1 (scope & cost) in Vendor Management.` });
-    }
-    this.notify(db, { toRole: "owner", kind: "info", message: `✓ "${d.name}" is approved and ready to be paid.` });
-  }
   /** Drop a budget line into a draw (default 0% allocation). Skips paid draws. */
   addAllocation(drawId: string, lineId: string, mode: "pct" | "flat" = "pct", value = 0) {
     this.mutate((db) => {
@@ -1145,6 +1137,103 @@ class Store {
       this.notify(db, { toRole: "owner", kind: "info", message: `🏆 Bid awarded: "${p.title}" → ${b.vendorName} at $${b.amount.toLocaleString()} (now in Project Budget).` });
     });
     return outLineId;
+  }
+
+  // ---- Contracts ------------------------------------------------------------
+  // An award is a decision; a contract is the document that decision becomes.
+  // Issuing freezes what was awarded so the signed paper cannot drift as the
+  // budget line moves, and signing is what opens the line to be drawn against.
+
+  /** Issue the contract for an awarded package. One per trade in the bundle,
+   *  each between the vendor and whoever contracts with them. */
+  issueContract(packageId: string, counterparty?: "builder" | "owner"): number {
+    if (!this.canManageBids) return 0;
+    let issued = 0;
+    this.mutate((db) => {
+      const p = db.bidPackages.find((x) => x.id === packageId);
+      const b = p?.bids.find((x) => x.id === p.awardedBidId);
+      if (!p || !b) return;
+      const tradeIds = [...new Set([p.tradeId, ...(p.tradeIds ?? [])])].filter(Boolean);
+      for (const tradeId of tradeIds) {
+        const trade = db.trades.find((t) => t.id === tradeId);
+        const party = counterparty ?? (trade?.managedBy === "owner" ? "owner" : "builder");
+        // Who the vendor contracts with and who manages the trade are the same
+        // fact. Storing it twice is how the two end up disagreeing, so the
+        // contract's counterparty sets the trade's manager rather than shadowing it.
+        if (trade) trade.managedBy = party;
+        const ag = this.ensureAgreement(db, tradeId);
+        // A new document means new signatures. Carrying the old ones over would
+        // put someone on record as having signed something they never read.
+        ag.round1 = [];
+        ag.contract = contractFromAward(db, p, b, tradeId, party, this.session.displayName);
+        issued++;
+        const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
+        this.notify(db, {
+          toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info",
+          message: `📄 Contract issued for ${db.trades.find((t) => t.id === tradeId)?.name ?? "your trade"} — review & sign in Vendor Management.`,
+        });
+      }
+      this.notify(db, { toRole: "owner", kind: "info", message: `📄 "${p.title}" contract issued to ${b.vendorName}.` });
+    }, "Issued contract");
+    return issued;
+  }
+
+  /** Push an approved change order onto the live contract as an amendment. Both
+   *  parties sign again: the sum they agreed to has changed. */
+  reviseContract(lineId: string, changeOrderId: string): boolean {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return false;
+    let ok = false;
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      const co = l?.changeOrders.find((c) => c.id === changeOrderId);
+      if (!l || !co) return;
+      const ag = db.vendorAgreements.find((a) => a.tradeId === l.tradeId);
+      if (!ag?.contract) return;
+      const delta = co.kind === "savings" ? -Math.abs(co.amount) : Math.abs(co.amount);
+      const revisions = ag.contract.revisions ?? (ag.contract.revisions = []);
+      if (revisions.some((r) => r.changeOrderId === co.id)) return; // already on the contract
+      const newAmount = revisions.reduce((a, r) => a + r.delta, ag.contract.amount) + delta;
+      revisions.push({
+        id: newId("rev"), at: new Date().toISOString().slice(0, 10), by: this.session.displayName,
+        changeOrderId: co.id, exhibit: co.exhibit, title: co.title, delta, newAmount,
+      });
+      co.status = "approved";
+      // lockedCost is deliberately NOT touched. The budget line already carries
+      // approved change orders in their own column, so writing the revised sum
+      // back would count this money twice. Contracted + change orders IS the
+      // revised contract sum — the same arithmetic contractAmount() does.
+      ag.round1 = [];
+      const tradeUser = db.users.find((u) => u.tradeIds?.includes(l.tradeId));
+      this.notify(db, {
+        toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info",
+        message: `📄 Revised contract issued (${co.exhibit}: ${co.title}) — please re-sign in Vendor Management.`,
+      });
+      ok = true;
+    }, "Revised contract");
+    return ok;
+  }
+
+  /** Send draws that already carry this line back for fresh client approval.
+   *  A paid draw is never touched — that money has gone. Returns what was
+   *  reopened, and the paid draws that could not be. */
+  reopenDrawsForLine(lineId: string): { reopened: string[]; paid: string[] } {
+    const out = { reopened: [] as string[], paid: [] as string[] };
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return out;
+    this.mutate((db) => {
+      for (const d of db.draws) {
+        if (!d.allocations.some((a) => a.lineId === lineId)) continue;
+        if (d.status === "paid") { out.paid.push(d.name); continue; }
+        if (d.status !== "pushed") continue;
+        d.status = "planned";
+        d.approvedBy = undefined;
+        d.approvedDate = undefined;
+        out.reopened.push(d.name);
+      }
+      if (out.reopened.length) {
+        this.notify(db, { toRole: "builder", kind: "info", message: `↺ ${out.reopened.join(", ")} reopened — the contract changed, so it needs the client's approval again.` });
+      }
+    }, "Reopened draw for approval");
+    return out;
   }
 
   // ---- The ROM ---------------------------------------------------------------
