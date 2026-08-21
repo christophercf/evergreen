@@ -221,23 +221,54 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
         </table>
       </div>
 
-      {!ro ? (
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginTop: 16 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, minWidth: 240 }}>
-            <span style={{ fontSize: 11, color: MUTED }}>Package name — optional</span>
-            <input className="input" value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder={picked.length
-                ? chosen.map((c) => tradeName(db, c.row.tradeId)).join(" + ") + ` — ${db.project.name}`
-                : "Named from the lines you pick"}
-              style={{ fontSize: 12.5 }} />
-          </label>
-          <button className={`btn btn-sm ${picked.length ? "btn-primary" : ""}`} disabled={!picked.length} onClick={create}>
-            {!picked.length ? "Pick at least one line"
-              : picked.length === 1 ? "Create the package"
-              : `Bundle ${picked.length} lines into one package`}
+      {/* The action floats, the way a cart bar does: a selection made at the top
+          of forty lines should not need a scroll to the bottom to act on. It
+          appears only once something is picked, so an untouched screen is just
+          the table. */}
+      {!ro && picked.length > 0 ? (
+        <div className="ever-bundlebar" style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60,
+          background: "var(--paper)", borderTop: "1px solid var(--line)",
+          boxShadow: "0 -6px 22px rgba(44,36,28,.10)",
+          padding: "10px 18px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+        }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
+            <strong style={{ fontSize: 13.5, color: "var(--walnut)" }}>
+              {picked.length} line{picked.length === 1 ? "" : "s"}
+            </strong>
+            <span style={{ fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ color: MUTED }}>to bid </span><strong>{fmt(ceiling)}</strong>
+            </span>
+            <span style={{ fontSize: 12, color: coversAll.length ? "var(--sage-2)" : "var(--rust)", fontWeight: 600 }}>
+              {coversAll.length
+                ? `${coversAll.length} vendor${coversAll.length === 1 ? "" : "s"} can bid it`
+                : "nobody can bid this bundle"}
+            </span>
+            {picked.length > 1 && sharedRooms.size > 0 ? (
+              <span style={{ fontSize: 12, color: MUTED }}>{sharedRooms.size} room{sharedRooms.size === 1 ? "" : "s"} shared</span>
+            ) : null}
+          </div>
+
+          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)}
+            placeholder={chosen.map((c) => tradeName(db, c.row.tradeId)).join(" + ").slice(0, 40) || "Package name"}
+            style={{ flex: 1, minWidth: 160, maxWidth: 320, fontSize: 12.5 }} />
+
+          <button className="btn btn-sm" onClick={() => { setPicked([]); setTitle(""); }}>Clear</button>
+          <button className="btn btn-primary btn-sm" onClick={create} style={{ fontWeight: 700 }}>
+            {picked.length === 1 ? "Create the package" : `Bundle ${picked.length} lines`} →
           </button>
         </div>
       ) : null}
+
+      {/* Room for the bar so the last rows are never hidden behind it. */}
+      {!ro && picked.length > 0 ? <div style={{ height: 76 }} /> : null}
+
+      <style>{`
+        @media (max-width: 860px) {
+          /* Clear the phone's bottom tab bar. */
+          .ever-bundlebar { bottom: calc(env(safe-area-inset-bottom, 0px) + 56px) !important; }
+        }
+      `}</style>
 
       <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.55, marginTop: 10, maxWidth: "78ch" }}>
         Lines already in an open package, fully contracted, on hold or paid in full are shown but not
