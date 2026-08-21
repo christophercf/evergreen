@@ -324,6 +324,10 @@ export type RomRow = {
   complete: boolean;
   /** No builder fee applies — the owner carries and pays this one directly. */
   ownerManagedDirect: boolean;
+  /** Value on this row that was never part of the agreed ROM. */
+  outsideRomTotal: number;
+  /** Nothing on this row was in the ROM — it is all new work. */
+  allOutsideRom: boolean;
   markupLabel: string;
   owner: CostOwner | "mixed";
   category: MacroCategory;
@@ -342,6 +346,10 @@ export type RomRow = {
  *  A locked line is fixed at its locked cost; an unlocked ranged line uses its
  *  allowance ends; anything else is its live total. */
 export function romEnvelope(line: CostLine): { low: number; high: number } {
+  // Work that turned up after the ROM was agreed was never in it. Deriving a
+  // ROM figure from its contract would make the baseline grow to match
+  // whatever was spent, which is the one thing a baseline must not do.
+  if (line.outsideRom) return { low: 0, high: 0 };
   if (isLocked(line)) {
     const fixed = line.lockedCost != null ? line.lockedCost * lineMarkupFactor(line) : lineBaseline(line);
     return { low: fixed, high: fixed };
@@ -401,6 +409,9 @@ export function romRows(db: DB): RomRow[] {
     const complete = total > 0 && paid >= total - 0.5;
     // No fee applies when the owner carries the line and pays the trade direct.
     const ownerManagedDirect = lines.every((l) => l.owner === "owner");
+    // A row is only "in the ROM" if some line under it actually was.
+    const outsideRomTotal = lines.filter((l) => l.outsideRom).reduce((a, l) => a + lineTotal(l), 0);
+    const allOutsideRom = lines.every((l) => l.outsideRom);
     const state: BudgetLineState = rom?.state ?? "active";
     const manager: CostOwner = ownerManagedDirect ? "owner" : "builder";
 
@@ -433,7 +444,7 @@ export function romRows(db: DB): RomRow[] {
       current,
       romFigure: high,
       contracted, builderFee, total, draw, complete, ownerManagedDirect,
-      state, manager,
+      state, manager, outsideRomTotal, allOutsideRom,
     });
   }
   return rows.sort((a, b) => b.allIn - a.allIn);
@@ -466,6 +477,8 @@ export function romTotals(db: DB) {
     paid: sum((r) => r.paid),
     remaining: sum((r) => r.remaining),
     removedRows: all.length - rows.length,
+    /** Everything under contract that the agreed ROM never covered. */
+    outsideRom: sum((r) => r.outsideRomTotal),
   };
 }
 
@@ -524,6 +537,6 @@ export function tradeUsage(db: DB, tradeId: string) {
 /** Every ROM line committed is the precondition for throwing the lock. */
 export function romCanLock(db: DB): boolean {
   // A removed line is not waiting on anybody, so it does not hold up the lock.
-  const rows = romRows(db).filter((r) => r.state !== "removed");
+  const rows = romRows(db).filter((r) => r.state !== "removed" && !r.allOutsideRom);
   return !db.romLocked && rows.length > 0 && rows.every((r) => r.committed);
 }

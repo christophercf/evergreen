@@ -768,7 +768,7 @@ function DepsEditor({ item }: { item: ScheduleItem }) {
         {deps.map((d) => { const dep = db.schedule.find((s) => s.id === d); return (
           <span key={d} className="pill" style={{ background: "var(--sage-tint)", color: "var(--ink)" }}>⛓ {dep?.label ?? d}<button onClick={() => store.setScheduleDeps(item.id, deps.filter((x) => x !== d))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)", marginLeft: 2 }}>✕</button></span>
         ); })}
-        {matDeps.map((m) => { const mat = db.materials.find((x) => x.id === m); const onHand = mat?.status === "delivered" || mat?.status === "purchased"; return (
+        {matDeps.map((m) => { const mat = db.materials.find((x) => x.id === m); const onHand = mat?.status === "delivered"; return (
           <span key={m} className="pill" style={{ background: "#f0e6cd", color: "var(--ink)" }} title={mat ? `Status: ${mat.status}` : undefined}>📦 {mat?.item ?? m}{mat && !onHand && <span style={{ color: "var(--rust)", fontWeight: 700 }}> · {mat.status}</span>}<button onClick={() => store.setScheduleMaterialDeps(item.id, matDeps.filter((x) => x !== m))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--rust)", marginLeft: 2 }}>✕</button></span>
         ); })}
         {!deps.length && !matDeps.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>None.</span>}

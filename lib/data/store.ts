@@ -1193,13 +1193,18 @@ class Store {
    *  still has to agree. Once locked the ROM does not re-open, so the line goes
    *  in already contracted and the owner is asked to approve it instead — the
    *  work is real either way, and pretending otherwise just hides it. */
-  addBudgetLine(p: { tradeId: string; amount: number; note?: string; category?: MacroCategory; roomIds?: string[]; manager?: CostOwner }) {
+  addBudgetLine(p: { tradeId: string; amount: number; note?: string; category?: MacroCategory; roomIds?: string[]; manager?: CostOwner; outsideRom?: boolean }) {
     if (!["full_admin", "builder", "owner"].includes(this.session.role)) return;
     if (!p.tradeId || !(p.amount > 0)) return;
     this.mutate((db) => {
       const trade = db.trades.find((t) => t.id === p.tradeId);
       const owner: CostOwner = p.manager ?? (trade?.managedBy === "owner" ? "owner" : "builder");
       const locked = !!db.romLocked;
+      // Outside the ROM once the ROM is settled — either locked outright, or
+      // this trade's line already agreed by the owner. New work after that
+      // point is a deviation from the baseline, not a bigger baseline.
+      const romRow = (db.rom ?? []).find((r) => r.tradeId === p.tradeId);
+      const outsideRom = p.outsideRom ?? (locked || !!romRow?.committed);
       const today = new Date().toISOString().slice(0, 10);
       const markupModel: MarkupModel = "passthrough";
       const line: CostLine = {
@@ -1207,15 +1212,16 @@ class Store {
         category: p.category ?? trade?.category ?? "Soft Costs",
         owner, roomIds: p.roomIds ?? [], markupModel,
         markupPct: owner === "owner" ? 0 : (db.project.builderMarkupPct ?? 20),
-        history: [{ label: locked ? "Added after ROM lock" : "Added to the ROM", date: today, amount: p.amount }],
-        status: locked ? "contracted" : "estimate",
+        history: [{ label: outsideRom ? "Added after the ROM" : "Added to the ROM", date: today, amount: p.amount }],
+        outsideRom: outsideRom || undefined,
+        status: outsideRom ? "contracted" : "estimate",
         changeOrders: [], phases: [],
         desc: p.note?.trim() || undefined,
         // A line added after the lock is contracted from the start.
-        locked, lockedCost: locked ? p.amount : undefined,
-        lockedAt: locked ? today : undefined,
-        lockedBy: locked ? this.session.displayName : undefined,
-        baseline: locked ? p.amount * (owner === "owner" ? 1 : 1 + (db.project.builderMarkupPct ?? 20) / 100) : undefined,
+        locked: outsideRom, lockedCost: outsideRom ? p.amount : undefined,
+        lockedAt: outsideRom ? today : undefined,
+        lockedBy: outsideRom ? this.session.displayName : undefined,
+        baseline: outsideRom ? p.amount * (owner === "owner" ? 1 : 1 + (db.project.builderMarkupPct ?? 20) / 100) : undefined,
       };
       db.costLines.push(line);
 
@@ -1224,10 +1230,10 @@ class Store {
         db.rom.push({ id: newId("rom"), tradeId: p.tradeId, markupModel, committed: false, note: p.note?.trim() || undefined });
       }
 
-      if (locked) {
+      if (outsideRom) {
         this.notify(db, {
           toRole: "owner", kind: "info",
-          message: `Approval needed: "${line.name}" was added after the ROM was locked, contracted at $${p.amount.toLocaleString()}.`,
+          message: `Approval needed: "${line.name}" was added after the ROM, contracted at $${p.amount.toLocaleString()}. It sits outside the agreed baseline.`,
         });
       }
     }, this.db.romLocked ? "Added — sent for approval" : "Line added to the ROM");
@@ -1260,6 +1266,17 @@ class Store {
         l.markupPct = manager === "owner" ? 0 : (db.project.builderMarkupPct ?? 20);
       }
     }, manager === "owner" ? "Now owner managed" : "Now GC managed");
+  }
+
+  /** Move a line in or out of the agreed ROM baseline. Wrongly inside, the
+   *  baseline grows to cover work nobody agreed; wrongly outside, real ROM
+   *  scope reads as a deviation. Either way it is one switch. */
+  setLineOutsideRom(lineId: string, outside: boolean) {
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    this.mutate((db) => {
+      const l = db.costLines.find((x) => x.id === lineId);
+      if (l) l.outsideRom = outside || undefined;
+    }, outside ? "Outside the ROM" : "Part of the ROM");
   }
 
   /** Rename a budget line — which is to say, rename the trade. Everything that

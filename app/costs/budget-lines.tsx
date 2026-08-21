@@ -79,7 +79,9 @@ export function BudgetLines() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 14 }}>
-        <StatCard label="ROM agreed" value={fmt(t.agreed)} sub={`${t.committedRows} of ${t.rows} lines committed`} accent="var(--brass-2)" />
+        <StatCard label="ROM agreed" value={fmt(t.agreed)}
+          sub={t.outsideRom ? `${fmt(t.outsideRom)} added since, outside it` : `${t.committedRows} of ${t.rows} lines committed`}
+          accent="var(--brass-2)" />
         <StatCard label="Contracted" value={fmt(t.contracted)} sub="agreed with the builder, before fee" />
         <StatCard label="Total" value={fmt(t.total)} sub="contracted + change orders + fee" accent="var(--walnut)" />
         <StatCard label="Drawn / Paid" value={fmt(t.paid)} accent="var(--ok)" sub={`${fmt(Math.max(0, t.total - t.paid))} outstanding`} />
@@ -122,7 +124,9 @@ export function BudgetLines() {
         Contracted is the work itself, before fee — what was agreed with whoever is doing it —
         and its cell turns green once that is in place, amber on hold, grey once removed.
         Total is contracted plus approved change orders and the builder&rsquo;s fee. Whoever manages a
-        line fills in its contract figure, its change orders and its payments.
+        line fills in its contract figure, its change orders and its payments. Work added after the
+        ROM was agreed carries no ROM figure — the baseline stays the number that was agreed, and
+        the new work reads as the deviation it is.
       </div>
 
       {canAdd ? <AddBudgetLine /> : null}
@@ -158,6 +162,11 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
             <strong style={{ color: "var(--walnut)" }}>{r.label}</strong>
             {r.lines.length > 1 ? <span style={{ fontSize: 10.5, color: MUTED }}>{r.lines.length} lines</span> : null}
             {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
+            {r.allOutsideRom && r.state !== "removed"
+              ? <Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill>
+              : r.outsideRomTotal > 0
+                ? <span style={{ fontSize: 10.5, color: "var(--brass-2)" }}>{fmt(r.outsideRomTotal)} outside the ROM</span>
+                : null}
           </div>
           <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
             {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}
@@ -242,6 +251,14 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                     <span style={{ minWidth: 150 }}>{l.name}</span>
                     {iManage ? (
                       <>
+                        <button className="btn btn-sm"
+                          title={l.outsideRom
+                            ? "Not part of the ROM the owner agreed — carries no ROM figure"
+                            : "Part of the agreed ROM baseline"}
+                          onClick={() => store.setLineOutsideRom(l.id, !l.outsideRom)}
+                          style={{ fontSize: 10.5, background: l.outsideRom ? "#f7f1e2" : undefined }}>
+                          {l.outsideRom ? "Outside the ROM" : "In the ROM"}
+                        </button>
                         <label style={{ display: "inline-flex", alignItems: "center", gap: 4, color: MUTED, fontSize: 11 }}>
                           contract
                           <NumInput value={l.lockedCost ?? 0} onCommit={(v) => store.setLineContracted(l.id, v)} width={96} />
@@ -359,6 +376,8 @@ function AddBudgetLine() {
 
   const locked = !!db.romLocked;
   const trade = db.trades.find((t) => t.id === tradeId);
+  // Where this line will land, decided by whether its trade's ROM is settled.
+  const willBeOutside = locked || !!(db.rom ?? []).find((r) => r.tradeId === tradeId)?.committed;
 
   // Everything a line needs to mean something: who does it, what it covers,
   // where, what it costs, and whose money it is.
@@ -383,9 +402,9 @@ function AddBudgetLine() {
       <div>
         <div className="serif" style={{ fontSize: 17, fontWeight: 700, color: "var(--walnut)" }}>Add a budget line</div>
         <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5, maxWidth: "70ch" }}>
-          {locked
-            ? "The ROM is locked and does not re-open, so this line goes straight in as contracted and the owner is asked to approve it."
-            : "The ROM is still open, so this joins it as a draft for the owner to agree."}
+          {willBeOutside
+            ? "The ROM for this trade is already agreed, so this goes in as contracted — outside the baseline — and the owner is asked to approve it. It carries no ROM figure."
+            : "This trade's ROM is still open, so this joins it as a draft for the owner to agree."}
         </div>
       </div>
 
@@ -458,7 +477,7 @@ function AddBudgetLine() {
             });
             reset();
           }}>
-          {!ready ? `Needs ${missing.join(", ")}` : locked ? "Add as contracted, and send for approval" : "Add to the ROM"}
+          {!ready ? `Needs ${missing.join(", ")}` : willBeOutside ? "Add as contracted, outside the ROM" : "Add to the ROM"}
         </button>
       </div>
     </div>

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
-import { VendorRoster } from "./roster";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
 import { accessFor, isOwnerManaged, type ContactSheet, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
@@ -109,11 +108,6 @@ export default function VendorsPage() {
   const access = accessFor(user, role, "vendors");
   if (access === "none") return <NoAccess module="Vendors" />;
 
-  // Vendor Management is the roster: every company we can call on, independent
-  // of any one job. A trade or a designer has no roster — they came for their
-  // own contract, which is the screen below.
-  if (!["trade", "viewer"].includes(role)) return <VendorRoster />;
-
   // Trades and designers/viewers are scoped to their own assigned trades —
   // they only see contracts for work assigned to them, never the whole roster.
   const scopedToOwn = role === "trade" || role === "viewer";
@@ -136,7 +130,7 @@ export default function VendorsPage() {
   return (
     <>
       <PageHeader
-        title={role === "trade" ? "Current Contract" : "Vendor Management"}
+        title={role === "trade" ? "Current Contract" : "Contracts"}
         subtitle={role === "trade"
           ? "Your contract with the project: scope, terms, your requested draw parameters, and two rounds of digital signature — first on scope & cost, then on draw schedule & timeline."
           : "Each trade's roll-up: scope pulled from the Admin matrix, terms applied, the vendor's requested draw parameters, and two rounds of digitally-signed contract — first on scope & cost, then on draw schedule & timeline."}

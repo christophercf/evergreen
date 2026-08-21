@@ -286,6 +286,11 @@ export interface CostLine {
   allowanceLow?: number;
   allowanceHigh?: number;
   status: "estimate" | "allowance" | "contracted" | "complete";
+  /** True when this line was NOT part of the ROM the owner agreed — work that
+   *  turned up afterwards. It carries no ROM figure at all, so the agreed
+   *  baseline stays the number it was and the new work reads as the deviation
+   *  it is, rather than quietly enlarging what was agreed. */
+  outsideRom?: boolean;
   contractId?: string;
   /** Locked baseline (original budget). Set when the baseline is locked. */
   baseline?: number;
@@ -449,11 +454,24 @@ export interface Artifact {
 }
 
 // ---- Materials --------------------------------------------------------------
-export type MaterialStatus = "needed" | "identified" | "ordered" | "purchased" | "delivered";
+/** "purchased" was the same moment as "ordered" — money committed, thing on
+ *  its way — so it is gone. Kept in the union only so databases written before
+ *  the merge still parse; `normalizeMaterialStatus` folds it into "ordered"
+ *  everywhere it is read. */
+export type MaterialStatus = "needed" | "identified" | "ordered" | "delivered" | "purchased";
+
+/** The states a material can actually be put into, in order. */
+export const MATERIAL_STATUS_ORDER: MaterialStatus[] = ["needed", "identified", "ordered", "delivered"];
+
+/** Fold the retired "purchased" into "ordered". */
+export const normalizeMaterialStatus = (s?: MaterialStatus): MaterialStatus =>
+  s === "purchased" ? "ordered" : (s ?? "needed");
 export type Purchaser = "owner" | "trade" | "builder";
 
 export const MATERIAL_STATUS_LABEL: Record<MaterialStatus, string> = {
-  needed: "Needed", identified: "Identified", ordered: "Ordered", purchased: "Purchased", delivered: "Delivered",
+  needed: "Needed", identified: "Identified", ordered: "Ordered", delivered: "Delivered",
+  // Only ever rendered for legacy rows that have not been touched since.
+  purchased: "Ordered",
 };
 
 // An alternate product candidate for a material — owner/builder add 2-3 of

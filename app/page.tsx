@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { Money, StatCard, SectionTitle, PageHeader, StackBar, Pill } from "./ui/bits";
+import { normalizeMaterialStatus } from "@/lib/data/types";
 import { byCategory, totals, drawAmount, fmt, materialDates, tradeName, macroOrder, macroColor } from "@/lib/data/money";
 import { accessFor } from "@/lib/data/types";
 
@@ -173,7 +174,7 @@ function TradeDashboard() {
   const inProg = tasks.filter((s) => s.status === "in_progress").length;
   const pendingConfirm = tasks.filter((s) => s.confirm === "pending" && s.assignedUserId === user?.id);
   const mats = db.materials.filter((m) => m.tradeId && mine.has(m.tradeId));
-  const matsDue = mats.filter((m) => m.dueDate && m.status !== "purchased" && m.status !== "delivered")
+  const matsDue = mats.filter((m) => m.dueDate && normalizeMaterialStatus(m.status) !== "ordered" && m.status !== "delivered")
     .map((m) => ({ m, days: Math.round((new Date(`${m.dueDate}T00:00:00`).getTime() - Date.now()) / 86400000) }))
     .sort((a, b) => a.days - b.days);
   let qcSigned = 0, qcTotal = 0;

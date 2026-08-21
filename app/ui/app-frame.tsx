@@ -42,7 +42,9 @@ const NAV: NavItem[] = [
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
-  { href: "/vendors", label: "Vendors", mod: "vendors", band: "reference", Icon: UsersIcon },
+  // The roster moved into Administrative; what lives here is the contract
+  // itself, which is what a trade came for.
+  { href: "/vendors", label: "Contracts", mod: "vendors", band: "reference", Icon: UsersIcon },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", band: "reference", Icon: FolderIcon },
 ];
 

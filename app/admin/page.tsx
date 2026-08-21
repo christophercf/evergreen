@@ -9,6 +9,7 @@ import {
   type ContactSheet, type MacroCategory, type ModuleKey, type Role, type ScopeStatus, type AccessLevel, type RoomFloor, type Trade, type User, type VendorDocKind,
 } from "@/lib/data/types";
 import { tradeName, macroOrder, macroColor, categoryUsage, tradeUsage } from "@/lib/data/money";
+import { VendorRoster } from "../vendors/roster";
 import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { AddVendor } from "./add-vendor";
@@ -21,7 +22,7 @@ const FLOORS: RoomFloor[] = ["Whole House", "First Floor", "Second Floor", "Base
 // Who can hand out access. Mirrors the check the /api/invite route enforces.
 const CAN_INVITE: Role[] = ["full_admin", "builder", "owner"];
 
-type Tab = "matrix" | "trade" | "categories" | "team";
+type Tab = "matrix" | "trade" | "categories" | "team" | "vendors";
 
 export default function AdminPage() {
   const store = useStore();
@@ -41,7 +42,7 @@ export default function AdminPage() {
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
       <div style={{ display: "flex", gap: 6, marginTop: 16, borderBottom: "1px solid var(--line)" }}>
-        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["categories", "Trade Category Management"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
+        {([["matrix", "Rooms & Scope Matrix"], ["trade", "Trade Scope"], ["categories", "Trade Category Management"], ["vendors", "Vendor Management"], ["team", "Team, Access & Billing"]] as [Tab, string][]).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} className="btn btn-sm"
             style={{ border: "none", borderBottom: tab === k ? "2px solid var(--sage)" : "2px solid transparent", background: "transparent", borderRadius: 0, color: tab === k ? "var(--walnut)" : "var(--muted)", fontWeight: 700 }}>
             {label}
@@ -52,6 +53,7 @@ export default function AdminPage() {
       {tab === "matrix" && <MatrixTab ro={ro} />}
       {tab === "trade" && <TradeScopeTab ro={ro} />}
       {tab === "categories" && <CategoriesTab ro={ro} />}
+      {tab === "vendors" && <VendorRoster />}
       {tab === "team" && <TeamTab ro={ro} />}
     </>
   );

@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, StatCard, Pill, NumInput, TextInput } from "../ui/bits";
-import { accessFor, isArchitectUser, materialLockedCost, MATERIAL_STATUS_LABEL, type Material, type MaterialStatus, type ProductOption, type Purchaser } from "@/lib/data/types";
+import { accessFor, isArchitectUser, materialLockedCost, MATERIAL_STATUS_LABEL, MATERIAL_STATUS_ORDER, normalizeMaterialStatus, type Material, type MaterialStatus, type ProductOption, type Purchaser } from "@/lib/data/types";
 import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 import { CATALOG_CATEGORIES } from "@/lib/data/materialCatalog";
 import { fileToDataURL } from "../ui/upload";
@@ -66,7 +66,8 @@ function SpecCell({ url }: { url?: string }) {
     </a>
   );
 }
-const STATUS_ORDER = Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[];
+// The retired "purchased" is never offered — only the four real states.
+const STATUS_ORDER = MATERIAL_STATUS_ORDER;
 const PURCH: Purchaser[] = ["owner", "trade", "builder"];
 
 type SortKey = "item" | "room" | "trade" | "qty" | "status" | "buyer" | "budget" | "due" | "tied" | "spec";
@@ -197,7 +198,7 @@ export default function MaterialsPage() {
   }, [db.materials, q, room, trade, cat, status, sort, dir]);
   const catsUsed = Array.from(new Set([...CATALOG_CATEGORIES, ...db.materials.map((m) => m.category).filter(Boolean) as string[]]));
 
-  const counts = { total: db.materials.length, needed: db.materials.filter((m) => m.status === "needed").length, purchased: db.materials.filter((m) => m.status === "purchased" || m.status === "delivered").length, owner: db.materials.filter((m) => m.purchaser === "owner").length };
+  const counts = { total: db.materials.length, needed: db.materials.filter((m) => m.status === "needed").length, purchased: db.materials.filter((m) => m.status === "delivered").length, owner: db.materials.filter((m) => m.purchaser === "owner").length };
   const budgetTotal = db.materials.reduce((a, m) => a + (m.budget ?? 0), 0);
   const lockedMats = db.materials.map((m) => materialLockedCost(m)).filter((v): v is number => v != null);
   const lockedTotal = lockedMats.reduce((a, v) => a + v, 0);
@@ -233,7 +234,7 @@ export default function MaterialsPage() {
         <Filter label="Room" value={room} onChange={setRoom} options={[["all", "All rooms"], ...roomsUsed.map((r) => [r, db.rooms.find((x) => x.id === r)?.name ?? r] as [string, string])]} />
         <Filter label="Trade" value={trade} onChange={setTrade} options={[["all", "All trades"], ...tradesUsed.map((t) => [t, tradeName(db, t)] as [string, string])]} />
         <Filter label="Category" value={cat} onChange={setCat} options={[["all", "All categories"], ...catsUsed.map((c) => [c, c] as [string, string])]} />
-        <Filter label="Status" value={status} onChange={(v) => setStatus(v as "all" | MaterialStatus)} options={[["all", "All status"], ...(Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[]).map((s) => [s, MATERIAL_STATUS_LABEL[s]] as [string, string])]} />
+        <Filter label="Status" value={status} onChange={(v) => setStatus(v as "all" | MaterialStatus)} options={[["all", "All status"], ...MATERIAL_STATUS_ORDER.map((s) => [s, MATERIAL_STATUS_LABEL[s]] as [string, string])]} />
         <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· click a column header to sort</span>
         {tieClip && (
           <span style={{ fontSize: 11.5, color: "var(--sage-2)", display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -285,8 +286,8 @@ export default function MaterialsPage() {
                 <td style={td} className="m-hide">{mt.tradeId ? tradeName(db, mt.tradeId) : "—"}</td>
                 <td style={tdC} className="m-hide"><NumInput value={mt.qty ?? 0} disabled={ro} onCommit={(v) => store.updateMaterial(mt.id, { qty: v > 0 ? v : undefined })} width={40} align="center" style={{ fontSize: 12 }} /></td>
                 <td style={td}>
-                  <select value={mt.status} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { status: e.target.value as MaterialStatus })} style={{ fontSize: 11, padding: "2px 4px", color: "#fff", background: STATUS_BG[mt.status], border: "none", borderRadius: 5 }}>
-                    {(Object.keys(MATERIAL_STATUS_LABEL) as MaterialStatus[]).map((s) => <option key={s} value={s} style={{ color: "var(--ink)", background: "var(--paper)" }}>{MATERIAL_STATUS_LABEL[s]}</option>)}
+                  <select value={normalizeMaterialStatus(mt.status)} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { status: e.target.value as MaterialStatus })} style={{ fontSize: 11, padding: "2px 4px", color: "#fff", background: STATUS_BG[normalizeMaterialStatus(mt.status)], border: "none", borderRadius: 5 }}>
+                    {MATERIAL_STATUS_ORDER.map((s) => <option key={s} value={s} style={{ color: "var(--ink)", background: "var(--paper)" }}>{MATERIAL_STATUS_LABEL[s]}</option>)}
                   </select>
                 </td>
                 <td style={td} className="m-hide">
