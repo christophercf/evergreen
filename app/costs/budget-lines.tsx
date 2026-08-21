@@ -198,7 +198,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                 <Kick>Name</Kick>
                 {canManage ? (
                   <>
-                    <TextInput value={r.tradeLabel}
+                    <TextInput value={r.label}
                       onCommit={(v) => store.setBudgetLineName(r.tradeId, v)}
                       style={{ width: "100%", fontSize: 13, fontWeight: 600, marginTop: 4 }} />
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>

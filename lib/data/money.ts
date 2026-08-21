@@ -291,7 +291,9 @@ export type RomRow = {
   key: string;
   tradeId: string;
   markupModel: MarkupModel;
+  /** The trade's name, exactly as stored. Never composed. */
   label: string;
+  /** @deprecated same as `label` — kept while callers migrate. */
   tradeLabel: string;
   /** True when this trade is priced both ways, so the label names the model. */
   splitByMarkup: boolean;
@@ -350,15 +352,19 @@ export function romEnvelope(line: CostLine): { low: number; high: number } {
   // ROM figure from its contract would make the baseline grow to match
   // whatever was spent, which is the one thing a baseline must not do.
   if (line.outsideRom) return { low: 0, high: 0 };
-  if (isLocked(line)) {
-    const fixed = line.lockedCost != null ? line.lockedCost * lineMarkupFactor(line) : lineBaseline(line);
-    return { low: fixed, high: fixed };
+
+  const f = lineMarkupFactor(line);
+  // The ROM is what this line was estimated at BEFORE anybody contracted it.
+  // It deliberately never reads lockedCost: that is the contract figure, and
+  // sourcing the baseline from it means typing a contract silently rewrites
+  // the number the owner agreed to.
+  if (line.allowanceLow != null && line.allowanceHigh != null) {
+    return { low: line.allowanceLow * f, high: line.allowanceHigh * f };
   }
-  if (lineHasRange(line)) {
-    return { low: line.allowanceLow! * lineMarkupFactor(line), high: line.allowanceHigh! * lineMarkupFactor(line) };
-  }
-  const t = lineTotal(line);
-  return { low: t, high: t };
+  // The first price point is the original estimate; later points are
+  // re-pricings, and the contract is not a price point at all.
+  const start = lineStart(line) * f;
+  return { low: start, high: start };
 }
 
 /** One row per trade per markup treatment, richest first. */
@@ -400,8 +406,13 @@ export function romRows(db: DB): RomRow[] {
     // Contracted is the work itself, before any fee: what we agreed the builder
     // would do it for. The fee is its own figure beside it, so the owner can see
     // what she is paying for work and what she is paying for management.
-    const contracted = locked.reduce((a, l) => a + lineBase(l), 0);
-    const builderFee = locked.reduce((a, l) => a + (lineTotal(l) - lineBase(l)), 0);
+    // Contracted is the figure someone typed into the contract field —
+    // lockedCost — not the latest price point, which is an estimate and moves
+    // for its own reasons. Reading the estimate here meant typing a contract
+    // changed nothing in the column named after it.
+    const contractedOf = (l: CostLine) => l.lockedCost ?? lineBase(l);
+    const contracted = locked.reduce((a, l) => a + contractedOf(l), 0);
+    const builderFee = locked.reduce((a, l) => a + contractedOf(l) * (lineMarkupFactor(l) - 1), 0);
     const total = contracted + changeOrders + builderFee;
     const draw = lines.reduce((a, l) => a + lineDrawn(db, l.id), 0);
     // Paid in full closes the line. Nothing moves again until a change order
@@ -428,8 +439,11 @@ export function romRows(db: DB): RomRow[] {
 
     rows.push({
       key, tradeId, markupModel: model,
-      label: splitByMarkup ? `${name} — ${markupLabel}` : name,
-      /** The trade's own name, without the fee suffix a split row carries. */
+      // The name is the trade's name — the same string the trade record holds
+      // and the same one the rename field edits. A row never composes a label
+      // of its own: two rows for one trade are told apart by the fee treatment
+      // on the line beneath, not by a name that exists nowhere in the data.
+      label: name,
       tradeLabel: name,
       splitByMarkup,
       lines, rom, committed, autoCommitted,

@@ -45,8 +45,25 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
       (db.bidPackages ?? []).filter((p) => !p.awardedBidId)
         .flatMap((p) => [p.tradeId, ...(p.tradeIds ?? [])]),
     );
-    return romRows(db)
-      .filter((r) => r.state !== "removed")
+    // A trade priced two ways is two budget rows but ONE thing to bid, so the
+    // rows are merged back together here. Keying candidates by trade also
+    // keeps the selection unambiguous — a package bundles trades.
+    const merged = new Map<string, RomRow>();
+    for (const r of romRows(db).filter((x) => x.state !== "removed")) {
+      const prev = merged.get(r.tradeId);
+      if (!prev) { merged.set(r.tradeId, { ...r }); continue; }
+      merged.set(r.tradeId, {
+        ...prev,
+        lines: [...prev.lines, ...r.lines],
+        romFigure: prev.romFigure + r.romFigure,
+        allIn: prev.allIn + r.allIn,
+        contracted: prev.contracted + r.contracted,
+        lockedCount: prev.lockedCount + r.lockedCount,
+        committed: prev.committed || r.committed,
+        complete: prev.complete && r.complete,
+      });
+    }
+    return [...merged.values()]
       .map((r) => {
         const rooms = [...new Set(r.lines.flatMap((l: CostLine) => l.roomIds ?? []))]
           .map((id) => db.rooms.find((x) => x.id === id)?.name).filter(Boolean) as string[];
