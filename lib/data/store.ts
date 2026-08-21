@@ -754,12 +754,41 @@ class Store {
     this.mutate((db) => { db.draws = db.draws.filter((d) => d.id !== id); });
   }
   setDrawStatus(id: string, status: Draw["status"]) {
+    // Draw Management is the builder's module (the owner's role has no access
+    // to it at all — decision 03). So these three states are the builder
+    // RECORDING where the draw stands with the client, not the client
+    // operating a gate in here. Recording an approval is not granting one.
+    if (!["full_admin", "owner", "builder"].includes(this.session.role)) return;
+    const today = new Date().toISOString().slice(0, 10);
     this.mutate((db) => {
       const d = db.draws.find((x) => x.id === id);
       if (!d) return;
+      if (d.status === "paid" && status !== "paid") return; // paid is final
       d.status = status;
-      d.paidDate = status === "paid" ? new Date().toISOString().slice(0, 10) : d.paidDate;
-    });
+      if (status === "pushed") {
+        d.approvedBy = this.session.displayName; // who recorded it
+        d.approvedDate = today;
+        d.pushedDate = d.pushedDate ?? today;
+        this.issueDrawContracts(db, d);
+      }
+      if (status === "paid") d.paidDate = d.paidDate ?? today;
+      if (status === "planned") { d.approvedBy = undefined; d.approvedDate = undefined; }
+    }, status === "pushed" ? "Approved draw" : status === "paid" ? "Marked draw paid" : "Draw back to saved");
+  }
+
+  /** The client's approval is what puts the trades in a draw under contract —
+   *  this is the same moment the old "push" was, under the name the job
+   *  actually uses for it. */
+  private issueDrawContracts(db: DB, d: Draw) {
+    const byName = this.session.displayName;
+    const tradeIds = [...new Set(d.allocations.map((a) => db.costLines.find((l) => l.id === a.lineId)?.tradeId).filter(Boolean) as string[])];
+    for (const tradeId of tradeIds) {
+      const ag = this.ensureAgreement(db, tradeId);
+      if (!ag.round1.some((x) => x.party === "builder")) ag.round1.push({ party: "builder", name: byName, at: new Date().toISOString() });
+      const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
+      this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", message: `📄 Contract issued for "${d.name}". Please review & sign Round 1 (scope & cost) in Vendor Management.` });
+    }
+    this.notify(db, { toRole: "owner", kind: "info", message: `✓ "${d.name}" is approved and ready to be paid.` });
   }
   /** Drop a budget line into a draw (default 0% allocation). Skips paid draws. */
   addAllocation(drawId: string, lineId: string, mode: "pct" | "flat" = "pct", value = 0) {
@@ -798,24 +827,6 @@ class Store {
     });
   }
   /** Push a draw → create the first round of trade contracts for its lines. */
-  pushDraw(drawId: string, byName: string): { trades: number } {
-    let trades = 0;
-    this.mutate((db) => {
-      const d = db.draws.find((x) => x.id === drawId);
-      if (!d) return;
-      d.status = "pushed";
-      d.pushedDate = new Date().toISOString().slice(0, 10);
-      const tradeIds = [...new Set(d.allocations.map((a) => db.costLines.find((l) => l.id === a.lineId)?.tradeId).filter(Boolean) as string[])];
-      trades = tradeIds.length;
-      for (const tradeId of tradeIds) {
-        const a = this.ensureAgreement(db, tradeId);
-        if (!a.round1.some((s) => s.party === "builder")) a.round1.push({ party: "builder", name: byName, at: new Date().toISOString() });
-        const tradeUser = db.users.find((u) => u.tradeIds?.includes(tradeId));
-        this.notify(db, { toUserId: tradeUser?.id, toRole: tradeUser ? undefined : "trade", kind: "info", message: `📄 Contract issued for "${d.name}". Please review & sign Round 1 (scope & cost) in Vendor Management.`, });
-      }
-    });
-    return { trades };
-  }
 
   // ---- Schedule: add new timeline items (owner / builder / full admin) ----
   addScheduleItem(item: { label: string; kind: ScheduleItem["kind"]; tradeId?: string; start: string; end: string; deps?: string[]; materialDeps?: string[]; budgetKey?: string; budgetNote?: string }) {

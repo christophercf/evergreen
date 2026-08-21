@@ -355,6 +355,14 @@ export interface VendorAgreement {
 // A client payment (draw) that allocates a portion of one or more budget lines.
 // Each allocation is a % or flat $ of that line's current total. "Pushing" a
 // draw creates the first round of trade contracts. Paid draws lock.
+/** A draw moves Saved → Client approved → Client paid, and a paid draw is
+ *  archived: the money has moved and nothing about it changes again. */
+export const DRAW_STATUS_LABEL: Record<Draw["status"], string> = {
+  planned: "Saved",
+  pushed: "Client approved",
+  paid: "Client paid",
+};
+
 export interface DrawAllocation {
   lineId: string;
   mode: "pct" | "flat";
@@ -368,7 +376,13 @@ export interface Draw {
   id: string;
   name: string;
   allocations: DrawAllocation[];
+  /** Stored values are unchanged so no existing draw needs migrating; what
+   *  they MEAN is: planned = saved by the GC, pushed = approved by the client,
+   *  paid = the client has paid it. See DRAW_STATUS_LABEL. */
   status: "planned" | "pushed" | "paid";
+  /** Who approved it, and when — the client's own record of saying yes. */
+  approvedBy?: string;
+  approvedDate?: string;
   pushedDate?: string;
   paidDate?: string;
   note?: string;

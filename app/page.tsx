@@ -6,7 +6,7 @@ import { useStore } from "@/lib/data/hooks";
 import { Money, StatCard, SectionTitle, PageHeader, StackBar, Pill } from "./ui/bits";
 import { normalizeMaterialStatus } from "@/lib/data/types";
 import { byCategory, totals, drawAmount, fmt, materialDates, tradeName, macroOrder, macroColor } from "@/lib/data/money";
-import { accessFor } from "@/lib/data/types";
+import { accessFor, DRAW_STATUS_LABEL } from "@/lib/data/types";
 
 export default function Dashboard() {
   const store = useStore();
@@ -147,7 +147,7 @@ export default function Dashboard() {
             <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 7 }}>
               {db.draws.map((d) => (
                 <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-                  <Pill color="#fff" bg={d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass)" : "var(--sc-unset)"}>{d.status}</Pill>
+                  <Pill color="#fff" bg={d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass)" : "var(--sc-unset)"}>{DRAW_STATUS_LABEL[d.status]}</Pill>
                   <span style={{ flex: 1, color: "var(--muted)" }}>{d.name}</span>
                   <span style={{ fontWeight: 700 }}>{fmt(drawAmount(db, d))}</span>
                 </div>

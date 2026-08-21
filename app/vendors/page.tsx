@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money } from "../ui/bits";
-import { accessFor, isOwnerManaged, type ContactSheet, type DB, type VendorAgreement } from "@/lib/data/types";
+import { accessFor, DRAW_STATUS_LABEL, isOwnerManaged, type ContactSheet, type DB, type VendorAgreement } from "@/lib/data/types";
 import { tradeCost, tradeName, allocationAmount, fmt } from "@/lib/data/money";
 import { renderTerms } from "@/lib/data/terms";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
@@ -292,7 +292,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
               <div key={i} style={{ display: "flex", gap: 8, fontSize: 12.5 }}>
                 <span style={{ flex: 1 }}>{d.name} · {l.name}</span>
                 {canSeeCosts && <span style={{ fontWeight: 600 }}>{fmt(amt)}</span>}
-                <span style={{ minWidth: 92, textAlign: "right", color: d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass-2)" : "var(--muted)" }}>{d.status}</span>
+                <span style={{ minWidth: 92, textAlign: "right", color: d.status === "paid" ? "var(--ok)" : d.status === "pushed" ? "var(--brass-2)" : "var(--muted)" }}>{DRAW_STATUS_LABEL[d.status]}</span>
               </div>
             )) : <span style={{ fontSize: 12, color: "var(--muted)" }}>Not allocated to any draw yet (set in Payment &amp; Draw Management).</span>}
           </div>

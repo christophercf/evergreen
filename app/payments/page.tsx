@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
-import { accessFor, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
+import { accessFor, DRAW_STATUS_LABEL, type CostLine, type DB, type Draw, type DrawAllocation } from "@/lib/data/types";
 import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid, isLocked } from "@/lib/data/money";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
@@ -37,15 +37,20 @@ export default function PaymentsPage() {
   const unallocated = Math.max(0, t.grand - allocated);
 
   const lines = [...db.costLines].filter((l) => lineCurrent(l) > 0).sort((a, b) => a.category.localeCompare(b.category) || lineCurrent(b) - lineCurrent(a));
-  // Completed draws sink to the bottom (collapsed); active ones stay on top.
+  // A paid draw is finished: the money has moved and nothing about it changes
+  // again. It leaves the working list for the archive rather than sitting at
+  // the bottom of it forever.
   const order = { planned: 0, pushed: 1, paid: 2 } as const;
-  const draws = [...db.draws].sort((a, b) => order[a.status] - order[b.status]);
+  const live = db.draws.filter((d) => d.status !== "paid").sort((a, b) => order[a.status] - order[b.status]);
+  const archived = db.draws.filter((d) => d.status === "paid")
+    .sort((a, b) => (b.paidDate ?? "").localeCompare(a.paidDate ?? ""));
+  const archivedTotal = archived.reduce((a, d) => a + drawAmount(db, d), 0);
 
   return (
     <>
       <PageHeader
         title="Budget Management"
-        subtitle="What has actually left. Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then push a draw to issue trade contracts. Completed draws collapse to the bottom; the budget on the left tracks total → drawn → remaining live."
+        subtitle="What has actually left. Drag budget lines into draws, set each line's share (% or flat $), spell out which scope is covered, then send it to the client. A draw runs Saved → Client approved → Client paid, and paid draws move to the archive; the budget on the left tracks total → drawn → remaining live."
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
 
@@ -72,8 +77,15 @@ export default function PaymentsPage() {
         <div>
           <SectionTitle right={!ro ? <button className="btn btn-primary btn-sm" onClick={() => store.addDraw(`Draw ${db.draws.length + 1}`)}>+ Add draw</button> : undefined}>Draws</SectionTitle>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {draws.map((d) => <DrawCard key={d.id} draw={d} ro={ro} />)}
-            {!draws.length && <div className="card" style={{ padding: 20, fontSize: 13, color: "var(--muted)" }}>No draws yet. Add one, then drag budget lines in.</div>}
+            {live.map((d) => <DrawCard key={d.id} draw={d} ro={ro} />)}
+            {!live.length && (
+              <div className="card" style={{ padding: 20, fontSize: 13, color: "var(--muted)" }}>
+                {archived.length ? "No open draws — every draw has been paid. The archive is below." : "No draws yet. Add one, then drag budget lines in."}
+              </div>
+            )}
+            {archived.length ? (
+              <ArchiveBand draws={archived} total={archivedTotal} ro={ro} />
+            ) : null}
           </div>
         </div>
       </div>
@@ -140,6 +152,33 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
   );
 }
 
+/** Paid draws, folded away. They are kept — a paid draw is the record of the
+ *  money leaving — but they are no longer part of the work in front of you. */
+function ArchiveBand({ draws, total, ro }: { draws: Draw[]; total: number; ro: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+          border: "1px solid var(--line)", borderRadius: 8, background: "transparent",
+          padding: "8px 10px", color: "var(--muted)", fontSize: 11.5, fontWeight: 700,
+          letterSpacing: ".06em", textTransform: "uppercase",
+        }}>
+        <span style={{ fontSize: 13 }}>{open ? "▾" : "▸"}</span>
+        Archive — {draws.length} paid draw{draws.length === 1 ? "" : "s"}
+        <span style={{ marginLeft: "auto", textTransform: "none", letterSpacing: 0, fontVariantNumeric: "tabular-nums" }}>{fmt(total)}</span>
+      </button>
+      {open ? (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 12 }}>
+          {draws.map((d) => <DrawCard key={d.id} draw={d} ro={ro} />)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
   const store = useStore();
   const db = store.db;
@@ -158,7 +197,7 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <button onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Expand" : "Collapse"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>{collapsed ? "▸" : "▾"}</button>
         <input value={draw.name} disabled={ro || locked} onChange={(e) => store.renameDraw(draw.id, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", minWidth: 110, flex: 1 }} />
-        <Pill color="#fff" bg={STATUS_BG[draw.status]}>{draw.status}{draw.paidDate ? ` · ${draw.paidDate}` : draw.pushedDate ? ` · ${draw.pushedDate}` : ""}</Pill>
+        <Pill color="#fff" bg={STATUS_BG[draw.status]}>{DRAW_STATUS_LABEL[draw.status]}{draw.paidDate ? ` · ${draw.paidDate}` : draw.approvedDate ? ` · ${draw.approvedDate}` : ""}</Pill>
         <span style={{ fontSize: 17, fontWeight: 700, fontFamily: "var(--font-serif)" }}><Money value={total} /></span>
       </div>
 
@@ -181,13 +220,26 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
 
           {!ro && (
             <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-              {draw.status === "planned" && <PushButton draw={draw} />}
-              {draw.status === "pushed" && <button className="btn btn-sm btn-primary" onClick={() => store.setDrawStatus(draw.id, "paid")}>Mark paid 🔒</button>}
+              {/* Saved → client approved → client paid. Each button records
+                  what the client has done; paid is final and archives. */}
+              {draw.status === "planned" && (
+                <button className="btn btn-sm btn-primary" disabled={!draw.allocations.length}
+                  title={draw.allocations.length ? "" : "Add at least one budget line first"}
+                  onClick={() => store.setDrawStatus(draw.id, "pushed")}>Mark client approved</button>
+              )}
+              {draw.status === "pushed" && <button className="btn btn-sm btn-primary" onClick={() => store.setDrawStatus(draw.id, "paid")}>Mark client paid 🔒</button>}
+              {draw.status === "pushed" && (
+                <button className="btn btn-sm" onClick={() => store.setDrawStatus(draw.id, "planned")}>Back to saved</button>
+              )}
               {!locked && <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => store.removeDraw(draw.id)}>Delete</button>}
             </div>
           )}
           {locked && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — locked. If costs increase, raise a change order in <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>Budget Management</Link> (a paid draw can’t be edited).</div>}
-          {draw.status === "pushed" && <div style={{ fontSize: 11.5, color: "var(--brass-2)", marginTop: 8 }}>📄 Contracts issued — see Vendor Management for signatures.</div>}
+          {draw.status === "pushed" && (
+            <div style={{ fontSize: 11.5, color: "var(--brass-2)", marginTop: 8 }}>
+              ✓ Client approved{draw.approvedDate ? ` ${draw.approvedDate}` : ""}{draw.approvedBy ? ` · recorded by ${draw.approvedBy}` : ""} — contracts issued to the trades in this draw. Mark it paid once the money lands.
+            </div>
+          )}
         </>
       )}
     </div>
@@ -268,13 +320,3 @@ function RemitTo({ draw }: { draw: Draw }) {
   );
 }
 
-function PushButton({ draw }: { draw: Draw }) {
-  const store = useStore();
-  const name = store.session.displayName;
-  const [done, setDone] = useState(false);
-  return (
-    <button className="btn btn-sm btn-primary" disabled={!draw.allocations.length} onClick={() => { const r = store.pushDraw(draw.id, name); setDone(true); void r; }}>
-      {done ? "✓ Pushed" : "Push → issue contracts"}
-    </button>
-  );
-}
