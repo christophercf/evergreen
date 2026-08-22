@@ -7,6 +7,7 @@ import { fmt, tradeName, lineCurrent, lineDrawn, linePaid } from "@/lib/data/mon
 import { contractOf, contractState, contractMissingSigs, contractAmount, type ContractState } from "@/lib/data/contract";
 import type { Draw } from "@/lib/data/types";
 import { Pill, StatCard, PaceBar } from "../ui/bits";
+import { SkeletonList } from "../ui/skeleton";
 
 // ---------------------------------------------------------------------------
 // Contracts, one line each.
@@ -229,6 +230,7 @@ export function ContractList({ tradeIds, renderDetail }: {
   const store = useStore();
   const db = store.db;
   const rows = useMemo(() => contractRows(db, tradeIds), [db, tradeIds]);
+  const loading = store.loading;
   const [open, setOpen] = useState<string | null>(null);
 
   const packages = rows.filter((r) => !r.legacy);
@@ -243,6 +245,7 @@ export function ContractList({ tradeIds, renderDetail }: {
   const unsigned = inApp.filter((r) => r.state !== "signed").reduce((a, r) => a + r.amount, 0);
   const paperTotal = rows.filter((r) => r.paper).reduce((a, r) => a + r.amount, 0);
 
+  if (loading) return <SkeletonList rows={4} />;
   if (!rows.length) {
     return (
       <>

@@ -202,6 +202,25 @@ Prove the isolation, do not assume it: read `notifications[].readBy` after
 opening a module and confirm it holds exactly the one user id.
 ---
 
+## 5b. Reach — can the user actually get to the action?
+
+A control that exists is not a control the user can use. Check, on a phone:
+
+- **Every flow that mutates from a list is completable with taps only.** Drag
+  may exist as an accelerator, never as the only path — HTML5 drag-and-drop does
+  not fire on touch browsers at all, and synthetic `DragEvent`s in a test prove
+  nothing about a real phone.
+- **Any pick-from-list longer than the viewport carries the floating action
+  bar**, with a running count, clearing the tab bar and the keyboard.
+- **A disabled control shows its reason as text on the screen**, not only in
+  `title` — a tooltip explains itself to a mouse and to nobody else.
+- **No `window.confirm`.** Destructive confirmation uses the sheet, and says
+  what happens rather than asking whether you are sure.
+- **Nothing simulates progress.** A spinner with no work behind it teaches
+  people to distrust every real one.
+
+---
+
 ## 6b. The feedback tracker (daily)
 
 Run `node scripts/pull-feedback.mjs`. It is read-only against live and rewrites
@@ -291,6 +310,13 @@ Bugs that already escaped once. Each run, prove they are still dead.
 - **An open conversation takes the phone** — fixed, full-height, tab bar hidden.
   The old `calc(100dvh - 250px)` inverted under the keyboard, because
   `min-height: 420` stopped the card shrinking when the viewport did.
+- **A draw can be built with taps** — tapping a drawable line adds it (directly
+  when one draw is open, arm-and-place when several). Fixed 2026-08-22; drag was
+  the only path and touch browsers never fire it.
+- **A signed contract does not move** — binding language and Round-2 dates
+  freeze on the first signature; changing them goes through the amendment path.
+- **A bundled package is one contract sum** — per-trade agreements are the same
+  document; summing them double-counts the award.
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the

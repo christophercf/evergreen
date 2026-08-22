@@ -54,11 +54,16 @@ class Store {
     return this.backend?.mode ?? "mock";
   }
 
+  /** False until the first load from the backend has landed. Mock returns
+   *  almost instantly; Supabase over a site connection does not, and a blank
+   *  card must not be mistaken for an empty project. */
+  loading = true;
+
   start() {
     if (this.started || typeof window === "undefined") return;
     this.started = true;
     this.backend = makeBackend();
-    const pDB = this.backend.loadDB().then((db) => { this.db = db; });
+    const pDB = this.backend.loadDB().then((db) => { this.db = db; this.loading = false; });
     const pS = this.backend.loadSession().then((s) => { this.session = s; });
     void Promise.all([pDB, pS]).then(() => {
       if (authEnabled()) {

@@ -126,6 +126,7 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
   const by = store.session.displayName;
   const [hist, setHist] = useState(false);
   const [showAccess, setShowAccess] = useState(false);
+  const [more, setMore] = useState(false);
   const cur = currentVersion(a);
   const href = versionHref(cur);
   const hasAnyFile = !!(cur?.fileUrl || cur?.driveUrl);
@@ -168,20 +169,40 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
 
       <SummaryBlock a={a} ro={ro} />
 
+      {/* Two primaries, then everything else behind ⋯. Nine chips per card was
+          a wall on a desk and a stack on a phone — and permanent Delete sat
+          next to Archive, told apart by colour alone despite being the one
+          that cannot be undone. */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {a.kind === "drawing" && <button className="btn btn-sm btn-primary" onClick={onOpen}>✍️ Interactive view</button>}
-        {hasAnyFile && <button className="btn btn-sm btn-primary" onClick={onView}>👁 View</button>}
-        {href ? (cur?.fileUrl ? <a className="btn btn-sm" href={href} download={cur.fileName ?? a.name}>⬇ Download</a> : <a className="btn btn-sm" href={driveViewLink(href)} target="_blank" rel="noreferrer">↗ Open</a>) : null}
-        <button className="btn btn-sm" onClick={() => setHist((v) => !v)}>🕑 {(a.versions?.length ?? (a.url || a.version ? 1 : 0))} ver.</button>
+        {a.kind === "drawing" && <button className="btn btn-sm btn-primary" onClick={onOpen}>Interactive view</button>}
+        {hasAnyFile && <button className="btn btn-sm btn-primary" onClick={onView}>View</button>}
+        {href ? (cur?.fileUrl ? <a className="btn btn-sm" href={href} download={cur.fileName ?? a.name}>Download</a> : <a className="btn btn-sm" href={driveViewLink(href)} target="_blank" rel="noreferrer">Open ↗</a>) : null}
         <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
-        {!ro && <button className="btn btn-sm" title="Notify the team on new versions" onClick={() => store.toggleArtifactWatch(a.id)} style={{ color: a.watch ? "var(--brass-2)" : "var(--muted)" }}>{a.watch ? "🔔 Watching" : "🔕 Watch"}</button>}
-        {isAdmin && <button className="btn btn-sm" title="Assign which roles can view this" onClick={() => setShowAccess((v) => !v)}>🔐 Access</button>}
-        {!ro && <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
-          <button className="btn btn-sm" title={a.archived ? "Restore to the library" : "Archive (keep on record, hide from library)"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "♻ Unarchive" : "🗄 Archive"}</button>
-          <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete permanently"
-            onClick={async () => { if (await ask({ title: `Permanently remove "${a.name}"?`, body: "Every version of it goes too, and this cannot be undone. Archiving keeps it and takes it out of the way.", danger: "Delete for good" })) store.removeArtifact(a.id); }}>🗑</button>
-        </div>}
+        <button className="btn btn-sm tap" aria-label="More actions" title="More" style={{ marginLeft: "auto" }}
+          onClick={() => setMore((v) => !v)}>⋯</button>
       </div>
+
+      {more ? (
+        <div className="card" style={{ padding: 10, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", background: "var(--paper)" }}>
+          <button className="btn btn-sm" onClick={() => setHist((v) => !v)}>{(a.versions?.length ?? (a.url || a.version ? 1 : 0))} version{(a.versions?.length ?? 1) === 1 ? "" : "s"}</button>
+          {!ro && (
+            <button className="btn btn-sm" title="Notify the team on new versions" onClick={() => store.toggleArtifactWatch(a.id)}
+              style={a.watch
+                ? { background: "var(--brass)", borderColor: "var(--brass)", color: "#fff", fontWeight: 700 }
+                : { color: "var(--muted)" }}>
+              {a.watch ? "Watching" : "Watch"}
+            </button>
+          )}
+          {isAdmin && <button className="btn btn-sm" title="Assign which roles can view this" onClick={() => setShowAccess((v) => !v)}>Access</button>}
+          {!ro && <button className="btn btn-sm" title={a.archived ? "Restore to the library" : "Archive (keep on record, hide from library)"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "Unarchive" : "Archive"}</button>}
+          {!ro && (
+            <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }}
+              onClick={async () => { if (await ask({ title: `Permanently remove "${a.name}"?`, body: "Every version of it goes too, and this cannot be undone. Archiving keeps it and takes it out of the way.", danger: "Delete for good" })) store.removeArtifact(a.id); }}>
+              Delete permanently
+            </button>
+          )}
+        </div>
+      ) : null}
 
       {isAdmin && showAccess && <AccessEditor a={a} />}
 
@@ -250,22 +271,21 @@ function PermitBar({ a, ro }: { a: Artifact; ro: boolean }) {
 // AI document summary (stub — labeled; a real OCR/vision model is the next step).
 function SummaryBlock({ a, ro }: { a: Artifact; ro: boolean }) {
   const store = useStore();
-  const [busy, setBusy] = useState(false);
   const cur = currentVersion(a);
   const hasFile = !!(cur?.fileUrl || cur?.driveUrl);
   const generate = () => {
-    setBusy(true);
     const kindWord = a.kind === "permit" ? "permit" : a.kind === "survey" ? "survey" : a.kind === "contract" ? "contract" : a.kind === "drawing" ? "drawing set" : "document";
-    const text = `AI summary (placeholder): This ${kindWord} — "${a.name}"${a.source ? ` from ${a.source}` : ""} — would be read and summarized here: key parties, dates, scope, and any conditions or expirations. Connect a vision/OCR model to generate a real summary from the uploaded file.`;
-    // tiny delay so the action reads as "working"; no real model wired yet.
-    setTimeout(() => { store.setArtifactSummary(a.id, text); setBusy(false); }, 250);
+    const text = `Sample summary (no model wired yet): this ${kindWord} — "${a.name}"${a.source ? ` from ${a.source}` : ""} — would be read here for key parties, dates, scope, and any conditions or expirations. Connect a vision/OCR model to produce a real one from the uploaded file.`;
+    // No artificial delay. There is nothing to wait for, and simulating
+    // progress teaches people to distrust every real spinner in the app.
+    store.setArtifactSummary(a.id, text);
   };
   if (!a.summary && (ro || !hasFile)) return null;
   return (
     <div style={{ background: "#f0e6cd", borderRadius: 8, padding: "8px 10px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brass-2)", letterSpacing: ".05em", textTransform: "uppercase" }}>✨ AI summary</span>
-        {!ro && hasFile && <button className="btn btn-sm" style={{ marginLeft: "auto" }} disabled={busy} onClick={generate}>{busy ? "Reading…" : a.summary ? "Regenerate" : "Summarize document"}</button>}
+        {!ro && hasFile && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={generate}>{a.summary ? "Replace sample" : "Sample summary"}</button>}
       </div>
       {a.summary && <p style={{ fontSize: 12, color: "var(--ink)", margin: "6px 0 0", lineHeight: 1.45 }}>{a.summary}</p>}
     </div>

@@ -6,7 +6,9 @@ import { accessFor, type CostOwner, type MacroCategory } from "@/lib/data/types"
 import { fmt, romRows, romTotals, romCanLock, type RomRow, macroOrder } from "@/lib/data/money";
 import { Pill, StatCard, TextInput, NumInput } from "../ui/bits";
 import { ChangeOrders } from "./line-parts";
-import { contractState, lineContractState, CONTRACT_STATE_LABEL } from "@/lib/data/contract";
+import { contractOf, contractState, lineContractState, CONTRACT_STATE_LABEL } from "@/lib/data/contract";
+import { SearchBox, matches } from "../ui/search-box";
+import { SkeletonList } from "../ui/skeleton";
 import { MsgButton } from "../ui/messenger";
 
 // ---------------------------------------------------------------------------
@@ -41,12 +43,25 @@ export function BudgetLines() {
   const role = store.session.role;
   const user = store.currentUser;
   const [open, setOpen] = useState<string | null>(null);
+  const [q, setQ] = useState("");
 
   const access = accessFor(user, role, "costs");
   if (access === "none") return null;
+  // Loading is not the same as empty, and on a site connection the difference
+  // is several seconds of looking like a project with nothing in it.
+  if (store.loading) return <SkeletonList rows={5} />;
   const ro = access !== "edit";
 
-  const rows = romRows(db);
+  const allRows = romRows(db);
+  // Matched against what someone would actually remember about a line: its
+  // name, its category, its vendor, the rooms it covers.
+  const rows = allRows.filter((r) => matches(
+    q,
+    r.label,
+    r.category,
+    contractOf(db, r.tradeId)?.vendorName,
+    ...r.lines.flatMap((l) => [l.name, l.desc, ...l.roomIds.map((id) => db.rooms.find((x) => x.id === id)?.name)]),
+  ));
   const t = romTotals(db);
 
   const canCommit = !db.romLocked && ["full_admin", "owner"].includes(role);
@@ -66,6 +81,7 @@ export function BudgetLines() {
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <SearchBox value={q} onChange={setQ} placeholder="Search lines, rooms, vendors…" count={rows.length} of={allRows.length} />
           {db.romLocked ? <Pill color="#fff" bg="var(--walnut)">{`ROM locked ${db.romLockedAt ?? ""}`.trim()}</Pill> : null}
           {/* Only shown once it can actually be pressed — a disabled button that
               names what it is waiting for is just a status flag. */}

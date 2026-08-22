@@ -149,6 +149,18 @@ table { border-collapse: collapse; width: 100%; }
 .m-only { display: none; }
 .m-filters-toggle { display: none; }
 
+/* Loading, as distinct from empty. A blank card on a slow connection reads as
+   "nothing here"; a shimmer reads as "not yet". */
+.ever-shimmer {
+  background: linear-gradient(90deg, var(--cream-2) 25%, #efe7d6 37%, var(--cream-2) 63%);
+  background-size: 400% 100%;
+  animation: ever-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes ever-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@media (prefers-reduced-motion: reduce) {
+  .ever-shimmer { animation: none; }
+}
+
 /* Reading text on a phone. Applied to the lines someone actually reads —
    money strips, headroom, card metas — not to labels or kickers, which stay
    small because they are scanned, not read. Sunlight is the design constraint

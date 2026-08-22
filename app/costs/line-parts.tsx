@@ -57,7 +57,12 @@ export function ChangeOrders({ line, ro }: { line: CostLine; ro: boolean }) {
               </div>
               <span style={{ fontWeight: 700, color: co.kind === "savings" ? "var(--ok)" : "var(--rust)" }}>{co.kind === "savings" ? "−" : "+"}{fmt(co.amount)}</span>
               {co.status === "approved" ? <Pill color="#fff" bg="var(--ok)">approved</Pill>
-                : !ro ? <button className="btn btn-sm" onClick={() => setDeciding(co)}>Approve</button>
+                : !ro ? (
+                  <button className="btn btn-sm btn-primary" onClick={() => setDeciding(co)}
+                    title={`${co.kind === "savings" ? "Takes" : "Adds"} ${fmt(co.amount)} ${co.kind === "savings" ? "off" : "to"} the contract`}>
+                    Approve · {co.kind === "savings" ? "−" : "+"}{fmt(co.amount)}
+                  </button>
+                )
                 : <Pill color="var(--muted)">proposed</Pill>}
               {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} onClick={() => store.removeChangeOrder(line.id, co.id)}>✕</button>}
             </div>
