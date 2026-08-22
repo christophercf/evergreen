@@ -30,6 +30,12 @@ export function Landing() {
   const [needVerify, setNeedVerify] = useState(false);
   const [who, setWho] = useState<string | undefined>();
   const [code, setCode] = useState("");
+  // The account check could not run. We do not know what this person needs, so
+  // the screen stops pretending it does.
+  const [degraded, setDegraded] = useState(false);
+  // Typing a password blind on a phone is a leading cause of "it won't let me
+  // in". One control, and the guessing stops.
+  const [showPw, setShowPw] = useState(false);
 
   const reset = () => { setErr(""); setInfo(""); setNeedVerify(false); };
   const backToEmail = () => { reset(); setPassword(""); setConfirm(""); setCode(""); setStep("email"); };
@@ -85,6 +91,7 @@ export function Landing() {
     try {
       const a = await checkAccount(email);
       setWho(a.name);
+      setDegraded(!!a.degraded);
       const s: AccountState = a.state;
       if (s === "not_invited") {
         setErr("That email isn't on this project yet. Ask the project admin to invite you — access is invite-only.");
@@ -182,10 +189,13 @@ export function Landing() {
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Set your password</div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 16 }}>You followed a set-up link. Choose a password to finish — you&apos;ll use it to log in from now on.</p>
                 <label style={L}>New password
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" autoComplete="new-password" style={{ width: "100%", marginTop: 4, marginBottom: 12 }} />
+                  <PwInput value={password} onChange={setPassword} show={showPw} onToggle={() => setShowPw((v) => !v)}
+                    autoComplete="new-password" placeholder="at least 8 characters" />
                 </label>
+                <div style={{ height: 12 }} />
                 <label style={L}>Confirm password
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" autoComplete="new-password" onKeyDown={(e) => e.key === "Enter" && submitReset()} style={{ width: "100%", marginTop: 4 }} />
+                  <PwInput value={confirm} onChange={setConfirm} show={showPw} onToggle={() => setShowPw((v) => !v)}
+                    autoComplete="new-password" placeholder="type it again" onEnter={submitReset} />
                 </label>
                 {err && <Msg tone="err">{err}</Msg>}
                 <button className="btn btn-primary" disabled={busy || !password || !confirm} style={btn} onClick={submitReset}>{busy ? "…" : "Set password →"}</button>
@@ -233,11 +243,15 @@ export function Landing() {
             ) : step === "password" ? (
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Welcome back{who ? `, ${who.split(" ")[0]}` : ""}</div>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>Enter your password to continue.</p>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>
+                  {degraded
+                    ? "We couldn't check your account just now, so here are all the ways in. Any of them works."
+                    : "Enter your password to continue."}
+                </p>
                 {emailRow}
                 <label style={L}>Password
-                  <input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" autoComplete="current-password"
-                    onKeyDown={(e) => e.key === "Enter" && submitPassword()} style={{ width: "100%", marginTop: 4 }} />
+                  <PwInput value={password} onChange={setPassword} show={showPw} onToggle={() => setShowPw((v) => !v)}
+                    autoFocus autoComplete="current-password" placeholder="••••••••" onEnter={submitPassword} />
                 </label>
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
@@ -283,10 +297,13 @@ export function Landing() {
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>You&apos;re invited{who ? ` as ${who}` : ""} — pick a password and you&apos;re in.</p>
                 {emailRow}
                 <label style={L}>Password
-                  <input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" autoComplete="new-password" style={{ width: "100%", marginTop: 4, marginBottom: 12 }} />
+                  <PwInput value={password} onChange={setPassword} show={showPw} onToggle={() => setShowPw((v) => !v)}
+                    autoFocus autoComplete="new-password" placeholder="at least 8 characters" />
                 </label>
+                <div style={{ height: 12 }} />
                 <label style={L}>Confirm password
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••" autoComplete="new-password" onKeyDown={(e) => e.key === "Enter" && submitCreate()} style={{ width: "100%", marginTop: 4 }} />
+                  <PwInput value={confirm} onChange={setConfirm} show={showPw} onToggle={() => setShowPw((v) => !v)}
+                    autoComplete="new-password" placeholder="type it again" onEnter={submitCreate} />
                 </label>
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
@@ -308,13 +325,51 @@ export function Landing() {
         </div>
       </div>
       <div style={{ textAlign: "center", padding: 14, fontSize: 11.5, color: "#9a8e79" }}>Evergreen AI · end-to-end renovation project management.{realAuth ? " Secured by Supabase Auth." : " Demo — sample data, saved in this browser."}</div>
-      <style>{`@media (max-width: 760px){ .ever-landing{ grid-template-columns: 1fr !important; gap: 28px !important; } }`}</style>
+      {/* On a phone the form comes first. Everyone who reaches this screen is
+          one of five people signing in again, not a visitor being pitched. */}
+      <style>{`@media (max-width: 760px){
+        .ever-landing{ grid-template-columns: 1fr !important; gap: 28px !important; }
+        .ever-landing > :first-child{ order: 2; }
+        .ever-landing > :last-child{ order: 1; }
+      }`}</style>
     </div>
   );
 }
 
 const btn: React.CSSProperties = { width: "100%", marginTop: 16, justifyContent: "center", padding: 10 };
 const ghost: React.CSSProperties = { width: "100%", marginTop: 8, border: "none", background: "transparent", color: "var(--muted)" };
+
+/** A password field you can read back. Same field, one toggle — the reveal is
+ *  never on by default, and it never survives to another screen. */
+function PwInput({ value, onChange, show, onToggle, onEnter, autoFocus, autoComplete, placeholder }: {
+  value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void;
+  onEnter?: () => void; autoFocus?: boolean; autoComplete?: string; placeholder?: string;
+}) {
+  return (
+    <div style={{ position: "relative", marginTop: 4 }}>
+      <input
+        type={show ? "text" : "password"}
+        value={value}
+        autoFocus={autoFocus}
+        autoComplete={autoComplete}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Enter" && onEnter) onEnter(); }}
+        style={{ width: "100%", paddingRight: 62 }}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={show ? "Hide password" : "Show password"}
+        style={{
+          position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+          border: "none", background: "transparent", color: "var(--muted)",
+          fontSize: 11.5, fontWeight: 700, cursor: "pointer", padding: "6px 8px",
+        }}
+      >{show ? "Hide" : "Show"}</button>
+    </div>
+  );
+}
 
 function Msg({ tone, children }: { tone: "err" | "ok"; children: React.ReactNode }) {
   return (

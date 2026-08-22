@@ -49,11 +49,14 @@ export async function authSignOut() {
   await c()?.auth.signOut();
 }
 
-/** Supabase's built-in mailer is rate-limited project-wide (~2/hour). Turn the
- *  raw error into something a person can act on instead of silently failing. */
+/** Auth mail is rate-limited per address and project-wide. Turn the raw error
+ *  into something a person can act on instead of a dead end. The old copy named
+ *  a specific hourly figure that only applies to Supabase's built-in mailer —
+ *  this project sends through its own hook, so quoting it made people wait for
+ *  no reason. */
 function mailError(msg: string): string {
   if (/rate limit|too many|only request this after/i.test(msg)) {
-    return "Email limit reached (the project can send a couple of auth emails an hour). Wait a few minutes and try again, or ask your project admin to send you a direct setup link.";
+    return "Too many emails to that address just now — give it a minute and try again. If it keeps happening, ask your project admin for a direct sign-in link, which skips email entirely.";
   }
   return msg;
 }

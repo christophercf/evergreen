@@ -71,6 +71,13 @@ export async function POST(req: Request) {
   }
 
   // 1) Is this email on the project at all?
+  //
+  // "We could not check" and "you are not invited" are completely different
+  // answers, and only one of them tells someone to give up. A network blip used
+  // to be reported as the second, locking a real user out with a message saying
+  // they had no access — so the roster lookup must SUCCEED before its silence
+  // means anything.
+  let rosterRead = false;
   let onProject = false;
   let name: string | undefined;
   try {
@@ -78,26 +85,42 @@ export async function POST(req: Request) {
       headers: { apikey: svc, Authorization: `Bearer ${svc}` },
       cache: "no-store",
     });
-    const rows = await res.json();
-    const users = (rows?.[0]?.db?.users ?? []) as { name: string; email: string; status?: string }[];
-    const u = users.find((x) => x.email?.trim().toLowerCase() === email);
-    onProject = !!u;
-    name = u?.name;
-  } catch { /* fall through */ }
+    if (res.ok) {
+      const rows = await res.json();
+      const users = (rows?.[0]?.db?.users ?? []) as { name: string; email: string; status?: string }[];
+      // An empty roster is a failed read, not a project with nobody on it.
+      if (users.length) {
+        rosterRead = true;
+        const u = users.find((x) => x.email?.trim().toLowerCase() === email);
+        onProject = !!u;
+        name = u?.name;
+      }
+    }
+  } catch { /* rosterRead stays false */ }
 
+  if (!rosterRead) {
+    // Unknown, not refused: the login screen shows the password box AND the
+    // ways in that do not need one.
+    return NextResponse.json({ ok: true, state: "active", degraded: true });
+  }
   if (!onProject) return NextResponse.json({ ok: true, state: "not_invited" });
 
   // 2) What does Supabase Auth know about them?
-  let authExists = false, confirmed = false, lastSignInAt: string | null = null;
+  let authRead = false, authExists = false, confirmed = false, lastSignInAt: string | null = null;
   try {
     const { data } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    authRead = true;
     const a = data?.users?.find((x) => x.email?.toLowerCase() === email);
     if (a) {
       authExists = true;
       confirmed = !!a.email_confirmed_at;
       lastSignInAt = a.last_sign_in_at ?? null;
     }
-  } catch { /* best effort — fall back to asking for a password */ }
+  } catch { /* authRead stays false */ }
+
+  // Same rule again: if we could not read Auth, do not tell a long-standing
+  // user their account has no password. Say we do not know.
+  if (!authRead) return NextResponse.json({ ok: true, state: "active", name, degraded: true });
 
   const state = !authExists || !confirmed || !lastSignInAt ? "needs_setup" : "active";
   return NextResponse.json({ ok: true, state, name, authExists, confirmed, lastSignInAt });

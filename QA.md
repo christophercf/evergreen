@@ -205,6 +205,44 @@ Run `node scripts/pull-feedback.mjs`. It is read-only against live and rewrites
 
 ---
 
+## 6c. Sign-in (weekly, and after anything touching auth)
+
+Nobody can report a bug they cannot log in to file. These checks are read-only
+and need no credentials — **never sign in as anyone, never set a password.**
+
+Health of the five real accounts, one call each:
+
+```bash
+curl -s -X POST https://evergreen-rust-five.vercel.app/api/account-status \
+  -H "Content-Type: application/json" -d '{"email":"<their address>"}'
+```
+
+- `state: "active"` with `confirmed: true` and a `lastSignInAt` → healthy.
+- `state: "needs_setup"` → that person cannot use a password. They need the
+  6-digit code or a direct link; tell Chris rather than waiting for them to ask.
+- `state: "not_invited"` for someone who IS on the roster → the roster lookup is
+  failing. That is an outage, not an access decision.
+- `degraded: true` → the check could not run. The login screen must still offer
+  every way in; it must never claim someone is not on the project.
+
+Delivery path, unsigned probe — 401 proves the hook and both secrets are live;
+500 means auth email is dead and every password reset is silently failing:
+
+```bash
+curl -s -X POST https://evergreen-rust-five.vercel.app/api/auth-email \
+  -H "Content-Type: application/json" -d '{}'
+```
+
+On the screen itself:
+
+- The login card is the FIRST thing on a phone, above the pitch.
+- Password fields have a working Show/Hide, off by default.
+- A wrong password says what to do next, not just "invalid".
+- Any dead end names a way out: the code, the reset link, or asking the admin
+  for a direct link.
+
+---
+
 ## 7. Regression watchlist
 
 Bugs that already escaped once. Each run, prove they are still dead.
@@ -234,6 +272,9 @@ Bugs that already escaped once. Each run, prove they are still dead.
   row titles and icon links carry `.tap` / `.tap-row` (fixed 2026-08-21; 112
   controls across Draw Management, Materials, Help and Artifacts were between
   9px and 19px).
+- **A failed account lookup is never reported as "not invited"** — the roster
+  and Auth reads must SUCCEED before their silence means anything, or a network
+  blip tells a real user they have no access (fixed 2026-08-22).
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the
