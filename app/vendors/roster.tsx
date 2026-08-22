@@ -147,7 +147,7 @@ export function VendorRoster() {
         </div>
       ) : view === "table" ? (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 880, fontSize: 12.5 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 0, fontSize: 12.5 }}>
             <thead>
               <tr>{["Company", "Trades", "Contact", "Rating", "Documents on file", "Last job"].map((h) => (
                 <th key={h} style={{

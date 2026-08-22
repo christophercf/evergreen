@@ -147,8 +147,21 @@ export default function TimingPage() {
   // up what nothing else claimed.
   const panRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const [panning, setPanning] = useState(false);
+  // Two fingers zoom the chart; one pans it. Zoom is the same state the
+  // −/+ buttons drive, so the gesture and the buttons cannot disagree.
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+  const touches = useRef(new Map<number, { x: number; y: number }>());
+
   const startPan = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
+    touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.current.size === 2) {
+      const [a, b] = [...touches.current.values()];
+      pinch.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+      panRef.current = null;
+      setPanning(false);
+      return;
+    }
     if ((e.target as HTMLElement).closest("button, a, input, textarea, select, [data-bar]")) return;
     const el = scrollRef.current;
     if (!el) return;
@@ -157,12 +170,22 @@ export default function TimingPage() {
     el.setPointerCapture(e.pointerId);
   };
   const movePan = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (touches.current.has(e.pointerId)) touches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pz = pinch.current;
+    if (pz && touches.current.size === 2) {
+      const [a, b] = [...touches.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pz.dist > 0) setZoom(+Math.max(1, Math.min(6, pz.zoom * (dist / pz.dist))).toFixed(2));
+      return;
+    }
     const p = panRef.current, el = scrollRef.current;
     if (!p || !el) return;
     el.scrollLeft = p.left - (e.clientX - p.x);
     el.scrollTop = p.top - (e.clientY - p.y);
   };
   const endPan = (e: React.PointerEvent<HTMLDivElement>) => {
+    touches.current.delete(e.pointerId);
+    if (touches.current.size < 2) pinch.current = null;
     if (!panRef.current) return;
     panRef.current = null;
     setPanning(false);
@@ -341,9 +364,9 @@ export default function TimingPage() {
                         {/* Row-order controls — tap-friendly, no drag needed (custom order only) */}
                         {rowSort === "custom" && <span style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
                           <button title="Move row up" onClick={() => store.moveScheduleItem(s.id, -1)}
-                            style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▲</button>
+                            className="tap" style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▲</button>
                           <button title="Move row down" onClick={() => store.moveScheduleItem(s.id, 1)}
-                            style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▼</button>
+                            className="tap" style={{ width: 20, height: 15, lineHeight: 1, fontSize: 9, padding: 0, border: "1px solid var(--line)", borderRadius: 4, background: "var(--paper)", cursor: "pointer", color: "var(--muted)" }}>▼</button>
                         </span>}
                         <input type="checkbox" checked={selIds.has(s.id)} title="Select to move together with other checked bars"
                           onClick={(e) => e.stopPropagation()} onChange={() => toggleSel(s.id)} style={{ flexShrink: 0 }} />
@@ -373,7 +396,7 @@ export default function TimingPage() {
                         onPointerDown={(e) => { if (!canDrag) return; e.currentTarget.setPointerCapture(e.pointerId); const st = { id: s.id, startX: e.clientX, days: 0, mode: "move" as const }; dragRef.current = st; setDrag(st); }}
                         onPointerMove={(e) => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = Math.round((e.clientX - d.startX) / pxPerDay); if (days !== d.days) { dragRef.current = { ...d, days }; setDrag({ ...d, days }); } }}
                         onPointerUp={() => { const d = dragRef.current; if (!d || d.id !== s.id) return; const days = d.days; const mode = d.mode; dragRef.current = null; setDrag(null); if (days) { if (mode === "move" && selIds.size > 1 && selIds.has(s.id)) applyGroupDelta(days); else applyDelta(s, mode, days); } }}
-                        style={{ position: "absolute", left, top: 6, width: w, height: ROW_H - 12, borderRadius: 5, background: hexA(barColor, 0.28), border: isPending ? "1.5px dashed var(--rust)" : `1px solid ${s.status === "blocked" ? "var(--rust)" : s.status === "done" ? "var(--ok)" : hexA(barColor, 0.9)}`, boxShadow: isSel ? "0 0 0 2px var(--brass)" : undefined, overflow: "hidden", display: "flex", alignItems: "center", cursor: canDrag ? "grab" : "pointer", touchAction: "none" }}>
+                        style={{ position: "absolute", left, top: 6, width: w, height: ROW_H - 12, borderRadius: 5, background: hexA(barColor, 0.28), border: isPending ? "1.5px dashed var(--rust)" : `1px solid ${s.status === "blocked" ? "var(--rust)" : s.status === "done" ? "var(--ok)" : hexA(barColor, 0.9)}`, boxShadow: isSel ? "0 0 0 2px var(--brass)" : undefined, overflow: "hidden", display: "flex", alignItems: "center", cursor: canDrag ? "grab" : "pointer", touchAction: canDrag ? "none" : "manipulation" }}>
                         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${frac * 100}%`, background: barColor, opacity: .85 }} />
                         {w > 40 && <span style={{ position: "relative", fontSize: 9.5, fontWeight: 700, color: frac > 0.5 ? "#fff" : "var(--ink)", padding: "0 5px", whiteSpace: "nowrap" }}>{dl}</span>}
                         {canDrag && (
@@ -381,7 +404,8 @@ export default function TimingPage() {
                             onPointerDown={(e) => { e.stopPropagation(); (e.currentTarget.parentElement as HTMLElement).setPointerCapture?.(e.pointerId); const st = { id: s.id, startX: e.clientX, days: 0, mode: "resize" as const }; dragRef.current = st; setDrag(st); }}
                             onPointerMove={(e) => { const d = dragRef.current; if (!d || d.id !== s.id || d.mode !== "resize") return; const days = Math.round((e.clientX - d.startX) / pxPerDay); if (days !== d.days) { dragRef.current = { ...d, days }; setDrag({ ...d, days }); } }}
                             onPointerUp={(e) => { e.stopPropagation(); const d = dragRef.current; if (!d || d.id !== s.id) return; const days = d.days; dragRef.current = null; setDrag(null); if (days) applyDelta(s, "resize", days); }}
-                            style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 9, cursor: "ew-resize", background: "rgba(0,0,0,.12)" }} title="Drag to change length" />
+                            className="ever-grip" title="Drag to change length"
+                            style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 9, cursor: "ew-resize", background: "rgba(0,0,0,.12)", touchAction: "none" }} />
                         )}
                       </div>
                     )}
@@ -564,8 +588,9 @@ function PublishModal({ changes, onClose, onDone }: { changes: { itemId: string;
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={step === "reason" ? onClose : undefined}>
-      <div className="card" style={{ maxWidth: 540, width: "100%", padding: 22, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+    <div className="ever-sheet-overlay" style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      onClick={step === "reason" && !reason.trim() ? onClose : undefined}>
+      <div className="card ever-sheet" style={{ maxWidth: 540, width: "100%", padding: 22, maxHeight: "90vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         {step === "reason" ? (
           <>
             <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>Publish timing changes</h3>
@@ -615,8 +640,8 @@ function CascadeModal({ cascade, editing, onClose }: { cascade: NonNullable<Casc
   const [sel, setSel] = useState<Set<string>>(new Set(cascade.deps.map((d) => d.id)));
   const src = db.schedule.find((s) => s.id === cascade.sourceId);
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 520, width: "100%", padding: 22 }} onClick={(e) => e.stopPropagation()}>
+    <div className="ever-sheet-overlay" style={{ position: "fixed", inset: 0, background: "rgba(44,36,28,.45)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }} onClick={onClose}>
+      <div className="card ever-sheet" style={{ maxWidth: 520, width: "100%", padding: 22 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="serif" style={{ fontSize: 18, fontWeight: 700, color: "var(--walnut)" }}>Shift dependent tasks?</h3>
         <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 12px" }}>“{src?.label}” moved back <strong>{cascade.deltaDays} day{cascade.deltaDays === 1 ? "" : "s"}</strong>. These tasks depend on it. Shift the selected ones too?</p>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflow: "auto" }}>

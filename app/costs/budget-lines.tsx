@@ -95,11 +95,14 @@ export function BudgetLines() {
         </div>
       ) : (
         <div style={{ overflowX: "auto", marginTop: 14 }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1040, fontSize: 12.5 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 0, fontSize: 12.5 }}>
             <thead>
               <tr>
+                {/* ROM, contracted, change orders and fee drop below 700px —
+                    they are in the expander, which is where you go to change
+                    them anyway. */}
                 {COLS.map((h, i) => (
-                  <th key={h} style={{
+                  <th key={h} className={[1, 2, 3, 4].includes(i) ? "m-hide" : undefined} style={{
                     textAlign: i === 0 ? "left" : "right", padding: "7px 10px", whiteSpace: "nowrap",
                     fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED,
                     borderBottom: "1px solid var(--line)",
@@ -114,8 +117,8 @@ export function BudgetLines() {
               ))}
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
                 <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines{t.removedRows ? ` · ${t.removedRows} removed` : ""}</td>
-                <Num v={t.romFigure} bold /><Num v={t.contracted} bold /><Num v={t.changeOrders} bold />
-                <Num v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.paid} bold />
+                <Num hide v={t.romFigure} bold /><Num hide v={t.contracted} bold /><Num hide v={t.changeOrders} bold />
+                <Num hide v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.paid} bold />
               </tr>
             </tbody>
           </table>
@@ -179,17 +182,24 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
           <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
             {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}
           </div>
+          {/* What the hidden money columns said, for the phone. */}
+          <div className="m-only" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17, gap: 7, flexWrap: "wrap" }}>
+            <span>ROM {r.ranged ? `${fmt(r.low)}–${fmt(r.high)}` : fmt(r.romFigure)}</span>
+            {r.contracted ? <span>· contracted {fmt(r.contracted)}</span> : null}
+            {r.changeOrders ? <span>· COs {fmt(r.changeOrders)}</span> : null}
+            {r.builderFee ? <span>· fee {fmt(r.builderFee)}</span> : null}
+          </div>
         </td>
-        <Num v={r.romFigure} node={r.ranged ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span> : undefined} />
+        <Num hide v={r.romFigure} node={r.ranged ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span> : undefined} />
         {/* Green once the line is actually under contract, amber on hold,
             grey once removed. */}
-        <Num v={r.contracted}
+        <Num hide v={r.contracted}
           bg={r.state === "active" ? (r.lockedCount > 0 ? "var(--sage-tint)" : undefined) : CELL_BG[r.state]}
           title={r.state === "removed" ? "Removed — counts towards nothing"
             : r.state === "hold" ? "On hold"
             : r.lockedCount > 0 ? `${CONTRACT_STATE_LABEL[contractState(db, r.tradeId) === "none" ? "issued" : contractState(db, r.tradeId)]}${r.lockedCount < r.lines.length ? ` — ${r.lockedCount} of ${r.lines.length} lines` : ""}` : "No contract yet"} />
-        <Num v={r.changeOrders} />
-        <Num v={r.builderFee} />
+        <Num hide v={r.changeOrders} />
+        <Num hide v={r.builderFee} />
         <Num v={r.total} bold />
         <Num v={r.paid} node={r.draw !== r.paid
           ? <span>{fmt(r.paid)}<span style={{ color: MUTED, fontSize: 11 }}> of {fmt(r.draw)} drawn</span></span>
@@ -498,9 +508,9 @@ function Kick({ children, style }: { children: React.ReactNode; style?: React.CS
   return <div style={{ fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED, ...style }}>{children}</div>;
 }
 
-function Num({ v, bold, node, bg, title }: { v: number; bold?: boolean; node?: React.ReactNode; bg?: string; title?: string }) {
+function Num({ v, bold, node, bg, title, hide }: { v: number; bold?: boolean; node?: React.ReactNode; bg?: string; title?: string; hide?: boolean }) {
   return (
-    <td title={title} style={{
+    <td title={title} className={hide ? "m-hide" : undefined} style={{
       padding: "9px 10px", textAlign: "right", whiteSpace: "nowrap",
       fontVariantNumeric: "tabular-nums", fontWeight: bold ? 700 : 400,
       background: bg,

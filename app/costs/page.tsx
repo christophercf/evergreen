@@ -259,7 +259,7 @@ function CostChart() {
 
   return (
     <div className="card" style={{ padding: 16, overflowX: "auto" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 520, display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ minWidth: 0, display: "block" }}>
         {[0, 0.25, 0.5, 0.75, 1].map((f) => (
           <g key={f}>
             <line x1={padL} x2={W - 10} y1={padT + plotH * (1 - f)} y2={padT + plotH * (1 - f)} stroke="var(--line)" strokeWidth={1} />

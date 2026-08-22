@@ -372,10 +372,20 @@ export default function UpdatesPage() {
 
       <style>{`
         @media (max-width: 860px) {
-          .msgr { display: block !important; height: calc(100dvh - 250px) !important; }
+          .msgr { display: block !important; height: calc(100dvh - 250px) !important; min-height: 0 !important; }
           .msgr [data-role="list"], .msgr [data-role="chat"] { height: 100%; border-right: none !important; }
           .msgr[data-pane="chat"] [data-role="list"] { display: none !important; }
           .msgr[data-pane="list"] [data-role="chat"] { display: none !important; }
+
+          /* An open conversation owns the screen: no page header above it, no
+             tab bar below it, and no arithmetic against either. 100dvh follows
+             the keyboard, so the composer stays visible while typing. */
+          .msgr[data-pane="chat"] {
+            position: fixed !important; inset: 0 !important; z-index: 45 !important;
+            height: 100dvh !important; margin: 0 !important; border-radius: 0 !important;
+            padding-bottom: env(safe-area-inset-bottom) !important;
+          }
+          body:has(.msgr[data-pane="chat"]) .ever-bottomnav { display: none !important; }
         }
         @media (min-width: 861px) {
           .msgr-back { display: none !important; }
@@ -626,8 +636,12 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column" }}>
               {divider && <div style={{ alignSelf: "center", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 99, padding: "2px 10px", margin: "8px 0" }}>{day}</div>}
+              {/* Hover is the desktop grammar; long-press is the phone's. Both
+                  open the same row, so nothing is discoverable on one device
+                  and invisible on the other. */}
               <div onMouseEnter={() => setHoverId(m.id)} onMouseLeave={() => { setHoverId(null); setReactFor(null); }}
                 onClick={() => setHoverId((h) => (h === m.id ? null : m.id))}
+                onContextMenu={(e) => { e.preventDefault(); setHoverId(m.id); }}
                 style={{ alignSelf: mine ? "flex-end" : "flex-start", maxWidth: "80%", display: "flex", alignItems: "flex-end", gap: 5, flexDirection: mine ? "row-reverse" : "row" }}>
               <div style={{ minWidth: 0, background: mine ? "#dde8d2" : "var(--paper)", border: "1px solid var(--line)", borderRadius: mine ? "12px 12px 3px 12px" : "12px 12px 12px 3px", padding: "7px 10px", boxShadow: "0 1px 1px rgba(44,36,28,.06)" }}>
                 {/* Name the author in groups — and in a 1:1 whenever a third

@@ -35,6 +35,12 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
   const [pendingKind, setPendingKind] = useState<PinKind | null>(null);
   const [openPin, setOpenPin] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
+  // Zoom + pan of the plan itself. 1 = fit; panning is in CSS pixels of the frame.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const gesture = useRef<{ mode: "pan" | "pinch"; x: number; y: number; panX: number; panY: number; dist: number; zoom: number } | null>(null);
+  const points = useRef(new Map<number, { x: number; y: number }>());
+  const lastTap = useRef(0);
   // trade for scope view: a trade user is locked to their own trade
   const myTrade = me?.tradeIds?.[0];
   const [scopeTrade, setScopeTrade] = useState<string>(initialTrade ?? myTrade ?? "");
@@ -103,6 +109,78 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
   };
 
   const zonesToShow = mode === "scope" ? scopeZones : (a.zones ?? []);
+
+  // A tool is armed when a tap is about to DO something: drop a pin, drag a
+  // zone, or paint. Only then does the drawing own the gesture.
+  const armed = !!pendingKind || (mode === "zones" && !!zoneRoom) || drawing;
+
+  const clampPan = (z: number, p: { x: number; y: number }) => {
+    const el = wrapRef.current;
+    if (!el || z <= 1) return { x: 0, y: 0 };
+    // Never pan the plan off its own frame: the slack is half the overflow.
+    const mx = (el.clientWidth * (z - 1)) / 2;
+    const my = (el.clientHeight * (z - 1)) / 2;
+    return { x: Math.max(-mx, Math.min(mx, p.x)), y: Math.max(-my, Math.min(my, p.y)) };
+  };
+  const zoomTo = (z: number, p?: { x: number; y: number }) => {
+    const next = Math.max(1, Math.min(6, z));
+    setZoom(next);
+    setPan(clampPan(next, p ?? (next === 1 ? { x: 0, y: 0 } : pan)));
+  };
+
+  // Two fingers pinch; one finger pans, but only once zoomed in — at fit, a
+  // swipe belongs to the page.
+  const viewDown = (e: React.PointerEvent) => {
+    if (armed) return;
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...points.current.values()];
+    if (pts.length === 2) {
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      gesture.current = { mode: "pinch", x: 0, y: 0, panX: pan.x, panY: pan.y, dist, zoom };
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      return;
+    }
+    if (zoom > 1) {
+      gesture.current = { mode: "pan", x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, dist: 0, zoom };
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    }
+  };
+  const viewMove = (e: React.PointerEvent) => {
+    if (!points.current.has(e.pointerId)) return;
+    points.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const g = gesture.current;
+    if (!g) return;
+    if (g.mode === "pinch") {
+      const pts = [...points.current.values()];
+      if (pts.length < 2) return;
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (g.dist > 0) zoomTo(g.zoom * (dist / g.dist));
+      return;
+    }
+    setPan(clampPan(zoom, { x: g.panX + (e.clientX - g.x), y: g.panY + (e.clientY - g.y) }));
+  };
+  const viewUp = (e: React.PointerEvent) => {
+    points.current.delete(e.pointerId);
+    if (points.current.size < 2) gesture.current = null;
+  };
+  // Double-tap toggles between fit and 2.5×, centred on where you tapped.
+  const viewTap = (e: React.PointerEvent) => {
+    if (armed) return;
+    const now = e.timeStamp;
+    const el = wrapRef.current;
+    if (now - lastTap.current < 320 && el) {
+      const r = el.getBoundingClientRect();
+      if (zoom > 1) zoomTo(1);
+      else {
+        const z = 2.5;
+        // Pull the tapped point toward the middle of the frame.
+        zoomTo(z, { x: (r.left + r.width / 2 - e.clientX) * z, y: (r.top + r.height / 2 - e.clientY) * z });
+      }
+      lastTap.current = 0;
+      return;
+    }
+    lastTap.current = now;
+  };
   const roomName = (id: string) => db.rooms.find((r) => r.id === id)?.name ?? id;
 
   return (
@@ -162,8 +240,20 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
 
         {/* the drawing surface */}
         <div style={{ display: "grid", gridTemplateColumns: mode === "scope" && scopeTrade ? "1fr 280px" : "1fr", gap: 14, marginTop: 12, alignItems: "start" }}>
-          <div ref={wrapRef} {...dropProps} onClick={onImgClick} onPointerDown={mode === "zones" ? zoneDown : undefined} onPointerMove={mode === "zones" ? zoneMove : undefined} onPointerUp={mode === "zones" ? zoneUp : undefined}
-            style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 10, overflow: "hidden", border: `1px solid ${dropOver ? "var(--sage)" : "var(--line)"}`, outline: dropOver ? "2px dashed var(--sage)" : "none", background: "#f4f1e8", cursor: pendingKind ? "crosshair" : mode === "zones" && zoneRoom ? "crosshair" : "default", touchAction: "none" }}>
+          <div ref={wrapRef} {...dropProps} onClick={onImgClick}
+            onPointerDown={(e) => { if (mode === "zones") zoneDown(e); viewDown(e); viewTap(e); }}
+            onPointerMove={(e) => { if (mode === "zones") zoneMove(e); viewMove(e); }}
+            onPointerUp={(e) => { if (mode === "zones") zoneUp(); viewUp(e); }}
+            onPointerCancel={viewUp}
+            style={{ position: "relative", width: "100%", aspectRatio: "4 / 3", borderRadius: 10, overflow: "hidden", border: `1px solid ${dropOver ? "var(--sage)" : "var(--line)"}`, outline: dropOver ? "2px dashed var(--sage)" : "none", background: "#f4f1e8", cursor: pendingKind ? "crosshair" : mode === "zones" && zoneRoom ? "crosshair" : "default",
+              // Only an armed tool takes the gesture. Otherwise this is a picture
+              // on a page, and a swipe across it scrolls the page.
+              touchAction: armed ? "none" : zoom > 1 ? "none" : "manipulation" }}>
+
+            {/* Everything below is positioned in image coordinates, so one
+                transform on the wrapper moves the plan, its zones, its pins and
+                its markup together. */}
+            <div style={{ position: "absolute", inset: 0, transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "center center", transition: gesture.current ? "none" : "transform .12s ease-out" }}>
             {dropOver && <div style={{ position: "absolute", inset: 0, zIndex: 5, background: "var(--sage-tint)", opacity: 0.9, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "var(--walnut)", pointerEvents: "none" }}>⬆ Drop an image to set the drawing</div>}
             {img && !broken
               ? <img src={img} alt={a.name} onError={() => setBroken(true)} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
@@ -198,6 +288,22 @@ export default function DrawingViewer({ artifactId, initialTrade, onClose }: { a
                 <PinEditor artId={a.id} pin={p} canEdit={canEdit || p.by === by} onClose={() => setOpenPin(null)} />
               </div>
             ); })()}
+            </div>{/* /transform wrapper */}
+
+            {/* Zoom, said out loud — pinch and double-tap are not discoverable
+                on their own, and a desktop has no pinch at all. */}
+            {zoom > 1 ? (
+              <button onClick={(e) => { e.stopPropagation(); zoomTo(1); }}
+                style={{ position: "absolute", right: 8, top: 8, zIndex: 6, border: "none", borderRadius: 99, padding: "5px 11px", fontSize: 11.5, fontWeight: 700, background: "rgba(28,22,16,.72)", color: "#fff", cursor: "pointer" }}>
+                {zoom.toFixed(1)}× · Fit
+              </button>
+            ) : null}
+            <div style={{ position: "absolute", right: 8, bottom: 8, zIndex: 6, display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+              <button className="tap" onClick={() => zoomTo(zoom - 0.5)} disabled={zoom <= 1} aria-label="Zoom out"
+                style={{ border: "none", borderRadius: 99, width: 34, height: 34, fontSize: 16, fontWeight: 700, background: "rgba(28,22,16,.72)", color: "#fff", cursor: zoom <= 1 ? "default" : "pointer", opacity: zoom <= 1 ? .4 : 1 }}>−</button>
+              <button className="tap" onClick={() => zoomTo(zoom + 0.5)} disabled={zoom >= 6} aria-label="Zoom in"
+                style={{ border: "none", borderRadius: 99, width: 34, height: 34, fontSize: 16, fontWeight: 700, background: "rgba(28,22,16,.72)", color: "#fff", cursor: zoom >= 6 ? "default" : "pointer", opacity: zoom >= 6 ? .4 : 1 }}>+</button>
+            </div>
           </div>
 
           {/* scope side panel */}

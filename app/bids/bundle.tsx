@@ -149,11 +149,13 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
       ) : null}
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900, fontSize: 12.5 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 0, fontSize: 12.5 }}>
           <thead>
             <tr>
+              {/* Rooms, dates and coverage drop below 700px — they are under
+                  the budget line's own name there. */}
               {["", "Budget line", "Left to bid", "Rooms", "On site", "Who can bid it"].map((h, i) => (
-                <th key={h || i} style={{
+                <th key={h || i} className={i >= 3 ? "m-hide" : undefined} style={{
                   textAlign: i === 2 ? "right" : "left", padding: "7px 10px", whiteSpace: "nowrap",
                   fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED,
                   borderBottom: "1px solid var(--line)",
@@ -197,11 +199,15 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
                             : c.row.committed ? `agreed ${fmt(c.row.romFigure)}` : "ROM not agreed yet"}
                           {c.row.contracted > 0 && !c.blocked ? ` · ${fmt(c.row.contracted)} contracted` : ""}
                         </div>
+                        {/* What the dropped columns said. */}
+                        <div className="m-only" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, gap: 6, flexWrap: "wrap" }}>
+                          <span>{c.rooms.length ? c.rooms.slice(0, 2).join(", ") + (c.rooms.length > 2 ? ` +${c.rooms.length - 2}` : "") : "whole project"}</span>
+                        </div>
                       </td>
                       <td style={{ padding: "8px 10px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                         {c.blocked ? "—" : fmt(c.remaining)}
                       </td>
-                      <td style={{ padding: "8px 10px", fontSize: 11.5, color: MUTED, maxWidth: 200 }}>
+                      <td className="m-hide" style={{ padding: "8px 10px", fontSize: 11.5, color: MUTED, maxWidth: 200 }}>
                         {c.rooms.length ? c.rooms.slice(0, 3).join(", ") + (c.rooms.length > 3 ? ` +${c.rooms.length - 3}` : "") : "whole project"}
                       </td>
                       <td style={{ padding: "8px 10px", fontSize: 11.5, color: MUTED, whiteSpace: "nowrap" }}>

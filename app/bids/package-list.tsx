@@ -123,11 +123,13 @@ export function PackageList({ onOpen, onNew, canEdit }: {
         </div>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900, fontSize: 12.5 }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 0, fontSize: 12.5 }}>
             <thead>
               <tr>
+                {/* On a phone only vendor, package and total survive — the rest
+                    are in the package itself, one tap away. */}
                 {["Vendor", "Package & trades", "Awarded", "Change orders", "Total", "Drawn", "Remaining"].map((h, i) => (
-                  <th key={h} style={{
+                  <th key={h} className={[2, 3, 5, 6].includes(i) ? "m-hide" : undefined} style={{
                     textAlign: i < 2 ? "left" : "right", padding: "7px 10px", whiteSpace: "nowrap",
                     fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED,
                     borderBottom: "1px solid var(--line)",
@@ -141,11 +143,11 @@ export function PackageList({ onOpen, onNew, canEdit }: {
               <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
                 <td style={{ padding: "9px 10px" }}>{vendors} vendor{vendors === 1 ? "" : "s"}</td>
                 <td style={{ padding: "9px 10px" }}>Total — {rows.length} packages</td>
-                <Num v={rows.reduce((a, r) => a + (r.inPlace ? r.awarded : 0), 0)} bold />
-                <Num v={t.changeOrders} bold />
+                <Num v={rows.reduce((a, r) => a + (r.inPlace ? r.awarded : 0), 0)} bold hide />
+                <Num v={t.changeOrders} bold hide />
                 <Num v={t.committed} bold />
-                <Num v={t.drawn} bold />
-                <Num v={t.remaining} bold />
+                <Num v={t.drawn} bold hide />
+                <Num v={t.remaining} bold hide />
               </tr>
             </tbody>
           </table>
@@ -184,19 +186,26 @@ function Row({ r, onOpen }: { r: PkgRow; onOpen: (id: string) => void }) {
         <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2 }}>
           Pkg {String(r.no).padStart(2, "0")} · {trades.map((t) => tradeName(db, t)).join(" + ") || "no trade"}
         </div>
+        {/* What the hidden columns said, for the phone. */}
+        <div className="m-only" style={{ fontSize: 10.5, color: MUTED, marginTop: 3, gap: 8, flexWrap: "wrap" }}>
+          {r.awarded ? <span>awarded {fmt(r.awarded)}</span> : null}
+          {r.changeOrders ? <span>· COs {fmt(r.changeOrders)}</span> : null}
+          {r.drawn ? <span>· drawn {fmt(r.drawn)}</span> : null}
+          {r.remaining ? <span>· {fmt(r.remaining)} left</span> : null}
+        </div>
       </td>
-      <Num v={r.awarded} />
-      <Num v={r.changeOrders} />
+      <Num v={r.awarded} hide />
+      <Num v={r.changeOrders} hide />
       <Num v={r.total} bold />
-      <Num v={r.drawn} />
-      <Num v={r.remaining} />
+      <Num v={r.drawn} hide />
+      <Num v={r.remaining} hide />
     </tr>
   );
 }
 
-function Num({ v, bold }: { v: number; bold?: boolean }) {
+function Num({ v, bold, hide }: { v: number; bold?: boolean; hide?: boolean }) {
   return (
-    <td style={{
+    <td className={hide ? "m-hide" : undefined} style={{
       padding: "9px 10px", textAlign: "right", whiteSpace: "nowrap",
       fontVariantNumeric: "tabular-nums", fontWeight: bold ? 700 : 400,
       color: v === 0 && !bold ? MUTED : "var(--ink)",

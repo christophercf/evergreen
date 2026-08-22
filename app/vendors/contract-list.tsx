@@ -273,11 +273,12 @@ export function ContractList({ tradeIds, renderDetail }: {
       </div>
 
       <div style={{ overflowX: "auto" }}>
-        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 760, fontSize: 12.5 }}>
+        <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 0, fontSize: 12.5 }}>
           <thead>
             <tr>
+              {/* Vendor and signature count move into the row on a phone. */}
               {["Contract", "Vendor", "State", "Signatures", "Sum"].map((h, i) => (
-                <th key={h} colSpan={i === 0 ? 2 : 1} style={{
+                <th key={h} colSpan={i === 0 ? 2 : 1} className={[1, 3].includes(i) ? "m-hide" : undefined} style={{
                   textAlign: i >= 3 ? "right" : "left", padding: "7px 10px", whiteSpace: "nowrap",
                   fontSize: 10, letterSpacing: ".09em", textTransform: "uppercase", color: MUTED,
                   borderBottom: "1px solid var(--line)",
@@ -328,8 +329,13 @@ function Row({ r, open, onToggle, renderDetail }: {
             {r.tradeIds.map((t) => tradeName(db, t)).join(" + ")}
             {r.revisions ? ` · ${r.revisions} amendment${r.revisions === 1 ? "" : "s"}` : ""}
           </div>
+          {/* Vendor and signatures, for the phone where their columns are gone. */}
+          <div className="m-only" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, gap: 6 }}>
+            <span>{r.vendor ?? (r.legacy ? "vendor not recorded" : "not awarded")}</span>
+            {r.needed ? <span>· {r.signed} of {r.needed} signed</span> : null}
+          </div>
         </td>
-        <td style={{ padding: "9px 10px" }}>
+        <td className="m-hide" style={{ padding: "9px 10px" }}>
           {r.vendor ?? <span style={{ color: MUTED }}>{r.legacy ? "not recorded" : "Not awarded"}</span>}
         </td>
         <td style={{ padding: "9px 10px" }}>
@@ -338,7 +344,7 @@ function Row({ r, open, onToggle, renderDetail }: {
             {r.paper && r.legacy ? "On paper" : r.state === "signed" ? "Signed" : r.state === "issued" ? "Issued" : "No contract"}
           </Pill>
         </td>
-        <td style={{ padding: "9px 10px", textAlign: "right", color: r.needed && r.signed === r.needed ? "var(--ok)" : MUTED, whiteSpace: "nowrap" }}>
+        <td className="m-hide" style={{ padding: "9px 10px", textAlign: "right", color: r.needed && r.signed === r.needed ? "var(--ok)" : MUTED, whiteSpace: "nowrap" }}>
           {r.needed ? `${r.signed} of ${r.needed}` : "—"}
         </td>
         <td style={{ padding: "9px 10px", textAlign: "right", fontWeight: 700, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>

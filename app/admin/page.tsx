@@ -50,7 +50,17 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === "matrix" && <MatrixTab ro={ro} />}
+      {tab === "matrix" && (
+        <>
+          {/* Honest rather than responsive: 1,500 cells is a desktop screen, and
+              the per-trade editor does the same job with a thumb. */}
+          <div className="m-only card" style={{ padding: 12, marginBottom: 10, fontSize: 12.5, color: "var(--brass-2)", lineHeight: 1.5, flexDirection: "column", gap: 6, alignItems: "flex-start" }}>
+            <span>Best on a bigger screen — the matrix is about 1,500 cells.</span>
+            <button className="btn btn-sm" onClick={() => setTab("trade")}>Use Trade Scope instead →</button>
+          </div>
+          <MatrixTab ro={ro} />
+        </>
+      )}
       {tab === "trade" && <TradeScopeTab ro={ro} />}
       {tab === "categories" && <CategoriesTab ro={ro} />}
       {tab === "vendors" && <VendorRoster />}

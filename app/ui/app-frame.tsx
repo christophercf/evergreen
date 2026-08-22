@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
@@ -98,6 +98,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const store = useStore();
   const pathname = usePathname();
   const [navOpen, setNavOpen] = useState(false);
+  // Escape closes the drawer — the same key that closes every other overlay here.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setNavOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const role = store.session.role;
   const user = store.currentUser;
 
@@ -140,6 +147,16 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Toaster />
+      {/* A real backdrop, because a box-shadow cannot be tapped. Only on phones,
+          where the drawer overlays the page rather than sitting beside it. */}
+      {navOpen && (
+        <div
+          className="ever-navscrim"
+          onClick={() => setNavOpen(false)}
+          aria-hidden
+          style={{ position: "fixed", inset: 0, zIndex: 39, background: "rgba(28,22,16,.45)" }}
+        />
+      )}
       {/* Sidebar */}
       <aside
         style={{
@@ -260,14 +277,16 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       </nav>
 
       <style>{`
+        .ever-navscrim { display: none; }
         @media (max-width: 860px) {
           .ever-sidebar { position: fixed !important; left: 0; top: 0; height: 100vh !important; z-index: 40; transform: translateX(-100%); transition: transform .2s; box-shadow: 0 0 0 200vmax rgba(0,0,0,0); }
-          .ever-sidebar[style*="translateX(0)"] { transform: translateX(0) !important; box-shadow: 0 0 0 200vmax rgba(28,22,16,.45); }
+          .ever-sidebar[style*="translateX(0)"] { transform: translateX(0) !important; box-shadow: 4px 0 24px rgba(0,0,0,.35); }
           .ever-burger { display: inline-flex !important; }
           /* Sides and top only. The bottom belongs to globals.css, which
              clears the fixed tab bar and the phone's safe area — a shorthand
              here would silently win and put controls under the bar. */
           .ever-main { padding-top: 16px !important; padding-left: 14px !important; padding-right: 14px !important; }
+          .ever-navscrim { display: block !important; }
         }
       `}</style>
     </div>
@@ -322,7 +341,9 @@ function PersonaSwitcher() {
     <div style={{ position: "relative" }}>
       <button className="btn" onClick={() => setOpen((v) => !v)} style={{ gap: 8 }}>
         <span style={{ width: 8, height: 8, borderRadius: 99, background: store.isViewingAs ? "var(--brass)" : "var(--sage)" }} />
-        <span style={{ textAlign: "left", lineHeight: 1.1 }}>
+        {/* Name and role are the first thing to go when the header runs out of
+            room — the dot still says whether you are impersonating. */}
+        <span className="m-hide-i" style={{ textAlign: "left", lineHeight: 1.1 }}>
           <span style={{ display: "block", fontSize: 12.5 }}>{name}</span>
           <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)" }}>{store.isViewingAs ? `viewing as ${ROLE_LABEL[current]}` : ROLE_LABEL[current]}</span>
         </span>

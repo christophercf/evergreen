@@ -155,6 +155,16 @@ Per route, require:
 | Elements past the viewport with no scrollable ancestor | **0** | a wide table inside `overflow-x:auto` is fine; a spilling card is not |
 | Smallest dimension of any control, at 375px | **≥ 24px**, target 34 | a 9px caret is not a control on a phone |
 | Last content bottom, scrolled to the end | above the tab bar | measure the last child of `.ever-main`, not any element — inner scrollers give false positives |
+| Elements with `touch-action: none` in a resting state | **0** | a swipe starting anywhere on a screen with no tool armed must scroll it |
+| Table overflow past the viewport at 375px | 0, except the scope matrix | `table.scrollWidth - 375`; panning is a fallback, never the way to read |
+| Chat open at ≤860 | fixed, full `100dvh`, tab bar hidden | `data-pane="chat"` takes the screen; no arithmetic against the header or the bar |
+| Drag affordances (bar grip, resize handles) | ≥24px **effective hit area** | measure the hit zone, not the painted glyph — a 9px grip with a 34px target passes |
+| Signature pad width at 375px | ≥90% of its card | a finger needs the card, not 260px of it |
+| Drawer open | tapping the scrim closes it | a box-shadow is paint, not a target |
+
+Measure in **every mode a screen has**, not just its resting one. The timing
+grips and row-order buttons sat below the floor for weeks because they only
+exist once edit mode is on, and a default-state sweep never saw them.
 
 Notes that keep this honest:
 
@@ -275,6 +285,12 @@ Bugs that already escaped once. Each run, prove they are still dead.
 - **A failed account lookup is never reported as "not invited"** — the roster
   and Auth reads must SUCCEED before their silence means anything, or a network
   blip tells a real user they have no access (fixed 2026-08-22).
+- **Nothing owns the touch gesture unless a tool is armed** — Gantt bars and the
+  drawing frame set `touch-action` from their own armed state, never
+  unconditionally (fixed 2026-08-22).
+- **An open conversation takes the phone** — fixed, full-height, tab bar hidden.
+  The old `calc(100dvh - 250px)` inverted under the keyboard, because
+  `min-height: 420` stopped the card shrinking when the viewport did.
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the

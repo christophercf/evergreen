@@ -149,6 +149,17 @@ table { border-collapse: collapse; width: 100%; }
 .m-only { display: none; }
 .m-filters-toggle { display: none; }
 
+/* Modals become bottom sheets on a phone: a centred card puts its buttons
+   under the keyboard, and a sheet keeps them where the thumb already is. */
+@media (max-width: 860px) {
+  .ever-sheet-overlay { align-items: flex-end !important; padding: 0 !important; }
+  .ever-sheet {
+    border-radius: 14px 14px 0 0 !important;
+    max-height: 92dvh !important;
+    padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 /* Bottom tab bar (mobile only). */
 .ever-bottomnav { display: none; }
 @media (max-width: 860px) {
