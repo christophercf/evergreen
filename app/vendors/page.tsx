@@ -200,6 +200,9 @@ function VendorCard({ tradeId }: { tradeId: string }) {
 
   const r1Done = agreement.round1.some((s) => s.party === manager) && agreement.round1.some((s) => s.party === "trade");
   const r2Done = agreement.round2.some((s) => s.party === manager) && agreement.round2.some((s) => s.party === "trade");
+  // ANY signature on Round 2 freezes the dates — not just a complete pair. The
+  // second party must be signing the same dates the first one did.
+  const datesLocked = agreement.round2.length > 0;
 
   // This trade's draw allocations (for round 2 schedule).
   const myLineIds = new Set(db.costLines.filter((l) => l.tradeId === tradeId).map((l) => l.id));
@@ -309,7 +312,8 @@ function VendorCard({ tradeId }: { tradeId: string }) {
           </p>
         )}
         <details style={{ fontSize: 12, color: "var(--muted)" }}><summary style={{ cursor: "pointer" }}>Full terms &amp; conditions</summary><pre style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", marginTop: 6 }}>{terms}</pre></details>
-        <BindingBlock canEdit={canManagerSign && !ro} />
+        {/* Once anyone has signed, the words they signed are fixed. */}
+        <BindingBlock canEdit={canManagerSign && !ro && !agreement.round1.length} locked={!!agreement.round1.length} />
         <SignRow round={1} agreement={agreement} parties={[manager, "trade"]} canManager={canManagerSign && !ro} canTrade={canTradeSign} signerSig={me?.signature} onSign={(party, img) => store.signVendorRound(tradeId, 1, party, name, img)} onAdopt={(img) => me && store.setUserSignature(me.id, img)} />
       </div>
 
@@ -322,9 +326,10 @@ function VendorCard({ tradeId }: { tradeId: string }) {
         </div>
         {r1Done && <>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", margin: "8px 0" }}>
-            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Start<br /><input type="date" value={start} disabled={!canManagerSign || ro} onChange={(e) => setStart(e.target.value)} /></label>
-            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Finish<br /><input type="date" value={finish} disabled={!canManagerSign || ro} onChange={(e) => setFinish(e.target.value)} /></label>
-            {(canManagerSign && !ro) && <button className="btn btn-sm" disabled={!start || !finish} onClick={() => store.setVendorDates(tradeId, start, finish)}>Save dates</button>}
+            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Start<br /><input type="date" value={start} disabled={!canManagerSign || ro || datesLocked} onChange={(e) => setStart(e.target.value)} /></label>
+            <label style={{ fontSize: 11.5, color: "var(--muted)" }}>Finish<br /><input type="date" value={finish} disabled={!canManagerSign || ro || datesLocked} onChange={(e) => setFinish(e.target.value)} /></label>
+            {(canManagerSign && !ro && !datesLocked) && <button className="btn btn-sm" disabled={!start || !finish} onClick={() => store.setVendorDates(tradeId, start, finish)}>Save dates</button>}
+            {datesLocked && <span style={{ fontSize: 11, color: "var(--muted)" }}>Dates are signed — change them with an amendment.</span>}
             {agreement.startDate && <span style={{ fontSize: 12, color: "var(--muted)" }}>Saved: {agreement.startDate} → {agreement.finishDate}</span>}
           </div>
           <Lbl>Draw schedule (from Payments)</Lbl>
@@ -345,7 +350,7 @@ function VendorCard({ tradeId }: { tradeId: string }) {
 }
 
 // Editable "intent to be legally bound" language, shown above the signatures.
-function BindingBlock({ canEdit }: { canEdit: boolean }) {
+function BindingBlock({ canEdit, locked }: { canEdit: boolean; locked?: boolean }) {
   const store = useStore();
   const [edit, setEdit] = useState(false);
   const text = store.db.terms.bindingLanguage;
@@ -354,6 +359,7 @@ function BindingBlock({ canEdit }: { canEdit: boolean }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>Binding agreement</span>
         {canEdit && <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setEdit((v) => !v)}>{edit ? "Done" : "Edit"}</button>}
+        {locked && <span style={{ marginLeft: "auto", fontSize: 10.5, color: "var(--muted)" }}>Signed — change it with an amendment</span>}
       </div>
       {edit ? (
         <textarea value={text} onChange={(e) => store.setTermsField({ bindingLanguage: e.target.value })} style={{ width: "100%", minHeight: 84, fontSize: 12, marginTop: 6, resize: "vertical" }} />
@@ -383,7 +389,17 @@ function SignRow({ round, agreement, parties, canManager, canTrade, signerSig, o
               <div style={{ marginTop: 4 }}>
                 <SignatureMark img={s.signatureImg} name={s.name} />
                 <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>signed {fmtTs(s.at)}</div>
-                {can && <button className="btn btn-sm" style={{ marginTop: 4, color: "var(--rust)" }} onClick={() => onSign(party)}>Revoke</button>}
+                {/* Signing has ceremony — adopt, draw, timestamp. Unsigning is
+                    the same act in reverse and gets the same weight, rather
+                    than being one unguarded click on an executed contract. */}
+                {can && (
+                  <button className="btn btn-sm" style={{ marginTop: 4, color: "var(--rust)" }}
+                    onClick={() => {
+                      if (confirm(`Revoke ${s.name}'s signature?
+
+The contract goes back to unsigned, and anything gated on it — drawing against its budget lines — closes again until it is re-signed.`)) onSign(party);
+                    }}>Revoke</button>
+                )}
               </div>
             ) : !can ? (
               <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>Awaiting signature</div>

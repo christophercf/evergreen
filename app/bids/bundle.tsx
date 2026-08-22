@@ -232,12 +232,7 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
           appears only once something is picked, so an untouched screen is just
           the table. */}
       {!ro && picked.length > 0 ? (
-        <div className="ever-bundlebar" style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60,
-          background: "var(--paper)", borderTop: "1px solid var(--line)",
-          boxShadow: "0 -6px 22px rgba(44,36,28,.10)",
-          padding: "10px 18px", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
-        }}>
+        <div className="ever-actionbar">
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", minWidth: 0 }}>
             <strong style={{ fontSize: 13.5, color: "var(--walnut)" }}>
               {picked.length} line{picked.length === 1 ? "" : "s"}
@@ -268,13 +263,6 @@ export function BundlePicker({ ro, onCreated }: { ro: boolean; onCreated: (id: s
 
       {/* Room for the bar so the last rows are never hidden behind it. */}
       {!ro && picked.length > 0 ? <div style={{ height: 76 }} /> : null}
-
-      <style>{`
-        @media (max-width: 860px) {
-          /* Clear the phone's bottom tab bar. */
-          .ever-bundlebar { bottom: calc(env(safe-area-inset-bottom, 0px) + 56px) !important; }
-        }
-      `}</style>
 
       <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.55, marginTop: 10, maxWidth: "78ch" }}>
         Lines already in an open package, fully contracted, on hold or paid in full are shown but not

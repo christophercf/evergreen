@@ -810,7 +810,14 @@ class Store {
       // What this draw finishes starts as whatever the package priced and no
       // other draw has claimed. The GC adjusts it; they do not build it.
       d.allocations.push({ lineId, mode, value, includedScope: uncoveredScopeFor(db, line, drawId) });
-    });
+    }, "Added to the draw");
+  }
+
+  /** One open draw means there is nothing to choose between, so a tap on the
+   *  line is the whole gesture. Undo is in the toast, as with any mutation. */
+  addAllocationToFirstOpenDraw(lineId: string) {
+    const open = this.db.draws.find((d) => d.status !== "paid");
+    if (open) this.addAllocation(open.id, lineId);
   }
   setAllocation(drawId: string, lineId: string, patch: Partial<{ mode: "pct" | "flat"; value: number; note: string }>) {
     this.mutate((db) => {

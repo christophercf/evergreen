@@ -149,6 +149,22 @@ table { border-collapse: collapse; width: 100%; }
 .m-only { display: none; }
 .m-filters-toggle { display: none; }
 
+/* The floating action bar. Any screen where you pick from a list that can
+   outgrow the viewport gets one, so the action is never at the end of a scroll
+   and the running count is always in sight. */
+.ever-actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+  background: var(--paper); border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 22px rgba(44,36,28,.10);
+  padding: 10px 18px; display: flex; align-items: center; gap: 12; flex-wrap: wrap;
+}
+@media (max-width: 860px) {
+  /* Clear the phone's tab bar and the home indicator. */
+  .ever-actionbar, .ever-bundlebar, .ever-scopebar {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 56px) !important;
+  }
+}
+
 /* Modals become bottom sheets on a phone: a centred card puts its buttons
    under the keyboard, and a sheet keeps them where the thumb already is. */
 @media (max-width: 860px) {

@@ -18,6 +18,7 @@ import { ScopeScreen } from "./scope";
 import { downloadRequestDoc } from "./request-doc";
 import { PackageList } from "./package-list";
 import { BundlePicker } from "./bundle";
+import { useConfirm } from "../ui/confirm";
 
 // ---------------------------------------------------------------------------
 // Bid Management — competitive bidding before the budget exists.
@@ -47,6 +48,7 @@ const TABS: [Tab, string][] = [["scope", "Scope"], ["bids", "Add New Vendors to 
 
 export default function BidsPage() {
   const store = useStore();
+  const ask = useConfirm();
   const db = store.db;
   const access = accessFor(store.currentUser, store.session.role, "bids");
   const [pkgId, setPkgId] = useState<string | null>(null);
@@ -113,12 +115,12 @@ export default function BidsPage() {
             a budget line, and the money would be left with nothing explaining it. */}
         {!ro && !pkg!.awardedBidId ? (
           <button className="btn btn-sm" style={{ color: "var(--rust)" }}
-            onClick={() => {
-              if (confirm(`Delete "${pkg!.title}"?
-
-Nothing has been awarded on it, so no money or contract depends on it.`)) {
-                store.removeBidPackage(pkg!.id); setPkgId(null);
-              }
+            onClick={async () => {
+              if (await ask({
+                title: `Delete "${pkg!.title}"?`,
+                body: "Nothing has been awarded on it, so no money or contract depends on it. The scope you wrote goes with it.",
+                danger: "Delete the package",
+              })) { store.removeBidPackage(pkg!.id); setPkgId(null); }
             }}>Delete package</button>
         ) : null}
       </div>
@@ -327,8 +329,11 @@ function RoutesScreen({ p, ro, onBack, onNext }: { p: BidPackage; ro: boolean; o
           {/* The thing you actually send them. Everything on step 02 lands here. */}
           <button className="btn btn-sm" onClick={() => downloadRequestDoc(db, p)}>📄 Request document</button>
           {!ro && (
-            <span title={blocked}>
+            <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
               <button className="btn btn-primary btn-sm" disabled={!invited} onClick={issue}>{label} →</button>
+              {/* The reason is on the screen for everyone, not in a tooltip for
+                  whoever happens to have a mouse. */}
+              {blocked ? <span style={{ fontSize: 11, color: "var(--muted)", maxWidth: 240, textAlign: "right", lineHeight: 1.35 }}>{blocked}</span> : null}
             </span>
           )}
         </span>

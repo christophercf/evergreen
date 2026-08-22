@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { ActionBar } from "../ui/action-bar";
 import {
   INTAKE_LABEL, PRICING_BASIS_LABEL, bidIntakeComplete, bidIntakeMissing,
   type BidPackage, type ContactSheet, type DB, type VendorBid,
@@ -209,14 +210,21 @@ export function Triage({ rows, empty, back, next }: {
           </div>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
-        {back && <button className="btn btn-sm" onClick={back}>← Back</button>}
-        {next && (
-          <button className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }} disabled={next.disabled} onClick={next.onClick}>
-            {next.label} →
-          </button>
-        )}
-      </div>
+      {/* The primary action floats instead of sitting at the end of the list —
+          on a long vendor directory it was a scroll away from every row. */}
+      {next ? (
+        <ActionBar
+          summary={<><strong style={{ color: "var(--walnut)" }}>{rows.filter((r) => r.on).length}</strong> of {rows.length} picked</>}
+          primary={{ label: next.label, disabled: next.disabled, onClick: next.onClick }}
+          secondary={back ? { label: "← Back", onClick: back } : undefined}
+        />
+      ) : null}
+      {/* Back stays in the flow only when there is no bar to carry it. */}
+      {back && !next ? (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+          <button className="btn btn-sm" onClick={back}>← Back</button>
+        </div>
+      ) : null}
     </>
   );
 }

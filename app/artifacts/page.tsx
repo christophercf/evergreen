@@ -11,6 +11,7 @@ import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
 import { MsgButton } from "../ui/messenger";
 import { FilePreview, FileViewerModal, currentVersion } from "./file-view";
+import { useConfirm } from "../ui/confirm";
 
 const KIND_ORDER: ArtifactKind[] = ["survey", "drawing", "permit", "contract", "photo", "design", "other"];
 const KIND_HINT: Partial<Record<ArtifactKind, string>> = {
@@ -120,6 +121,7 @@ export default function ArtifactsPage() {
 
 function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boolean; isAdmin: boolean; onOpen: () => void; onView: () => void }) {
   const store = useStore();
+  const ask = useConfirm();
   const db = store.db;
   const by = store.session.displayName;
   const [hist, setHist] = useState(false);
@@ -176,7 +178,8 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
         {isAdmin && <button className="btn btn-sm" title="Assign which roles can view this" onClick={() => setShowAccess((v) => !v)}>🔐 Access</button>}
         {!ro && <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
           <button className="btn btn-sm" title={a.archived ? "Restore to the library" : "Archive (keep on record, hide from library)"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "♻ Unarchive" : "🗄 Archive"}</button>
-          <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete permanently" onClick={() => { if (confirm(`Permanently remove "${a.name}"? This can't be undone.`)) store.removeArtifact(a.id); }}>🗑</button>
+          <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete permanently"
+            onClick={async () => { if (await ask({ title: `Permanently remove "${a.name}"?`, body: "Every version of it goes too, and this cannot be undone. Archiving keeps it and takes it out of the way.", danger: "Delete for good" })) store.removeArtifact(a.id); }}>🗑</button>
         </div>}
       </div>
 
@@ -284,6 +287,7 @@ function GeneralPermitNote({ items }: { items: Artifact[] }) {
 // Linear matrix (table) view — used for List layout and archived docs.
 function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: boolean; isAdmin: boolean; onOpen: (id: string) => void; onView: (id: string) => void }) {
   const store = useStore();
+  const ask = useConfirm();
   const th: React.CSSProperties = { textAlign: "left", padding: "6px 8px", fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".05em", color: "var(--muted)", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" };
   const tdS: React.CSSProperties = { padding: "6px 8px", fontSize: 12.5, borderBottom: "1px solid var(--line)", verticalAlign: "middle" };
   return (
@@ -308,7 +312,8 @@ function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: b
                   {cur?.fileUrl ? <a className="btn btn-sm" title="Download" href={cur.fileUrl} download={cur.fileName ?? a.name}>⬇</a> : cur?.driveUrl ? <a className="btn btn-sm" title="Open" href={driveViewLink(cur.driveUrl)} target="_blank" rel="noreferrer">↗</a> : null}
                   <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
                   {!ro && <button className="btn btn-sm" title={a.archived ? "Unarchive" : "Archive"} onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "♻" : "🗄"}</button>}
-                  {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete" onClick={() => { if (confirm(`Permanently remove "${a.name}"?`)) store.removeArtifact(a.id); }}>🗑</button>}
+                  {!ro && <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Delete"
+                    onClick={async () => { if (await ask({ title: `Permanently remove "${a.name}"?`, body: "Every version goes with it. This cannot be undone.", danger: "Delete for good" })) store.removeArtifact(a.id); }}>🗑</button>}
                 </td>
               </tr>
             );

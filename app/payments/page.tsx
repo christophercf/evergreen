@@ -11,6 +11,7 @@ import { scopeOptionsFor, lineHeadroom, drawHeadroom, type ScopeSource } from "@
 import { renderDrawRequest, projectHeadroom } from "@/lib/data/drawdoc";
 import { pushEmail } from "../ui/messenger";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
+import { useConfirm } from "../ui/confirm";
 
 const STATUS_BG: Record<Draw["status"], string> = { planned: "var(--sc-unset)", pushed: "var(--brass)", paid: "var(--ok)" };
 
@@ -39,6 +40,9 @@ export default function PaymentsPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "payments");
   const [dragLine, setDragLine] = useState<string | null>(null);
+  // The line waiting for a draw to land in. Tapping a line arms it; tapping a
+  // draw adds it; tapping anywhere else puts it down.
+  const [armed, setArmed] = useState<string | null>(null);
   if (access === "none") return <NoAccess module="Draw Management" />;
   const ro = access !== "edit";
 
@@ -62,6 +66,7 @@ export default function PaymentsPage() {
   const archived = db.draws.filter((d) => d.status === "paid")
     .sort((a, b) => (b.paidDate ?? "").localeCompare(a.paidDate ?? ""));
   const archivedTotal = archived.reduce((a, d) => a + drawAmount(db, d), 0);
+  const openDraws = live.length;
 
   return (
     <>
@@ -79,14 +84,18 @@ export default function PaymentsPage() {
           sub={`of ${fmt(head.contracted)} under contract`} />
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 18, alignItems: "start" }} className="ever-pay">
+      <div onClick={() => setArmed(null)}
+        style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 18, alignItems: "start" }} className="ever-pay">
         {/* LEFT: budget modules */}
         <div>
           <SectionTitle>Budget</SectionTitle>
           <div className="card" style={{ padding: 10, maxHeight: "74vh", overflow: "auto" }}>
-            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "A line opens up once its contract is signed. Drag one into a draw → · click to see its scope."}</div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{ro ? "Lines and their draw status — click a line to see its scope." : "A line opens up once its contract is signed. Tap one to add it to a draw (or drag it across); the caret shows its scope."}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {lines.map((l) => <BudgetLine key={l.id} line={l} ro={ro} dragLine={dragLine} setDragLine={setDragLine} />)}
+              {lines.map((l) => (
+              <BudgetLine key={l.id} line={l} ro={ro} dragLine={dragLine} setDragLine={setDragLine}
+                armed={armed === l.id} onArm={() => setArmed(armed === l.id ? null : l.id)} openDraws={openDraws} />
+            ))}
             </div>
           </div>
         </div>
@@ -95,7 +104,7 @@ export default function PaymentsPage() {
         <div>
           <SectionTitle right={!ro ? <button className="btn btn-primary btn-sm" onClick={() => store.addDraw(`Draw ${db.draws.length + 1}`)}>+ Add draw</button> : undefined}>Draws</SectionTitle>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {live.map((d) => <DrawCard key={d.id} draw={d} ro={ro} />)}
+            {live.map((d) => <DrawCard key={d.id} draw={d} ro={ro} armedLine={armed} onTake={() => setArmed(null)} />)}
             {!live.length && (
               <div className="card" style={{ padding: 20, fontSize: 13, color: "var(--muted)" }}>
                 {archived.length ? "No open draws — every draw has been paid. The archive is below." : "No draws yet. Add one, then drag budget lines in."}
@@ -119,7 +128,10 @@ export default function PaymentsPage() {
   );
 }
 
-function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: boolean; dragLine: string | null; setDragLine: (v: string | null) => void }) {
+function BudgetLine({ line, ro, dragLine, setDragLine, armed, onArm, openDraws }: {
+  line: CostLine; ro: boolean; dragLine: string | null; setDragLine: (v: string | null) => void;
+  armed: boolean; onArm: () => void; openDraws: number;
+}) {
   const store = useStore();
   const db = store.db;
   const [open, setOpen] = useState(false);
@@ -145,11 +157,31 @@ function BudgetLine({ line, ro, dragLine, setDragLine }: { line: CostLine; ro: b
       draggable={canDrag}
       onDragStart={(e) => { if (!canDrag) { e.preventDefault(); return; } e.dataTransfer.setData("text/plain", line.id); setDragLine(line.id); }}
       onDragEnd={() => setDragLine(null)}
+      onClick={(e) => {
+        if (!canDrag) return;
+        e.stopPropagation();
+        // With one open draw there is nothing to choose between, so the tap
+        // just does it. Undo is in the toast either way.
+        if (openDraws === 1) { store.addAllocationToFirstOpenDraw(line.id); return; }
+        onArm();
+      }}
       onMouseEnter={() => !drawable && setHover(true)}
       onMouseLeave={() => setHover(false)}
       title={!drawable && !ro ? (waiting ?? "Award this work and get the contract signed before drawing against it.") : undefined}
       className="card"
-      style={{ position: "relative", padding: "8px 10px", cursor: canDrag ? "grab" : (drawable ? "default" : "not-allowed"), opacity: dragLine === line.id ? 0.5 : drawable ? 1 : 0.62, background: "var(--paper)", borderLeft: `3px solid ${drawable ? "var(--ok)" : cstate === "issued" ? "var(--brass)" : "var(--line)"}` }}>
+      style={{
+        position: "relative", padding: "8px 10px",
+        cursor: canDrag ? "grab" : (drawable ? "default" : "not-allowed"),
+        opacity: dragLine === line.id ? 0.5 : drawable ? 1 : 0.62,
+        background: armed ? "var(--sage-tint)" : "var(--paper)",
+        outline: armed ? "2px solid var(--sage)" : undefined,
+        borderLeft: `3px solid ${drawable ? "var(--ok)" : cstate === "issued" ? "var(--brass)" : "var(--line)"}`,
+      }}>
+      {armed ? (
+        <div style={{ fontSize: 11, fontWeight: 700, color: "var(--sage-2)", marginBottom: 3 }}>
+          Adding this line — now tap a draw
+        </div>
+      ) : null}
       {/* Why this line can't be dragged yet — said where the hand already is. */}
       {!drawable && hover && !ro && (
         <div style={{ position: "absolute", left: 8, right: 8, bottom: "100%", marginBottom: 4, zIndex: 5, background: "var(--walnut)", color: "#fff", fontSize: 11.5, padding: "6px 9px", borderRadius: 7, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
@@ -214,8 +246,9 @@ function ArchiveBand({ draws, total, ro }: { draws: Draw[]; total: number; ro: b
   );
 }
 
-function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
+function DrawCard({ draw, ro, armedLine, onTake }: { draw: Draw; ro: boolean; armedLine?: string | null; onTake?: () => void }) {
   const store = useStore();
+  const ask = useConfirm();
   const db = store.db;
   const [over, setOver] = useState(false);
   const [issuing, setIssuing] = useState(false);
@@ -246,6 +279,19 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
       onDrop={(e) => { e.preventDefault(); setOver(false); const id = e.dataTransfer.getData("text/plain"); if (id) { store.addAllocation(draw.id, id); setCollapsed(false); } }}
       className="card"
       style={{ padding: 14, borderLeft: `3px solid ${STATUS_BG[draw.status]}`, outline: over ? "2px dashed var(--sage)" : "none", background: over ? "var(--sage-tint)" : undefined }}>
+      {/* The other half of tap-to-add: while a line is armed, every draw that
+          can still take one says so. */}
+      {armedLine && !ro && !locked ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); store.addAllocation(draw.id, armedLine); setCollapsed(false); onTake?.(); }}
+          style={{
+            width: "100%", marginBottom: 10, padding: "9px 10px", borderRadius: 8, cursor: "pointer",
+            border: "1.5px dashed var(--sage)", background: "var(--sage-tint)",
+            color: "var(--sage-2)", fontWeight: 700, fontSize: 12.5,
+          }}>
+          ＋ Add it to {draw.name}
+        </button>
+      ) : null}
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <button className="tap" onClick={() => setCollapsed((v) => !v)} title={collapsed ? "Expand" : "Collapse"} aria-label={collapsed ? "Expand this draw" : "Collapse this draw"} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>{collapsed ? "▸" : "▾"}</button>
         <input value={draw.name} disabled={ro || locked} onChange={(e) => store.renameDraw(draw.id, e.target.value)} style={{ border: "none", background: "transparent", fontWeight: 700, fontSize: 15, fontFamily: "var(--font-serif)", color: "var(--walnut)", minWidth: 110, flex: 1 }} />
@@ -291,19 +337,39 @@ function DrawCard({ draw, ro }: { draw: Draw; ro: boolean }) {
                   approved some other way. */}
               {draw.status === "planned" && !req && canIssue && (
                 <button className="btn btn-sm btn-primary" disabled={!draw.allocations.length}
-                  title={draw.allocations.length ? "" : "Add at least one budget line first"}
                   onClick={() => setIssuing(true)}>Issue this draw for signature</button>
               )}
               {draw.status === "planned" && (
                 <button className="btn btn-sm" disabled={!draw.allocations.length}
-                  title="Use this only when the client approved outside the app"
                   onClick={() => store.setDrawStatus(draw.id, "pushed")}>Approved another way</button>
               )}
+              {/* Said on the screen, not in a tooltip a thumb can never open. */}
+              {draw.status === "planned" && !draw.allocations.length ? (
+                <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--muted)" }}>
+                  Add at least one budget line before this draw can go anywhere.
+                </div>
+              ) : null}
+              {draw.status === "planned" && draw.allocations.length && !req ? (
+                <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--muted)" }}>
+                  &ldquo;Approved another way&rdquo; is for a client who said yes outside the app.
+                </div>
+              ) : null}
               {draw.status === "pushed" && <button className="btn btn-sm btn-primary" onClick={() => store.setDrawStatus(draw.id, "paid")}>Mark client paid 🔒</button>}
               {draw.status === "pushed" && (
                 <button className="btn btn-sm" onClick={() => store.setDrawStatus(draw.id, "planned")}>Back to saved</button>
               )}
-              {!locked && <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }} onClick={() => store.removeDraw(draw.id)}>Delete</button>}
+              {!locked && (
+                <button className="btn btn-sm" style={{ color: "var(--rust)", marginLeft: "auto" }}
+                  onClick={async () => {
+                    if (await ask({
+                      title: `Delete ${draw.name}?`,
+                      body: draw.allocations.length
+                        ? `Its ${draw.allocations.length} budget line${draw.allocations.length === 1 ? "" : "s"} go back to being undrawn. Nothing has been paid against it.`
+                        : "It has nothing in it.",
+                      danger: "Delete the draw",
+                    })) store.removeDraw(draw.id);
+                  }}>Delete</button>
+              )}
             </div>
           )}
           {locked && <div style={{ fontSize: 11.5, color: "var(--ok)", marginTop: 8 }}>🔒 Paid {draw.paidDate} — locked. If costs increase, raise a change order in <Link href="/costs" style={{ color: "var(--sage-2)", fontWeight: 600 }}>Budget Management</Link> (a paid draw can’t be edited).</div>}

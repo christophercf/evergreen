@@ -8,6 +8,7 @@ import { IS_MOCK } from "@/lib/data/config";
 import { ROLE_LABEL, accessFor, type ModuleKey, type Role } from "@/lib/data/types";
 import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
+import { ConfirmProvider } from "./confirm";
 import { Toaster } from "./toast";
 import {
   HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, HelpIcon,
@@ -145,6 +146,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const bottomNav = visible.slice(0, 4);
 
   return (
+    <ConfirmProvider>
     <div style={{ display: "flex", minHeight: "100vh" }}>
       <Toaster />
       {/* A real backdrop, because a box-shadow cannot be tapped. Only on phones,
@@ -290,6 +292,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         }
       `}</style>
     </div>
+    </ConfirmProvider>
   );
 }
 
