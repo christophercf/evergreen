@@ -84,6 +84,13 @@ export function ContractCard({ p, ro, highlight }: { p: BidPackage; ro: boolean;
         </>
       ) : (
         <>
+          {tradeIds.length > 1 && existing ? (
+            <div style={{ fontSize: 12.5, color: MUTED, lineHeight: 1.5 }}>
+              One contract with <strong style={{ color: "var(--ink)" }}>{existing.vendorName}</strong> at{" "}
+              <strong style={{ color: "var(--ink)" }}>{fmt(contractAmount(existing))}</strong>, covering all {tradeIds.length} trades.
+              Each trade signs it.
+            </div>
+          ) : null}
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {tradeIds.map((t) => {
               const st = contractState(db, t);
@@ -94,7 +101,9 @@ export function ContractCard({ p, ro, highlight }: { p: BidPackage; ro: boolean;
                   <span style={{ width: 8, height: 8, borderRadius: 99, background: st === "signed" ? "var(--ok)" : "var(--brass)" }} />
                   <strong style={{ minWidth: 0 }}>{tradeName(db, t)}</strong>
                   <span style={{ color: MUTED }}>{CONTRACT_STATE_LABEL[st]}</span>
-                  {c ? <span style={{ marginLeft: "auto", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(contractAmount(c))}</span> : null}
+                  {/* The sum is the package's, said once above — repeating it on
+                      every trade in a bundle reads as one sum per trade. */}
+                  {c && tradeIds.length === 1 ? <span style={{ marginLeft: "auto", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{fmt(contractAmount(c))}</span> : null}
                   {st === "issued" ? (
                     <div style={{ flexBasis: "100%", fontSize: 11.5, color: "var(--brass-2)" }}>
                       Waiting on {missing.map((m) => PARTY_LABEL[m]).join(" and ")} to sign.

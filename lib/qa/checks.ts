@@ -249,6 +249,22 @@ export function runChecks(db: DB): QaReport {
     }
   }
 
+  // A bundled package issues one agreement per trade, each holding the same
+  // sum. Anything that ADDS those together reports the award twice — which is
+  // exactly what the Contracts roll-up did until 2026-08-22.
+  ran.push("contracts: a bundled package is not counted once per trade");
+  for (const p of db.bidPackages ?? []) {
+    const trades = [...new Set([p.tradeId, ...(p.tradeIds ?? [])])].filter(Boolean);
+    if (trades.length < 2) continue;
+    const cs = trades.map((t) => contractOf(db, t)).filter(Boolean);
+    if (cs.length < 2) continue;
+    const won = p.bids?.find((b) => b.id === p.awardedBidId);
+    const summed = cs.reduce((a, c) => a + contractAmount(c!), 0);
+    if (won?.amount != null && summed > won.amount * 1.5) {
+      add("Contracts", "info", `"${p.title}" holds ${cs.length} per-trade copies of one ${money(won.amount)} contract — anything summing them must dedupe by package first`, "Contracts");
+    }
+  }
+
   ran.push("budget maths: markup factor is sane on every line");
   for (const l of db.costLines) {
     const fct = lineMarkupFactor(l);

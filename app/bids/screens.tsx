@@ -428,16 +428,36 @@ This locks the price into Budget Management and creates the contract to be signe
   );
 
   if (narrow) {
+    // Tapping a row picks it. Picking is not awarding — the award is a
+    // confirmed, separate act, the same as on a desktop.
+    const picked = p.bids.find((b) => b.shortlisted && b.amount != null);
     const rows: TriageRow[] = p.bids.map((b) => ({
       id: b.id,
       title: b.vendorName,
       value: money(b.amount),
       meta: `${duration(b)} · ${materialsPolicy(b)}${b.shortlisted ? " · ★ shortlisted" : ""}${p.awardedBidId === b.id ? " · 🏆 awarded" : ""}`,
       flag: flagsFor(p, b)[0],
-      on: p.awardedBidId === b.id,
+      on: p.awardedBidId === b.id || !!b.shortlisted,
       onClick: ro ? undefined : () => store.toggleBidShortlist(p.id, b.id),
     }));
-    return <>{head}<Triage rows={rows} empty="No bids to award." back={onBack} /></>;
+    return (
+      <>
+        {head}
+        <Triage
+          rows={rows}
+          empty="No bids to award."
+          back={onBack}
+          next={ro || awarded ? undefined : {
+            label: picked ? `Award ${picked.vendorName}` : "Shortlist one to award",
+            disabled: !picked,
+            onClick: () => picked && award(picked),
+          }}
+        />
+        {/* An award has to be able to become a contract from the same screen,
+            on the same device. */}
+        {awarded && !ro ? <div style={{ marginTop: 12 }}><ContractCard p={p} ro={ro} highlight={justAwarded} /></div> : null}
+      </>
+    );
   }
 
   return (

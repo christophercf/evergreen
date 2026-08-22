@@ -79,7 +79,13 @@ export function contractRows(db: DB, tradeIds: string[]): ContractRow[] {
     const trades = [...new Set([p.tradeId, ...(p.tradeIds ?? [])])].filter((t) => allowed.has(t));
     if (!trades.length) continue;
     trades.forEach((t) => claimed.add(t));
-    const contracts = trades.map((t) => contractOf(db, t)).filter(Boolean);
+    // One contract per PACKAGE, not per trade: the per-trade agreements are the
+    // same document seen from each of its trades, so they are deduped before
+    // anything is added up.
+    const contracts = [...new Map(
+      trades.map((t) => contractOf(db, t)).filter(Boolean)
+        .map((c) => [c!.packageId ?? `${c!.vendorName}:${c!.issuedAt}:${c!.amount}`, c!]),
+    ).values()];
     const won = p.bids?.find((b) => b.id === p.awardedBidId);
     const states = trades.map((t) => contractState(db, t));
     rows.push({
@@ -87,15 +93,21 @@ export function contractRows(db: DB, tradeIds: string[]): ContractRow[] {
       title: p.title,
       tradeIds: trades,
       vendor: contracts[0]?.vendorName ?? won?.vendorName ?? null,
+      // Needed counts SIGNATURES, which are per trade — every trade in the
+      // bundle signs, even though they sign one document.
+
       state: worst(states),
       // Before a contract exists the awarded price is the best figure there is;
       // after it, the contract's own sum is the only one that counts.
       amount: contracts.length
-        ? contracts.reduce((a, c) => a + contractAmount(c!), 0)
+        ? contracts.reduce((a, c) => a + contractAmount(c), 0)
         : (won?.amount ?? 0),
-      revisions: contracts.reduce((a, c) => a + (c!.revisions?.length ?? 0), 0),
+      revisions: contracts.reduce((a, c) => a + (c.revisions?.length ?? 0), 0),
       signed: trades.reduce((a, t) => a + (2 - contractMissingSigs(db, t).length), 0),
-      needed: contracts.length * 2,
+      // The SUM is per package; the SIGNATURES are per trade. One document, but
+      // every trade in the bundle has to sign it before its lines can be drawn
+      // against, so the count has to be the trades', not the contract's.
+      needed: trades.filter((t) => contractOf(db, t)).length * 2,
       ...(({ paid, drawn }) => ({ paid, drawn }))(spend(trades)),
       legacy: false,
       paper: !contracts.length,
