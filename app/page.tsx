@@ -19,7 +19,6 @@ export default function Dashboard() {
   // Today summarises other modules, so it has to respect their permissions —
   // otherwise a role that can't open Materials still reads the whole queue here.
   const canSeeMaterials = accessFor(user, role, "materials") !== "none";
-  const [qPage, setQPage] = useState(0);
 
   const t = totals(db.costLines);
   const cats = byCategory(db.costLines);
@@ -69,9 +68,7 @@ export default function Dashboard() {
       </div>
 
       {canSeeMaterials && queue.length > 0 && (() => {
-        const PAGE = 8;
-        const pages = Math.ceil(queue.length / PAGE);
-        const page = Math.min(qPage, pages - 1);
+        // Six rows, then a link. No page state to go stale between visits.
         return (
         <div className="card" style={{ padding: 14, marginTop: 14, borderLeft: "3px solid var(--brass)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -80,7 +77,7 @@ export default function Dashboard() {
             <Link href="/materials" className="btn btn-sm" style={{ marginLeft: "auto" }}>Materials →</Link>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {queue.slice(page * PAGE, page * PAGE + PAGE).map(({ m, days, due, lastWk }) => (
+            {queue.slice(0, 6).map(({ m, days, due, lastWk }) => (
               <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, flexWrap: "wrap" }}>
                 <Pill color="#fff" bg={days < 0 ? "var(--rust)" : days <= 7 ? "var(--rust)" : days <= 21 ? "var(--brass)" : "var(--sage)"}>{days < 0 ? `${-days}d overdue` : `${days}d`}</Pill>
                 <span style={{ flex: 1, minWidth: 140 }}>
@@ -92,11 +89,14 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
-          {pages > 1 && (
+          {queue.length > 6 && (
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, justifyContent: "center" }}>
-              <button className="btn btn-sm" disabled={page === 0} onClick={() => setQPage(page - 1)}>‹ Prev</button>
-              <span style={{ fontSize: 12, color: "var(--muted)" }}>Page {page + 1} of {pages} · {queue.length} items</span>
-              <button className="btn btn-sm" disabled={page >= pages - 1} onClick={() => setQPage(page + 1)}>Next ›</button>
+              {/* Paging eight rows in a dashboard card is more control than the
+                  content deserves, and the page reset on every visit anyway. */}
+              <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                Showing {Math.min(6, queue.length)} of {queue.length}
+              </span>
+              <Link href="/materials" className="btn btn-sm" style={{ marginLeft: "auto" }}>View all in Materials →</Link>
             </div>
           )}
         </div>

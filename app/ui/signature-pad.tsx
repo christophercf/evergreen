@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PenIcon } from "./icons";
 
 // A small canvas signature pad. Draw with mouse or finger, then Adopt to emit a
 // trimmed PNG data URL. Used to adopt a signature onto a profile and to sign.
@@ -60,7 +61,7 @@ export function SignaturePad({ onAdopt, onCancel }: { onAdopt: (dataUrl: string)
         style={{ width: "100%", height: 96, border: "1px dashed var(--line)", borderRadius: 8, background: "#fff", touchAction: "none", cursor: "crosshair", display: "block" }} />
       <div style={{ fontSize: 10.5, color: "var(--muted)", marginTop: 3 }}>Sign with a finger or a mouse.</div>
       <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-        <button className="btn btn-sm btn-primary" disabled={!dirty} onClick={() => onAdopt(ref.current!.toDataURL("image/png"))}>✒ Adopt signature</button>
+        <button className="btn btn-sm btn-primary" disabled={!dirty} onClick={() => onAdopt(ref.current!.toDataURL("image/png"))}><PenIcon width={14} height={14} /> Adopt signature</button>
         <button className="btn btn-sm" onClick={clear} disabled={!dirty}>Clear</button>
         {onCancel && <button className="btn btn-sm" onClick={onCancel}>Cancel</button>}
       </div>

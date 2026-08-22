@@ -183,7 +183,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
             {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}
           </div>
           {/* What the hidden money columns said, for the phone. */}
-          <div className="m-only" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17, gap: 7, flexWrap: "wrap" }}>
+          <div className="m-only m-read" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17, gap: 7, flexWrap: "wrap" }}>
             <span>ROM {r.ranged ? `${fmt(r.low)}–${fmt(r.high)}` : fmt(r.romFigure)}</span>
             {r.contracted ? <span>· contracted {fmt(r.contracted)}</span> : null}
             {r.changeOrders ? <span>· COs {fmt(r.changeOrders)}</span> : null}

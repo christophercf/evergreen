@@ -19,6 +19,7 @@ import { downloadRequestDoc } from "./request-doc";
 import { PackageList } from "./package-list";
 import { BundlePicker } from "./bundle";
 import { useConfirm } from "../ui/confirm";
+import { DocIcon } from "../ui/icons";
 
 // ---------------------------------------------------------------------------
 // Bid Management — competitive bidding before the budget exists.
@@ -32,7 +33,6 @@ import { useConfirm } from "../ui/confirm";
 // three have to land on the same five fields or the comparison is a fiction.
 // ---------------------------------------------------------------------------
 
-const NAV = ["Trades", "Scope", "Contacts", "How they bid", "Bids in", "Compare", "Award"] as const;
 const NEW = "__new";
 const ROUTES: BidRoute[] = ["app", "gc", "upload"];
 
@@ -44,7 +44,9 @@ const bidsIn = (p: BidPackage) => p.bids.filter((b) => b.amount != null).length;
 // modules of their own — showing them again here was a second place for the
 // same thing to be read, and a second place for it to be wrong.
 type Tab = "scope" | "bids";
-const TABS: [Tab, string][] = [["scope", "Scope"], ["bids", "Add New Vendors to Bid"]];
+// "Add New Vendors to Bid" described the first step of a tab that runs all the
+// way to the award. The tab is named for what it contains.
+const TABS: [Tab, string][] = [["scope", "Scope"], ["bids", "Bids & award"]];
 
 export default function BidsPage() {
   const store = useStore();
@@ -188,11 +190,29 @@ function BidsTab({ p, ro }: { p: BidPackage; ro: boolean }) {
         {next.go && !ro ? <button className="btn btn-sm btn-primary" onClick={next.go}>{next.label} →</button> : null}
       </div>
 
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14 }}>
-        {([["invite", "Who bids"], ["routes", "How they submit"], ["intake", "Bids in"], ["compare", "Compare"], ["award", "Award"]] as const).map(([k, l]) => (
-          <button key={k} className="btn btn-sm" onClick={() => setPhase(k)}
-            style={{ background: phase === k ? "var(--sage-tint)" : undefined, fontWeight: phase === k ? 700 : 400 }}>{l}</button>
-        ))}
+      {/* A stepper, not five equal buttons: numbered, with the steps already
+          behind you tinted so the sequence reads at a glance. */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 14, alignItems: "center" }}>
+        {([["invite", "Who bids"], ["routes", "How they submit"], ["intake", "Bids in"], ["compare", "Compare"], ["award", "Award"]] as const).map(([k, l], i, arr) => {
+          const at = arr.findIndex(([x]) => x === phase);
+          const done = i < at;
+          const now = phase === k;
+          return (
+            <button key={k} className="btn btn-sm" onClick={() => setPhase(k)}
+              style={{
+                background: now ? "var(--sage-tint)" : done ? "var(--cream-2)" : undefined,
+                borderColor: now ? "var(--sage)" : undefined,
+                fontWeight: now ? 700 : 400,
+                color: done ? "var(--muted)" : undefined,
+                display: "inline-flex", alignItems: "center", gap: 6,
+              }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: now ? "var(--sage-2)" : "var(--muted)" }}>
+                {done ? "✓" : String(i + 1).padStart(2, "0")}
+              </span>
+              {l}
+            </button>
+          );
+        })}
       </div>
 
       {phase === "invite" && <ContactsScreen p={p} ro={ro} onBack={() => undefined} onNext={() => setPhase("routes")} />}
@@ -327,7 +347,7 @@ function RoutesScreen({ p, ro, onBack, onNext }: { p: BidPackage; ro: boolean; o
       right={!narrow && (
         <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
           {/* The thing you actually send them. Everything on step 02 lands here. */}
-          <button className="btn btn-sm" onClick={() => downloadRequestDoc(db, p)}>📄 Request document</button>
+          <button className="btn btn-sm" onClick={() => downloadRequestDoc(db, p)}><DocIcon width={14} height={14} /> Request document</button>
           {!ro && (
             <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
               <button className="btn btn-primary btn-sm" disabled={!invited} onClick={issue}>{label} →</button>

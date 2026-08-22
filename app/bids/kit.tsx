@@ -155,7 +155,11 @@ export function vendorReview(db: DB, b: VendorBid): { rating: string; note?: str
 /** The shell's own breakpoint, read after mount — there is no window on the
  *  server, and rendering the desktop layout first would flash the wrong thing. */
 export function useNarrow(): boolean {
-  const [narrow, setNarrow] = useState(false);
+  // Answered synchronously on the first render, so a phone never paints the
+  // wide grid for a frame before flipping. Guarded for SSR, where there is no
+  // window and "not narrow" is the only answer available.
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 880px)").matches);
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 880px)");
     const sync = () => setNarrow(mq.matches);

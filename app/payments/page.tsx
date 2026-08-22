@@ -200,7 +200,7 @@ function BudgetLine({ line, ro, dragLine, setDragLine, armed, onArm, openDraws }
           : cstate === "issued" ? <Pill color="#fff" bg="var(--brass)">Contract issued</Pill>
           : <Pill color="var(--muted)">No contract</Pill>}
       </div>
-      <div style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36, flexWrap: "wrap" }}>
+      <div className="m-read" style={{ display: "flex", gap: 8, fontSize: 11, color: "var(--muted)", marginTop: 3, paddingLeft: ro ? 17 : 36, flexWrap: "wrap" }}>
         <span>Total <strong style={{ color: "var(--ink)" }}>{fmt(total)}</strong></span>
         <span>Paid <strong style={{ color: "var(--ok)" }}>{fmt(paid)}</strong></span>
         <span>Drawn <strong style={{ color: "var(--brass-2)" }}>{fmt(drawn)}</strong></span>
@@ -556,7 +556,7 @@ function AllocationRow({ draw, alloc, ro, locked }: { draw: Draw; alloc: DrawAll
 
       {/* How much of this line is still available to draw against. It sits on
           the row because that is where the figure is being decided. */}
-      <div style={{ fontSize: 10.5, color: "var(--muted)", paddingLeft: 18, marginTop: 1 }}>
+      <div className="m-read" style={{ fontSize: 10.5, color: "var(--muted)", paddingLeft: 18, marginTop: 1 }}>
         {over > 0 ? (
           <span style={{ color: "var(--rust)", fontWeight: 600 }}>
             {fmt(over)} more than this line has left — {fmt(head.remaining)} of {fmt(head.total)} remains
