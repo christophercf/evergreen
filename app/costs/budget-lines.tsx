@@ -7,6 +7,7 @@ import { fmt, romRows, romTotals, romCanLock, type RomRow, macroOrder } from "@/
 import { Pill, StatCard, TextInput, NumInput } from "../ui/bits";
 import { ChangeOrders } from "./line-parts";
 import { contractState, lineContractState, CONTRACT_STATE_LABEL } from "@/lib/data/contract";
+import { MsgButton } from "../ui/messenger";
 
 // ---------------------------------------------------------------------------
 // Budget lines.
@@ -168,6 +169,12 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
               : r.outsideRomTotal > 0
                 ? <span style={{ fontSize: 10.5, color: "var(--brass-2)" }}>{fmt(r.outsideRomTotal)} outside the ROM</span>
                 : null}
+            {/* Ask about this line from the line itself. The message opens
+                titled "Budget line: <name>", so the reader knows where it came
+                from before they open it. */}
+            <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
+              <MsgButton kind="cost" refId={r.lines[0]?.id ?? r.tradeId} label={r.label} href={`/costs?line=${r.lines[0]?.id ?? ""}`} small />
+            </span>
           </div>
           <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
             {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}

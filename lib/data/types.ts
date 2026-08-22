@@ -941,6 +941,21 @@ export const UPDATE_CONTEXT_ICON: Record<UpdateContext["kind"], string> = {
   material: "📦", cost: "🧾", timing: "📅", artifact: "📁",
 };
 
+/** What the thing a message came from is CALLED. The icon is a hint; the noun
+ *  is what someone reads in a notification or an email subject, where there is
+ *  no chip to look at. */
+export const UPDATE_CONTEXT_NOUN: Record<UpdateContext["kind"], string> = {
+  material: "Material", cost: "Budget line", timing: "Schedule", artifact: "Document",
+};
+
+/** The title a message starts with when it was begun from somewhere in the app.
+ *  "Roofing" alone tells the reader nothing about why it landed; "Budget line:
+ *  Roofing" tells them where to go and what it is about. The sender can still
+ *  edit it — this is the starting point, not a label they cannot remove. */
+export function contextTitle(ctx: UpdateContext): string {
+  return `${UPDATE_CONTEXT_NOUN[ctx.kind]}: ${ctx.label}`;
+}
+
 export interface SiteUpdate {
   id: string;
   title: string;

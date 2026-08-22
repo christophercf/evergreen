@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { Pill } from "./bits";
-import { canMessageUser, ROLE_LABEL, UPDATE_CONTEXT_ICON, type UpdateContext } from "@/lib/data/types";
+import { canMessageUser, contextTitle, ROLE_LABEL, UPDATE_CONTEXT_ICON, type UpdateContext } from "@/lib/data/types";
 import { storeFile } from "./upload";
 
 // ---- compose bus ------------------------------------------------------------
@@ -185,7 +185,10 @@ export function Composer({ context, onPosted }: { context?: UpdateContext; onPos
   const me = store.currentUser;
   const name = store.session.displayName;
 
-  const [title, setTitle] = useState(context ? context.label : "");
+  // A message begun from an item says so in its title, which is what shows in
+  // the conversation list, the notification and the email subject — none of
+  // which carry the context chip.
+  const [title, setTitle] = useState(context ? contextTitle(context) : "");
   const [body, setBody] = useState("");
   const [to, setTo] = useState<Set<string>>(new Set());
   const [posted, setPosted] = useState(false);
