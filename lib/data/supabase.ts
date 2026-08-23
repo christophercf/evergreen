@@ -6,7 +6,8 @@
 // normalized tables later without touching the store/UI.
 // ----------------------------------------------------------------------------
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
+import { sbOrThrow } from "./supabase-client";
 import type { DB, Session } from "./types";
 import { buildDB } from "./seed";
 import { type Backend, defaultSession } from "./backend";
@@ -18,9 +19,9 @@ export class SupabaseBackend implements Backend {
   private client: SupabaseClient;
 
   constructor() {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-    this.client = createClient(url, key);
+    // Shared with auth, so every read and write carries the signed-in user's
+    // JWT. That is what lets the table refuse anonymous access.
+    this.client = sbOrThrow();
   }
 
   async loadDB(): Promise<DB> {

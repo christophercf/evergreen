@@ -5,19 +5,14 @@
 // matched to the signed-in email by the store (invite-only access).
 // ----------------------------------------------------------------------------
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
 import { IS_SUPABASE } from "./config";
+import { sb } from "./supabase-client";
 
-let client: SupabaseClient | null = null;
+/** The one client (see supabase-client.ts) — auth and data share a session. */
 function c(): SupabaseClient | null {
-  if (!IS_SUPABASE || typeof window === "undefined") return null;
-  if (!client) {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return null;
-    client = createClient(url, key);
-  }
-  return client;
+  if (!IS_SUPABASE) return null;
+  return sb();
 }
 
 export const authEnabled = () => !!c();

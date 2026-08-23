@@ -77,10 +77,10 @@ class Store {
           if (event === "PASSWORD_RECOVERY") { this.recoveryPending = true; this.emit(); return; }
           if (this.recoveryPending) {
             // Stay on the reset screen until the new password is saved (USER_UPDATED).
-            if (event === "USER_UPDATED" && email) { this.recoveryPending = false; this.bindAuthEmail(email); }
+            if (event === "USER_UPDATED" && email) { this.recoveryPending = false; void this.reloadThenBind(email); }
             return;
           }
-          if (email) this.bindAuthEmail(email); else this.unbindAuth();
+          if (email) void this.reloadThenBind(email); else this.unbindAuth();
         });
       } else if (typeof window !== "undefined") {
         // Mock mode: accept an invite link directly (no password).
@@ -313,6 +313,22 @@ class Store {
     void this.backend?.persistSession(this.session);
     void authSignOut();
     this.emit();
+  }
+
+  /** Read the project again now that a session exists, THEN bind.
+   *
+   *  The first load happens before anyone has signed in. While the table allows
+   *  anonymous reads that is harmless, but it must not be the only read: the
+   *  moment the database requires a JWT, an unauthenticated first load returns
+   *  nothing and binding against an empty roster would lock everyone out of
+   *  their own project. */
+  private async reloadThenBind(email: string) {
+    try {
+      const fresh = await this.backend?.loadDB();
+      if (fresh) this.db = fresh;
+    } catch { /* keep whatever we already have and let the bind decide */ }
+    this.loading = false;
+    this.bindAuthEmail(email);
   }
 
   /** Is this email on the project (invited or active)? Gates invite-only signup. */
