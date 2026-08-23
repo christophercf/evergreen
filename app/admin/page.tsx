@@ -10,7 +10,7 @@ import {
 } from "@/lib/data/types";
 import { tradeName, macroOrder, macroColor, categoryUsage, tradeUsage } from "@/lib/data/money";
 import { VendorRoster } from "../vendors/roster";
-import { sendInviteEmail, inviteLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
+import { sendInviteEmail, handoverLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { AddVendor } from "./add-vendor";
 import { TradeRatingEditor } from "../ui/rating";
@@ -1155,13 +1155,16 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
 
   const copy = (v: string) => { if (navigator.clipboard) void navigator.clipboard.writeText(v); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
+  // A seven-day link. It mints its Supabase token at click time, so it cannot
+  // arrive stale — the old one-hour link was the reason people ended up asking
+  // for another.
   const makeLink = async () => {
     setBusy("link"); setMsg(null); setLink("");
-    const r = await inviteLink(email);
+    const r = await handoverLink(email, "signin");
     setBusy("");
     if (!r.ok || !r.link) { setMsg({ ok: false, text: r.error ?? "Couldn’t generate a link." }); return; }
     setLink(r.link); copy(r.link);
-    setMsg({ ok: true, text: "Copied — text or WhatsApp it to them." });
+    setMsg({ ok: true, text: "Copied — text or WhatsApp it to them. Good for 7 days." });
   };
 
   return (
@@ -1172,8 +1175,8 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
           {busy === "mail" ? "…" : fresh ? "✉ Send invite" : "✉ Re-send sign-in link"}
         </button>
         <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={makeLink}
-          title="Generate a link you can text or WhatsApp them — skips email entirely. One click signs them straight in.">
-          {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 Copy a direct link"}
+          title="A link you can text or WhatsApp — skips email entirely, lasts 7 days, and lets them set a password too.">
+          {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 7-day sign-in link"}
         </button>
       </div>
       {msg && <span style={{ fontSize: 10, lineHeight: 1.35, color: msg.ok ? "var(--sage-2)" : "var(--rust)" }}>{msg.text}</span>}
@@ -1183,7 +1186,7 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
           <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} onClick={() => copy(link)}>📋</button>
         </div>
       )}
-      {link && <span style={{ fontSize: 9.5, color: "var(--muted)", lineHeight: 1.3 }}>Single use, expires in 1 hour. Anyone with the link gets in as {email} — send it to them directly.</span>}
+      {link && <span style={{ fontSize: 9.5, color: "var(--muted)", lineHeight: 1.3 }}>Works for 7 days, as many times as they need, and lets them set a password. Anyone holding it gets in as {email} — send it to them directly.</span>}
     </div>
   );
 }

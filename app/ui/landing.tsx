@@ -36,6 +36,7 @@ export function Landing() {
   // Typing a password blind on a phone is a leading cause of "it won't let me
   // in". One control, and the guessing stops.
   const [showPw, setShowPw] = useState(false);
+  const [pwFails, setPwFails] = useState(0);
 
   const reset = () => { setErr(""); setInfo(""); setNeedVerify(false); };
   const backToEmail = () => { reset(); setPassword(""); setConfirm(""); setCode(""); setStep("email"); };
@@ -109,6 +110,9 @@ export function Landing() {
       if (!r.ok) {
         setErr(loginErrorHelp(r.error ?? "Login failed."));
         if (/confirm/i.test(r.error ?? "")) setNeedVerify(true);
+        // Two misses means the password is not coming back. Stop offering it as
+        // the main way in.
+        setPwFails((n) => n + 1);
         return;
       }
       const bound = store.bindAuthEmail(r.email ?? email);
@@ -141,7 +145,7 @@ export function Landing() {
     try {
       const r = await authSendReset(email);
       if (!r.ok) { setErr(r.error ?? "Couldn't send the email."); return; }
-      setInfo("Link sent — check your inbox (and spam). It's single-use and expires in about an hour, so click the newest one.");
+      setInfo("Link sent — check your inbox, and spam for evergreenreno.net. It's single-use and expires in about an hour; if you find it later, just come back here and send a fresh one.");
       setStep("sent");
     } finally { setBusy(false); }
   };
@@ -257,8 +261,33 @@ export function Landing() {
                 {info && <Msg tone="ok">{info}</Msg>}
                 {needVerify && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={async () => { const r = await authResendVerification(email); setInfo(r.ok ? "Verification email re-sent." : ""); setErr(r.ok ? "" : r.error ?? ""); setNeedVerify(false); }}>Resend verification email</button>}
                 <button className="btn btn-primary" disabled={busy || !password} style={btn} onClick={submitPassword}>{busy ? "…" : "Log in →"}</button>
-                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a 6-digit code instead</button>
-                <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a reset link</button>
+
+                {pwFails >= 1 ? (
+                  <>
+                    {/* After a miss, the way in that does not depend on
+                        remembering anything goes first and looks like the
+                        answer — because it is. */}
+                    <div style={{ borderTop: "1px solid var(--line)", margin: "14px 0 10px" }} />
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--walnut)", marginBottom: 6 }}>
+                      Can&apos;t remember it? You don&apos;t need it.
+                    </div>
+                    <button className="btn btn-primary" style={btn} disabled={busy} onClick={sendCode}>
+                      Email me a 6-digit code →
+                    </button>
+                    <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>
+                      Or email me a link to set a new password
+                    </button>
+                    <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>
+                      The code and the link arrive in the same email — whichever you use, it works. If nothing
+                      arrives within a couple of minutes, check spam for <strong>evergreenreno.net</strong>.
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a 6-digit code instead</button>
+                    <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a reset link</button>
+                  </>
+                )}
               </>
             ) : step === "setup" ? (
               <>

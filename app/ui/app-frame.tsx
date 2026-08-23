@@ -113,6 +113,11 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   // Gating on auth would bake the login screen into that HTML, leaving a
   // fetch-only reader (no JS) stuck at the door with every module behind it.
   // So mock renders the app straight away; the live Supabase build still gates.
+  // /enter is the hand-over sign-in link's landing page: it is FOR people who
+  // are not signed in, so the frame must not replace it with the login screen —
+  // that would swallow the link and send them back to the password box the link
+  // exists to avoid. It renders bare, with no nav around it.
+  if (pathname === "/enter") return <>{children}</>;
   if (!IS_MOCK && !store.session.authed) return <Landing />;
 
   // Absent, never greyed out: a role should not see a control it cannot use.

@@ -217,8 +217,34 @@ async function callInvite(email: string, mode: "email" | "link"): Promise<Invite
 export const sendInviteEmail = (email: string) => callInvite(email, "email");
 
 /** A one-click sign-in link to hand over by text/WhatsApp — bypasses email entirely.
- *  Existing accounts get a magic link; brand-new ones get an invite link. */
+ *  Existing accounts get a magic link; brand-new ones get an invite link.
+ *  Supabase mints the token immediately, so this one is short-lived: prefer
+ *  handoverLink below, which lasts a week. */
 export const inviteLink = (email: string) => callInvite(email, "link");
+
+/** A sign-in link that lasts SEVEN DAYS.
+ *
+ *  It is not a Supabase link. Redeeming it mints a fresh Supabase one at click
+ *  time, so the link in the text message never goes stale — and the project's
+ *  own token expiry stays short for password resets and one-time codes, where
+ *  a week would be a bad idea. */
+export type HandoverResult = { ok: boolean; error?: string; link?: string; expiresAt?: string; name?: string | null };
+export async function handoverLink(email: string, purpose: "signin" | "password" = "signin"): Promise<HandoverResult> {
+  let token: string | null = null;
+  const s = c();
+  if (s) { const { data } = await s.auth.getSession(); token = data.session?.access_token ?? null; }
+  if (!token) return { ok: false, error: "Sign in with your real account to hand out links (not available in demo mode)." };
+  try {
+    const res = await fetch("/api/signin-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ email, purpose, origin: typeof window !== "undefined" ? window.location.origin : undefined }),
+    });
+    return await res.json();
+  } catch {
+    return { ok: false, error: "Couldn't reach the server." };
+  }
+}
 
 /** Delete a user's Supabase Auth account (server route, service_role). */
 export async function removeAuthUser(email: string): Promise<{ ok: boolean; error?: string; deleted?: boolean }> {
