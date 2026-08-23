@@ -64,6 +64,21 @@ export async function authResendVerification(email: string): Promise<Res> {
   return { ok: true };
 }
 
+/** Ask for a seven-day sign-in link by email. Replaces the one-hour reset as
+ *  the front door: same trust model (it only goes to the address on file), but
+ *  it is still good when someone finds it after lunch. */
+export async function requestSigninLink(email: string): Promise<{ ok: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch("/api/signin-request", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, origin: typeof window !== "undefined" ? window.location.origin : undefined }),
+    });
+    return await res.json();
+  } catch {
+    return { ok: false, error: "Couldn't reach the server. Check your signal and try again." };
+  }
+}
+
 /** Sends the set-a-password email. Used for both "forgot password" and
  *  "finish setting up" — for an invited-but-never-activated account this is
  *  the only flow that actually works. */

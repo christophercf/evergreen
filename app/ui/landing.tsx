@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useStore } from "@/lib/data/hooks";
 import {
-  authEnabled, authSignIn, authSignUp, authResendVerification, authSendReset, authSignOut,
+  authEnabled, authSignIn, authSignUp, authResendVerification, requestSigninLink, authSignOut,
   authUrlError, checkAccount, loginErrorHelp, authSendCode, authVerifyCode, type AccountState,
 } from "@/lib/data/auth";
 import { LeafIcon } from "./icons";
@@ -139,13 +139,15 @@ export function Landing() {
     } finally { setBusy(false); }
   };
 
-  // Email a set-up / reset link (the only flow that works for a half-finished account).
+  // A seven-day link, emailed to the address on file. The one-hour reset used to
+  // live here, and expiring before someone got back to their inbox is precisely
+  // how people ended up asking an admin for help.
   const sendSetupLink = async () => {
     reset(); setBusy(true);
     try {
-      const r = await authSendReset(email);
+      const r = await requestSigninLink(email);
       if (!r.ok) { setErr(r.error ?? "Couldn't send the email."); return; }
-      setInfo("Link sent — check your inbox, and spam for evergreenreno.net. It's single-use and expires in about an hour; if you find it later, just come back here and send a fresh one.");
+      setInfo(r.message ?? "If that address is on the project, a sign-in link is on its way. It's good for 7 days.");
       setStep("sent");
     } finally { setBusy(false); }
   };
@@ -208,7 +210,7 @@ export function Landing() {
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>That link didn&apos;t work</div>
                 <div style={{ padding: "10px 12px", background: "#f7e6e0", borderRadius: 8, fontSize: 12.5, color: "var(--rust)", marginBottom: 12 }}>
-                  ⚠ {authUrlError()}. Set-up links are single-use and expire after about an hour — and requesting a new one cancels the older emails.
+                  ⚠ {authUrlError()}. That was an older one-hour link. The one below lasts 7 days.
                 </div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>Enter your email and we&apos;ll send a fresh link. Click only the <strong>newest</strong> email you receive.</p>
                 <label style={L}>Email
@@ -275,7 +277,7 @@ export function Landing() {
                       Email me a 6-digit code →
                     </button>
                     <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>
-                      Or email me a link to set a new password
+                      Or email me a 7-day sign-in link
                     </button>
                     <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.5 }}>
                       The code and the link arrive in the same email — whichever you use, it works. If nothing
@@ -285,7 +287,7 @@ export function Landing() {
                 ) : (
                   <>
                     <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a 6-digit code instead</button>
-                    <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a reset link</button>
+                    <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a sign-in link</button>
                   </>
                 )}
               </>
@@ -299,7 +301,7 @@ export function Landing() {
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
                 <button className="btn btn-primary" disabled={busy} style={btn} onClick={sendCode}>{busy ? "Sending…" : "Email me a 6-digit code →"}</button>
-                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendSetupLink}>I&apos;d rather set a password</button>
+                <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendSetupLink}>Email me a 7-day sign-in link instead</button>
                 <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.45 }}>
                   Not arriving? Check spam, then ask your project admin — they can send you a direct link that bypasses email entirely.
                 </div>

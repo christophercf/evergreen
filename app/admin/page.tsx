@@ -10,7 +10,7 @@ import {
 } from "@/lib/data/types";
 import { tradeName, macroOrder, macroColor, categoryUsage, tradeUsage } from "@/lib/data/money";
 import { VendorRoster } from "../vendors/roster";
-import { sendInviteEmail, handoverLink, removeAuthUser, accountHealth, authSendReset, type AccountHealth } from "@/lib/data/auth";
+import { sendInviteEmail, handoverLink, removeAuthUser, accountHealth, type AccountHealth } from "@/lib/data/auth";
 import TermsBuilder from "./terms-builder";
 import { AddVendor } from "./add-vendor";
 import { TradeRatingEditor } from "../ui/rating";
@@ -1137,21 +1137,11 @@ function RemoveDialog({ target, onClose }: { target: { id: string; name: string;
 // The copy-link path works either way, and is the answer when email itself is
 // the problem (throttled sender, spam filter, wrong inbox).
 function AccessActions({ email, state, compact }: { email: string; state?: AccountHealth["state"]; compact?: boolean }) {
-  const [busy, setBusy] = useState<"" | "mail" | "link" | "send">("");
+  const [busy, setBusy] = useState<"" | "link" | "send">("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
-  const fresh = state === "no_account";
 
-  const sendMail = async () => {
-    setBusy("mail"); setMsg(null); setLink("");
-    const r = fresh ? await sendInviteEmail(email) : await authSendReset(email);
-    setBusy("");
-    if (!r.ok) { setMsg({ ok: false, text: r.error ?? "Send failed." }); return; }
-    // The invite route hands back a link when it couldn't post the email itself.
-    if ("link" in r && r.link) { setLink(r.link); setMsg({ ok: true, text: "Email couldn’t go out — send them this link instead." }); return; }
-    setMsg({ ok: true, text: fresh ? "✓ Invite emailed." : "✓ Sign-in link emailed — good for 1 hour." });
-  };
 
   const copy = (v: string) => { if (navigator.clipboard) void navigator.clipboard.writeText(v); setCopied(true); setTimeout(() => setCopied(false), 2000); };
 
@@ -1183,10 +1173,6 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start", maxWidth: compact ? 172 : 460 }}>
       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={sendMail}
-          title={fresh ? "Email them an invitation to create their account" : "Email them a fresh link to set a password and get back in"}>
-          {busy === "mail" ? "…" : fresh ? "✉ Send invite" : "✉ Re-send sign-in link"}
-        </button>
         <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={makeLink}
           title="A link you can text or WhatsApp — skips email entirely, lasts 7 days, and lets them set a password too.">
           {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 Copy 7-day link"}

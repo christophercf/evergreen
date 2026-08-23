@@ -198,7 +198,14 @@ export default function MaterialsPage() {
   }, [db.materials, q, room, trade, cat, status, sort, dir]);
   const catsUsed = Array.from(new Set([...CATALOG_CATEGORIES, ...db.materials.map((m) => m.category).filter(Boolean) as string[]]));
 
-  const counts = { total: db.materials.length, needed: db.materials.filter((m) => m.status === "needed").length, purchased: db.materials.filter((m) => m.status === "delivered").length, owner: db.materials.filter((m) => m.purchaser === "owner").length };
+  const counts = {
+    total: db.materials.length,
+    needed: db.materials.filter((m) => m.status === "needed").length,
+    identified: db.materials.filter((m) => normalizeMaterialStatus(m.status) === "identified").length,
+    // "Purchased" to a builder means it is bought — ordered or already here.
+    purchased: db.materials.filter((m) => ["ordered", "delivered"].includes(normalizeMaterialStatus(m.status))).length,
+    owner: db.materials.filter((m) => m.purchaser === "owner").length,
+  };
   const budgetTotal = db.materials.reduce((a, m) => a + (m.budget ?? 0), 0);
   const lockedMats = db.materials.map((m) => materialLockedCost(m)).filter((v): v is number => v != null);
   const lockedTotal = lockedMats.reduce((a, v) => a + v, 0);
@@ -209,7 +216,15 @@ export default function MaterialsPage() {
     <>
       <PageHeader title="Materials" subtitle="Every material — sortable by any column — with schedule-driven due dates, spec links, who buys it, quantities, and where it's stored. Every item is critical by the time it's needed." />
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
+      {/* Phones get one line. The cards below carry the same numbers and more,
+          and are the right density for a desk. */}
+      <div className="m-only" style={{ marginTop: 12, gap: 14, flexWrap: "wrap", alignItems: "baseline", fontSize: 13 }}>
+        <span><strong style={{ fontSize: 16, fontFamily: "var(--font-serif)" }}>{counts.total}</strong> <span style={{ color: "var(--muted)" }}>materials</span></span>
+        <span><strong style={{ fontSize: 16, fontFamily: "var(--font-serif)", color: "var(--brass-2)" }}>{counts.identified}</strong> <span style={{ color: "var(--muted)" }}>identified</span></span>
+        <span><strong style={{ fontSize: 16, fontFamily: "var(--font-serif)", color: "var(--ok)" }}>{counts.purchased}</strong> <span style={{ color: "var(--muted)" }}>purchased</span></span>
+      </div>
+
+      <div className="m-hide" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Materials" value={`${counts.total}`} />
         <StatCard label="Still Needed" value={`${counts.needed}`} accent="var(--rust)" />
         <StatCard label="Purchased / Delivered" value={`${counts.purchased}`} accent="var(--ok)" />
@@ -256,7 +271,7 @@ export default function MaterialsPage() {
               {sortTh("status", "Status")}
               {sortTh("buyer", "Buyer", false, undefined, "m-hide")}
               {showMoney && sortTh("budget", "Budget", false, "Budget / locked cost", "m-hide")}
-              {sortTh("due", "Due")}
+              {sortTh("due", "Due", false, undefined, "m-hide")}
               {sortTh("tied", "Tied task", false, undefined, "m-hide")}
               {sortTh("spec", "Spec", false, undefined, "m-hide")}
               {!ro && <th style={th} className="m-hide"></th>}
@@ -300,7 +315,7 @@ export default function MaterialsPage() {
                     ? <span title="Cost locked from the approved product — revoke the approval to change it" style={{ fontSize: 12, fontWeight: 700, color: "var(--brass-2)", whiteSpace: "nowrap" }}>🔒 ${locked.toLocaleString()}</span>
                     : <NumInput value={mt.budget ?? 0} disabled={ro} onCommit={(v) => store.updateMaterial(mt.id, { budget: v > 0 ? v : undefined })} width={64} money style={{ fontSize: 12 }} />}
                 </td>}
-                <td style={td}><DueCell mt={mt} ro={ro} /></td>
+                <td style={td} className="m-hide"><DueCell mt={mt} ro={ro} /></td>
                 <td style={td} className="m-hide">
                   {tieEditCell === mt.id && !ro ? (
                     <select autoFocus value={mt.linkedScheduleId ?? ""}
@@ -344,7 +359,7 @@ export default function MaterialsPage() {
         </table>
       </div>
 
-      {!ro && <AddMaterial />}
+      {!ro && <AddMaterialPanel />}
 
       {ai && <AiModal mat={ai} onClose={() => setAi(null)} />}
     </>
@@ -374,10 +389,38 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
   const [previewBroken, setPreviewBroken] = useState(false);
   const shownPreview = !mt.imageUrl && preview && !previewBroken ? preview : null;
   const imgFileRef = useRef<HTMLInputElement>(null);
+  // Phones start folded; a desktop never folds (the CSS only applies ≤700px).
+  const [more, setMore] = useState(false);
   return (
     <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, padding: 16 }} className="ever-two">
+      {/* PHONE: the answer first — what it is, when it is needed, where it goes.
+          Everything below this is available, but folded. */}
+      <div className="m-only mat-brief" style={{ flexDirection: "column", gap: 6, order: -1 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--walnut)", lineHeight: 1.25 }}>{mt.item}</div>
+        {mt.desc ? <div style={{ fontSize: 12.5, color: "var(--muted)", lineHeight: 1.45 }}>{mt.desc}</div> : null}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
+          <Pill color="#fff" bg={STATUS_BG[normalizeMaterialStatus(mt.status)]}>{MATERIAL_STATUS_LABEL[normalizeMaterialStatus(mt.status)]}</Pill>
+          {mt.roomLabel || mt.roomId ? <Pill color="var(--muted)">{db.rooms.find((r) => r.id === mt.roomId)?.name ?? mt.roomLabel}</Pill> : null}
+          {mt.qty ? <Pill color="var(--muted)">×{mt.qty}</Pill> : null}
+          <Pill color="var(--muted)">{mt.purchaser} buys</Pill>
+        </div>
+        <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 2 }}>
+          <span style={{ color: "var(--muted)" }}>Needed: </span><DueCell mt={mt} ro={ro} />
+        </div>
+        {mt.specLink ? (
+          <a className="btn btn-sm" href={mt.specLink} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start", marginTop: 4 }}>Open the product page ↗</a>
+        ) : null}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+          <MsgButton kind="material" refId={mt.id} label={mt.item} href={`/materials?item=${mt.id}`} small />
+          {!ro && onAi && <button className="btn btn-sm" onClick={onAi}>✨ Price</button>}
+          <button className="btn btn-sm" onClick={() => setMore((v) => !v)} style={{ marginLeft: "auto" }}>
+            {more ? "Fewer details" : "Edit / more details"}
+          </button>
+        </div>
+      </div>
+
       {/* image / preview */}
-      <div>
+      <div className={more ? undefined : "mat-fold"}>
         <div {...dropProps} style={{ position: "relative", borderRadius: 8, outline: over ? "2px dashed var(--sage)" : "none" }}>
           {over && <div style={{ position: "absolute", inset: 0, zIndex: 2, background: "var(--sage-tint)", opacity: 0.9, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: "var(--walnut)", pointerEvents: "none" }}>⬆ Drop image</div>}
           {mt.imageUrl ? <img src={mt.imageUrl} alt={mt.item} style={{ width: "100%", borderRadius: 8, border: "1px solid var(--line)", display: "block" }} />
@@ -395,7 +438,7 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
         )}
       </div>
       {/* details */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div className={more ? undefined : "mat-fold"} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {/* item name & description — editable after creation */}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <label style={{ fontSize: 11, color: "var(--muted)", flex: 1, minWidth: 160 }}>Item name
@@ -665,6 +708,29 @@ function TimingBlock({ mt, ro }: { mt: Material; ro: boolean }) {
   );
 }
 
+/** Folded away until asked for. It used to sit open under the table with an
+ *  autoFocused first field, which on a phone scrolled past the list and opened
+ *  the keyboard before you had read a single row. */
+function AddMaterialPanel() {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button className="btn btn-primary" style={{ marginTop: 12 }} onClick={() => setOpen(true)}>
+        ＋ Add material
+      </button>
+    );
+  }
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <strong style={{ fontSize: 13 }}>Add material</strong>
+        <button className="btn btn-sm" style={{ marginLeft: "auto" }} onClick={() => setOpen(false)}>Done</button>
+      </div>
+      <AddMaterial />
+    </div>
+  );
+}
+
 function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
   const store = useStore();
   const db = store.db;
@@ -715,8 +781,7 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
   );
 
   return (
-    <div className="card" style={{ padding: 12, marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-      <strong style={{ fontSize: 13, alignSelf: "center" }}>Add material</strong>
+    <div className="card" style={{ padding: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
       {cell("Item", <input autoFocus placeholder="e.g. Kitchen faucet" value={item} onChange={(e) => setItem(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} style={{ minWidth: 180 }} />)}
       {cell("Room", (
         <select value={roomId} onChange={(e) => setRoomId(e.target.value)} style={{ borderColor: !roomId ? "var(--rust)" : undefined }}>

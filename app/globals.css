@@ -141,6 +141,9 @@ table { border-collapse: collapse; width: 100%; }
   .m-due { min-width: 0 !important; font-size: 10px !important; }
   /* Blocks that only exist on mobile (e.g. edit controls for hidden columns). */
   .m-only { display: flex !important; }
+  /* An expanded material leads with a brief; the full editor folds behind it. */
+  .mat-fold { display: none !important; }
+  .mat-brief { display: flex !important; }
   /* Collapsible filter bars. */
   .m-filters { display: none !important; }
   .m-filters.open { display: flex !important; }

@@ -107,7 +107,11 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
     <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
       <div>
         <h1 className="serif" style={{ fontSize: 28, fontWeight: 700, color: "var(--walnut)", lineHeight: 1.1 }}>{title}</h1>
-        {subtitle && <p style={{ color: "var(--muted)", marginTop: 5, maxWidth: 640, fontSize: 14 }}>{subtitle}</p>}
+        {/* The subtitle explains a screen to someone meeting it for the first
+            time. On a phone it is three lines of prose between the title and
+            the thing they came to look at, every single visit — so it stays on
+            the desk, and Help carries the per-seat explanation. */}
+        {subtitle && <p className="m-hide" style={{ color: "var(--muted)", marginTop: 5, maxWidth: 640, fontSize: 14 }}>{subtitle}</p>}
       </div>
       {right}
     </div>
