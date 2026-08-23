@@ -1137,7 +1137,7 @@ function RemoveDialog({ target, onClose }: { target: { id: string; name: string;
 // The copy-link path works either way, and is the answer when email itself is
 // the problem (throttled sender, spam filter, wrong inbox).
 function AccessActions({ email, state, compact }: { email: string; state?: AccountHealth["state"]; compact?: boolean }) {
-  const [busy, setBusy] = useState<"" | "mail" | "link">("");
+  const [busy, setBusy] = useState<"" | "mail" | "link" | "send">("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
@@ -1154,6 +1154,19 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
   };
 
   const copy = (v: string) => { if (navigator.clipboard) void navigator.clipboard.writeText(v); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+
+  // Emailing the 7-day link is the one-click version of the same thing. Unlike
+  // the old reset mail, this one is still good when they find it on Thursday.
+  const emailTheLink = async () => {
+    setBusy("send"); setMsg(null); setLink("");
+    const r = await handoverLink(email, "signin", "email");
+    setBusy("");
+    if (!r.ok) { setMsg({ ok: false, text: r.error ?? "Couldn't send it." }); return; }
+    if (r.emailed) { setMsg({ ok: true, text: `✓ Sent to ${r.sentTo} — good for 7 days.` }); return; }
+    // Mail failed but the link is valid: hand it over rather than lose it.
+    if (r.link) { setLink(r.link); copy(r.link); }
+    setMsg({ ok: false, text: r.emailError ?? "Email didn't go out — the link is copied instead." });
+  };
 
   // A seven-day link. It mints its Supabase token at click time, so it cannot
   // arrive stale — the old one-hour link was the reason people ended up asking
@@ -1176,7 +1189,11 @@ function AccessActions({ email, state, compact }: { email: string; state?: Accou
         </button>
         <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={makeLink}
           title="A link you can text or WhatsApp — skips email entirely, lasts 7 days, and lets them set a password too.">
-          {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 7-day sign-in link"}
+          {busy === "link" ? "…" : copied ? "✓ Copied" : "🔗 Copy 7-day link"}
+        </button>
+        <button className="btn btn-sm" style={{ padding: "1px 6px", fontSize: 10.5 }} disabled={!!busy} onClick={emailTheLink}
+          title="Email them the 7-day link. Still works when they find it days later — which the old reset email did not.">
+          {busy === "send" ? "…" : "✉ Send 7-day link"}
         </button>
       </div>
       {msg && <span style={{ fontSize: 10, lineHeight: 1.35, color: msg.ok ? "var(--sage-2)" : "var(--rust)" }}>{msg.text}</span>}

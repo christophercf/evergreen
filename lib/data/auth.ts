@@ -223,8 +223,15 @@ export const inviteLink = (email: string) => callInvite(email, "link");
  *  time, so the link in the text message never goes stale — and the project's
  *  own token expiry stays short for password resets and one-time codes, where
  *  a week would be a bad idea. */
-export type HandoverResult = { ok: boolean; error?: string; link?: string; expiresAt?: string; name?: string | null };
-export async function handoverLink(email: string, purpose: "signin" | "password" = "signin"): Promise<HandoverResult> {
+export type HandoverResult = {
+  ok: boolean; error?: string; link?: string; expiresAt?: string; name?: string | null;
+  emailed?: boolean; emailError?: string | null; sentTo?: string | null;
+};
+export async function handoverLink(
+  email: string,
+  purpose: "signin" | "password" = "signin",
+  deliver: "copy" | "email" = "copy",
+): Promise<HandoverResult> {
   let token: string | null = null;
   const s = c();
   if (s) { const { data } = await s.auth.getSession(); token = data.session?.access_token ?? null; }
@@ -233,7 +240,7 @@ export async function handoverLink(email: string, purpose: "signin" | "password"
     const res = await fetch("/api/signin-link", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email, purpose, origin: typeof window !== "undefined" ? window.location.origin : undefined }),
+      body: JSON.stringify({ email, purpose, deliver, origin: typeof window !== "undefined" ? window.location.origin : undefined }),
     });
     return await res.json();
   } catch {
