@@ -48,14 +48,15 @@ export function Landing() {
     try {
       const r = await authSendCode(email);
       if (!r.ok) { setErr(r.error ?? "Couldn't send the code."); return; }
-      setInfo("Sent. Check your email for a 6-digit code — or just click the link in it.");
+      setInfo("Sent. Check your email for the code — or just click the link in it, which does the same thing.");
       setCode(""); setStep("code");
     } finally { setBusy(false); }
   };
   const submitCode = async () => {
     reset();
     const clean = code.replace(/\D/g, "");
-    if (clean.length < 6) { setErr("Enter the 6-digit code from your email."); return; }
+    // A real code is at least four digits; beyond that the server decides.
+    if (clean.length < 4) { setErr("Enter the code from your email."); return; }
     setBusy(true);
     try {
       const r = await authVerifyCode(email, clean);
@@ -274,7 +275,7 @@ export function Landing() {
                       Can&apos;t remember it? You don&apos;t need it.
                     </div>
                     <button className="btn btn-primary" style={btn} disabled={busy} onClick={sendCode}>
-                      Email me a 6-digit code →
+                      Email me a code →
                     </button>
                     <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>
                       Or email me a 7-day sign-in link
@@ -286,7 +287,7 @@ export function Landing() {
                   </>
                 ) : (
                   <>
-                    <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a 6-digit code instead</button>
+                    <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Email me a code instead</button>
                     <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} disabled={busy} onClick={sendSetupLink}>Forgot password — email me a sign-in link</button>
                   </>
                 )}
@@ -295,12 +296,12 @@ export function Landing() {
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Finish setting up</div>
                 <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>
-                  You&apos;re on the project{who ? ` as ${who}` : ""}, but this account doesn&apos;t have a password yet. Easiest way in: we email you a 6-digit code — no password to create or remember.
+                  You&apos;re on the project{who ? ` as ${who}` : ""}, but this account doesn&apos;t have a password yet. Easiest way in: we email you a code — no password to create or remember.
                 </p>
                 {emailRow}
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
-                <button className="btn btn-primary" disabled={busy} style={btn} onClick={sendCode}>{busy ? "Sending…" : "Email me a 6-digit code →"}</button>
+                <button className="btn btn-primary" disabled={busy} style={btn} onClick={sendCode}>{busy ? "Sending…" : "Email me a code →"}</button>
                 <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendSetupLink}>Email me a 7-day sign-in link instead</button>
                 <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10, lineHeight: 1.45 }}>
                   Not arriving? Check spam, then ask your project admin — they can send you a direct link that bypasses email entirely.
@@ -309,16 +310,19 @@ export function Landing() {
             ) : step === "code" ? (
               <>
                 <div className="serif" style={{ fontSize: 20, fontWeight: 700, color: "var(--walnut)", marginBottom: 4 }}>Enter your code</div>
-                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>We emailed a 6-digit code. Type it below — or just click the link in that email and you&apos;re in.</p>
+                <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 14 }}>We emailed you a code. Type it below — or just click the link in that email, which signs you in without typing anything.</p>
                 {emailRow}
+                {/* No length assumed: Supabase issues 6 to 10 digits depending on
+                    the project setting, and truncating to six turned a valid
+                    code into an invalid one without saying so. */}
                 <input inputMode="numeric" autoComplete="one-time-code" autoFocus value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 10))}
                   onKeyDown={(e) => e.key === "Enter" && submitCode()}
-                  placeholder="123456"
+                  placeholder="the code from your email"
                   style={{ width: "100%", fontSize: 26, letterSpacing: ".35em", textAlign: "center", padding: "10px 12px", fontFamily: "var(--font-serif)" }} />
                 {err && <Msg tone="err">{err}</Msg>}
                 {info && <Msg tone="ok">{info}</Msg>}
-                <button className="btn btn-primary" disabled={busy || code.length < 6} style={btn} onClick={submitCode}>{busy ? "…" : "Log in →"}</button>
+                <button className="btn btn-primary" disabled={busy || code.length < 4} style={btn} onClick={submitCode}>{busy ? "…" : "Log in →"}</button>
                 <button className="btn btn-sm" style={ghost} disabled={busy} onClick={sendCode}>Send a new code</button>
                 <button className="btn btn-sm" style={{ ...ghost, marginTop: 2 }} onClick={backToEmail}>← Back</button>
               </>

@@ -113,7 +113,9 @@ export async function authVerifyCode(email: string, code: string): Promise<Res> 
   if (!s) return { ok: false, error: "Auth not configured." };
   const { data, error } = await s.auth.verifyOtp({ email: email.trim(), token: code.trim(), type: "email" });
   if (error) {
-    if (/expired|invalid/i.test(error.message)) return { ok: false, error: "That code didn't work — it may have expired. Send a new one." };
+    if (/expired|invalid/i.test(error.message)) {
+      return { ok: false, error: "That code didn't work. Check every digit against the email — codes are not always six long — or send a new one." };
+    }
     return { ok: false, error: error.message };
   }
   return { ok: true, email: data.user?.email ?? undefined };

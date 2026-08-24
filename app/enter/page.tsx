@@ -110,8 +110,8 @@ export default function EnterPage() {
               {/* Never a dead end: the ordinary login screen can send a code or a
                   reset without anyone's help. */}
               <p style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12, lineHeight: 1.55 }}>
-                You can still get in on your own. The login screen will email you a six-digit code, or a
-                link to set a password — you do not need a new link from anyone.
+                You can still get in on your own. The login screen will email you a code, or a fresh
+                link — you do not need a new one from anyone.
               </p>
               <a className="btn btn-primary" href="/" style={{ width: "100%", justifyContent: "center", textDecoration: "none" }}>
                 Go to the login screen →

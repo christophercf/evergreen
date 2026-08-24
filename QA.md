@@ -317,6 +317,10 @@ Bugs that already escaped once. Each run, prove they are still dead.
   freeze on the first signature; changing them goes through the amendment path.
 - **A bundled package is one contract sum** — per-trade agreements are the same
   document; summing them double-counts the award.
+- **The sign-in code field assumes no length** — Supabase issues 6 to 10 digits
+  depending on a project setting, and the field used to truncate at 6, turning a
+  valid code into an invalid one and reporting it as expired (fixed 2026-08-24).
+  Test by pasting a 10-digit string: all ten must survive.
 - **Deploys must hit both domains** — `evergreen-rust-five.vercel.app` and
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the
