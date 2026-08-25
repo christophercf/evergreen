@@ -19,7 +19,8 @@
 -- Run this in the Supabase SQL editor. It is the fix.
 -- ============================================================================
 
-alter table public.project_state enable row level security;
+-- Safe to run more than once: the policies are dropped and recreated, and RLS
+-- is switched on LAST so the rules exist before they start being enforced.
 
 -- ---------------------------------------------------------------------------
 -- RECOMMENDED — project members only.
@@ -29,6 +30,9 @@ alter table public.project_state enable row level security;
 -- being on the project's own users list, which is where membership already
 -- lives.
 -- ---------------------------------------------------------------------------
+drop policy if exists "members read" on public.project_state;
+drop policy if exists "members update" on public.project_state;
+
 create policy "members read"
   on public.project_state for select to authenticated
   using (
@@ -49,6 +53,12 @@ create policy "members update"
     )
   )
   with check (true);
+
+-- Enforcement goes on last, once the rules above are in place.
+alter table public.project_state enable row level security;
+
+-- To undo all of this in one line, if anything looks wrong:
+--   alter table public.project_state disable row level security;
 
 -- No INSERT or DELETE policy: the single project row already exists, and
 -- nothing in the app creates or removes it. The service-role key (server
