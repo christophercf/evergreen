@@ -178,6 +178,11 @@ Notes that keep this honest:
 - Only ONE stylesheet may own `.ever-main` padding-bottom. A `padding` shorthand
   elsewhere silently wins and drops content under the tab bar.
 - The floating bars (bundle, scope) must clear the tab bar on a phone.
+- **Draw Management is desktop-only by decision.** Below 860px it shows the
+  DesktopOnly explanation with links out to Budget Management and Contracts —
+  do not file the gate as a bug, and do not let the gated page regress into a
+  cramped working version. Signing a DRAW REQUEST stays phone-friendly; it is
+  only the building of draws that needs a desk.
 - Administrative carries the room × trade matrix — ~1,500 controls on one page.
   It is inside a scroll container and does not spill, but it is a desktop screen
   in practice. Do not file it as a layout defect; do not let it grow.

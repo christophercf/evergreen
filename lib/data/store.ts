@@ -1312,8 +1312,27 @@ class Store {
   setFeedbackDone(id: string, done: boolean) {
     this.mutate((db) => {
       const x = (db.feedback ?? []).find((y) => y.id === id);
-      if (x) x.done = done;
+      if (x) {
+        x.done = done;
+        // Reopening un-archives: an archived report is one that was handled,
+        // and reopening says it was not.
+        if (!done) x.archivedAt = undefined;
+      }
     }, done ? "Closed a report" : "Reopened a report");
+  }
+
+  /** Copying the brief IS the hand-off to Claude Code, so the copied reports
+   *  archive themselves — the list empties as it is consumed and nothing is
+   *  pasted twice. Only the admin does this, because only the admin sees the
+   *  collection at all. */
+  archiveFeedback(ids: string[]) {
+    if (this.session.role !== "full_admin" || !ids.length) return;
+    const at = new Date().toISOString();
+    this.mutate((db) => {
+      for (const x of db.feedback ?? []) {
+        if (ids.includes(x.id)) { x.done = true; x.archivedAt = at; }
+      }
+    }, `Archived ${ids.length} report${ids.length === 1 ? "" : "s"}`);
   }
 
   // ---- What has changed since I last looked ----------------------------------

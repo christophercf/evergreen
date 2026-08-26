@@ -8,6 +8,7 @@ import { accessFor, DRAW_STATUS_LABEL, type CostLine, type DB, type Draw, type D
 import { totals, drawAmount, lineCurrent, lineDrawn, allocationAmount, fmt, tradeName, linePaid, lineUnpaid } from "@/lib/data/money";
 import { lineContractState, lineDrawable, contractMissingSigs } from "@/lib/data/contract";
 import { scopeOptionsFor, lineHeadroom, drawHeadroom, type ScopeSource } from "@/lib/data/drawscope";
+import { DesktopOnly, useNarrowViewport } from "../ui/desktop-only";
 import { renderDrawRequest, projectHeadroom } from "@/lib/data/drawdoc";
 import { pushEmail } from "../ui/messenger";
 import { SignaturePad, SignatureMark } from "../ui/signature-pad";
@@ -43,6 +44,7 @@ export default function PaymentsPage() {
   // The line waiting for a draw to land in. Tapping a line arms it; tapping a
   // draw adds it; tapping anywhere else puts it down.
   const [armed, setArmed] = useState<string | null>(null);
+  const phone = useNarrowViewport();
   if (access === "none") return <NoAccess module="Draw Management" />;
   const ro = access !== "edit";
 
@@ -67,6 +69,26 @@ export default function PaymentsPage() {
     .sort((a, b) => (b.paidDate ?? "").localeCompare(a.paidDate ?? ""));
   const archivedTotal = archived.reduce((a, d) => a + drawAmount(db, d), 0);
   const openDraws = live.length;
+
+  // A desktop screen, said plainly. Building a draw is dragging money across
+  // two columns and reading five figures per line while you do it — on a phone
+  // that is a cramped version of a mistake. The signable draw request already
+  // covers the phone half of this workflow: the client can read and sign from
+  // anywhere, it is only the BUILDING that needs a desk.
+  if (phone) {
+    return (
+      <DesktopOnly
+        title="Draw Management"
+        because="Building a draw means working two columns at once — the budget lines on one side, the draws they fund on the other — with running figures on both. It needs the width of a real screen, and money screens are the wrong place to squint."
+        elsewhere={[
+          { href: "/costs", label: "Budget Management", note: "Every line's contracted, drawn and paid figures — readable on a phone." },
+          { href: "/vendors", label: "Contracts", note: "Draw requests live here once issued; signing works fine from a phone." },
+        ]}
+      >
+        {null}
+      </DesktopOnly>
+    );
+  }
 
   return (
     <>

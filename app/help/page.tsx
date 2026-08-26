@@ -97,9 +97,13 @@ export default function HelpPage() {
       <FeedbackForm />
       <Brief />
 
-      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 18 }}>
-        {db.feedback?.length ? `${db.feedback.length} report${db.feedback.length === 1 ? "" : "s"} filed.` : "No reports filed yet."}
-      </div>
+      {/* Only the admin sees how much has been filed across the project — the
+          count is the collection, just summarised. */}
+      {role === "full_admin" ? (
+        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 18 }}>
+          {db.feedback?.length ? `${db.feedback.length} report${db.feedback.length === 1 ? "" : "s"} filed.` : "No reports filed yet."}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -228,18 +232,28 @@ function Brief() {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const all = db.feedback ?? [];
-  // Everyone sees their own; the admin sees the lot, because the brief is how
-  // the whole list reaches whoever is fixing it.
-  const mine = role === "full_admin" ? all : all.filter((f) => f.filedBy === store.session.userId);
+  const admin = role === "full_admin";
+  // Everyone files; only Chris reads the collection. A filer keeps sight of
+  // their own OPEN reports — filing into a void teaches people to stop filing —
+  // but never anyone else's, and their archived ones disappear once handled.
+  const mine = admin ? all : all.filter((f) => f.filedBy === store.session.userId && !f.archivedAt);
+  const archived = admin ? mine.filter((f) => f.archivedAt) : [];
+  const closed = mine.filter((f) => f.done && !f.archivedAt);
   const live = mine.filter((f) => !f.done);
+  const shown = admin ? [...live, ...closed] : mine;
   if (!mine.length) return null;
 
   const text = briefText(live);
+  // Copying is the hand-off: the copied reports archive so the list empties as
+  // it is consumed and nothing gets pasted into Claude twice.
   const copy = () => {
-    if (!live.length) { setCopied("Nothing to copy — every report is closed."); return; }
+    if (!live.length) { setCopied("Nothing to copy — every open report has been handled."); return; }
     navigator.clipboard?.writeText(text).then(
-      () => setCopied("Brief copied. Paste it straight into Claude."),
-      () => { setOpen(true); setCopied("Copy was blocked here — the brief is open below, select it and copy."); },
+      () => {
+        store.archiveFeedback(live.map((f) => f.id));
+        setCopied(`Copied ${live.length} report${live.length === 1 ? "" : "s"} and moved ${live.length === 1 ? "it" : "them"} to the archive. Paste straight into Claude.`);
+      },
+      () => { setOpen(true); setCopied("Copy was blocked here — the brief is open below, select it and copy. Nothing was archived."); },
     );
   };
 
@@ -247,17 +261,17 @@ function Brief() {
     <>
       <SectionTitle right={
         <div style={{ display: "flex", gap: 6 }}>
-          <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>{open ? "Hide the brief" : "Show the brief"}</button>
-          <button className="btn btn-sm btn-primary" onClick={copy}>Copy the brief for Claude</button>
+          {admin ? <button className="btn btn-sm" onClick={() => setOpen((v) => !v)}>{open ? "Hide the brief" : "Show the brief"}</button> : null}
+          {admin ? <button className="btn btn-sm btn-primary" onClick={copy} title="Copies every open report and moves them to the archive — the list empties as it is consumed.">Copy all for Claude → archive</button> : null}
         </div>
       }>
-        {role === "full_admin" ? "Reports filed" : "Your reports"} — {live.length} open{mine.length - live.length ? `, ${mine.length - live.length} closed` : ""}
+        {admin ? "Reports filed" : "Your reports"} — {live.length} open{closed.length ? `, ${closed.length} closed` : ""}{admin && archived.length ? `, ${archived.length} archived` : ""}
       </SectionTitle>
 
       {copied ? <div style={{ fontSize: 12, color: "var(--ok)", fontWeight: 600, marginBottom: 8 }}>{copied}</div> : null}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {mine.map((f) => (
+        {shown.map((f) => (
           <div key={f.id} className="card" style={{ padding: "10px 12px", display: "flex", gap: 10, alignItems: "flex-start", opacity: f.done ? 0.55 : 1 }}>
             <Pill color="#fff" bg={f.kind === "bug" ? "var(--rust)" : f.kind === "feature" ? "var(--sage)" : "var(--brass)"}>
               {FEEDBACK_KIND_LABEL[f.kind]}{f.severity ? ` · ${FEEDBACK_SEVERITY_LABEL[f.severity]}` : ""}
@@ -285,6 +299,28 @@ function Brief() {
           fontSize: 11, lineHeight: 1.5, background: "var(--paper)", border: "1px solid var(--line)",
           borderRadius: 8, padding: 12, fontFamily: "var(--font-sans)",
         }}>{text}</pre>
+      ) : null}
+
+      {/* The archive: consumed reports, kept on the record, out of the way. */}
+      {admin && archived.length ? (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: "pointer", fontSize: 11, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: MUTED }}>
+            Archive — {archived.length} handed to Claude
+          </summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 8 }}>
+            {archived.map((f) => (
+              <div key={f.id} className="card" style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", opacity: 0.7 }}>
+                <Pill color="#fff" bg={f.kind === "bug" ? "var(--rust)" : f.kind === "feature" ? "var(--sage)" : "var(--brass)"}>{FEEDBACK_KIND_LABEL[f.kind]}</Pill>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 12, color: MUTED }}>
+                  <strong style={{ color: "var(--ink)" }}>{f.area}</strong> — {f.what}
+                  <span style={{ fontSize: 10.5 }}> · archived {f.archivedAt?.slice(0, 10)}</span>
+                </div>
+                <button className="btn btn-sm" onClick={() => store.setFeedbackDone(f.id, false)}
+                  title="Back to the open list — it will be in the next copy">Reopen</button>
+              </div>
+            ))}
+          </div>
+        </details>
       ) : null}
     </>
   );

@@ -1123,6 +1123,8 @@ export interface FeedbackItem {
   at: string;
   /** Chris closes one when it is fixed; it leaves the brief, not the record. */
   done?: boolean;
+  /** Set when the report was archived by copying the brief into Claude Code. */
+  archivedAt?: string;
 }
 
 // ---- Contracts (master terms templates) ------------------------------------
