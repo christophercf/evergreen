@@ -1056,13 +1056,26 @@ export function fieldItemsFor(u: FieldUpdate, role: Role, user: User | undefined
   return u.items.filter((i) => i.tradeId && mine.has(i.tradeId));
 }
 
-/** Whether this reader can open the update at all. */
-export function canReadFieldUpdate(u: FieldUpdate, role: Role, user: User | undefined): boolean {
+/** Whether this reader can open the update at all. For trades, pass the set
+ *  of AWARDED trade ids (vendorAgreements with a contract): distribution only
+ *  ever sends to awarded vendors, and the read gate must match — a bidding
+ *  vendor on the same trade was deliberately not sent the report. */
+export function canReadFieldUpdate(u: FieldUpdate, role: Role, user: User | undefined, awardedTradeIds?: Set<string>): boolean {
   if (role === "full_admin" || role === "builder") return true;
   if (role === "owner") return u.sentTo.owner;
   if (role === "viewer") return u.sentTo.designer;
-  if (role === "trade") return u.sentTo.vendors && fieldItemsFor(u, role, user).length > 0;
+  if (role === "trade") {
+    if (!u.sentTo.vendors || fieldItemsFor(u, role, user).length === 0) return false;
+    if (awardedTradeIds) return (user?.tradeIds ?? []).some((t) => awardedTradeIds.has(t));
+    return true;
+  }
   return false;
+}
+
+/** The awarded set, from the DB's agreements — the one fact `canReadFieldUpdate`
+ *  needs that the update itself does not carry. */
+export function awardedTradeIdSet(agreements: VendorAgreement[]): Set<string> {
+  return new Set(agreements.filter((a) => a.contract).map((a) => a.tradeId));
 }
 
 // ---- Schedule (Gantt) -------------------------------------------------------

@@ -205,6 +205,16 @@ class Store {
     // them backwards. (Reactions live inside messages and do get caught by a
     // snapshot restore — accepted; a reaction is one tap to redo.)
     restored.convMeta = this.db.convMeta;
+    // Published field updates survive too: they are immutable, numbered, and
+    // already emailed — a snapshot that predates one must not delete it (the
+    // emailed links would die and the number would be reissued). Their
+    // Messages chips ride along for the same reason.
+    if (this.db.fieldUpdates?.length) {
+      restored.fieldUpdates = this.db.fieldUpdates;
+      const have = new Set((restored.updates ?? []).map((m) => m.id));
+      const chips = (this.db.updates ?? []).filter((m) => m.context?.kind === "field" && !have.has(m.id));
+      if (chips.length) restored.updates = [...chips, ...restored.updates];
+    }
     this.db = restored;
     // An undo that doesn't reach the server is as silent a loss as a save that
     // doesn't, and it looks worse: the change appears to come back on screen.
@@ -1876,21 +1886,28 @@ class Store {
 
   // ---- Field Updates ----
   /** Publish a field update: ONE immutable report, a tagged Messages chip to
-   *  each audience, and (pushed client-side after this returns) the same
+   *  each audience, and (pushed by the caller AFTER this resolves) the same
    *  report by email. The client side — owner + designer — shares one thread
    *  and reads the whole report; each vendor gets their OWN thread, and their
    *  copy of the report shows only their items. There is deliberately no
-   *  edit or delete: corrections go in the next update. Returns what the
-   *  email push needs, or null when the publish was refused. */
-  publishFieldUpdate(input: {
+   *  edit or delete: corrections go in the next update.
+   *
+   *  This does NOT go through mutate(): a published report is not undoable
+   *  (the emails are already promised), and the write goes through patchDB —
+   *  read-modify-write against the server's current row — so the sequential
+   *  number is minted against what is actually published, not this device's
+   *  possibly-stale copy, and publishing never carries a stale snapshot of
+   *  everything else. Resolves with what the email push needs only once the
+   *  write has LANDED; null = refused or the save failed (already announced). */
+  async publishFieldUpdate(input: {
     title: string;
     items: Omit<FieldItem, "id">[];
     sendTo: { owner: boolean; designer: boolean; vendors: boolean };
-  }): {
+  }): Promise<{
     id: string; no: number; title: string; dateLabel: string; sentToLine: string;
     teamEmails: string[];
     vendorRecipients: { userId: string; email?: string; tradeIds: string[] }[];
-  } | null {
+  } | null> {
     const role = this.session.role;
     if (role !== "builder" && role !== "full_admin") return null;
     if (!input.items.length) return null;
@@ -1898,9 +1915,10 @@ class Store {
 
     const db = this.db;
     const id = newId("fu");
-    const no = Math.max(0, ...(db.fieldUpdates ?? []).map((u) => u.no)) + 1;
-    const noLabel = String(no).padStart(2, "0");
     const now = new Date();
+    // The publisher's own calendar day, everywhere — an evening publish must
+    // not read as tomorrow's date in the masthead (toISOString is UTC).
+    const dateIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const dateLabel = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const title = input.title.trim() || `Field update — ${dateLabel}`;
 
@@ -1928,29 +1946,45 @@ class Store {
 
     const reds = input.items.filter((i) => i.rag === "red").length;
     const asks = input.items.filter((i) => i.ask).length;
-    const items: FieldItem[] = input.items.map((i) => ({ ...i, id: newId("fi") }));
-    const ctx: UpdateContext = { kind: "field", refId: id, label: `Field update No ${noLabel} — ${dateLabel}`, href: `/field-updates?view=${id}` };
-
-    this.mutate((dbx) => {
+    // Ids are minted ONCE, outside apply: apply runs twice (optimistic local,
+    // then against the server's fresh copy) and both copies must agree on
+    // every id the outside world might hold. Items are deep-copied so the
+    // published report can never alias the composer's state.
+    const items: FieldItem[] = input.items.map((i) => ({ ...i, photos: [...i.photos], id: newId("fi") }));
+    const teamMsgId = newId("upd");
+    const vendorMsgIds = new Map(vendors.map((v) => [v.id, newId("upd")]));
+    // The sequential number is computed INSIDE apply, per copy: the server
+    // application sees what is actually published and mints the real number
+    // (captured below for the return + emails). The optimistic local copy may
+    // briefly show a lower number; realtime replaces it with the truth.
+    let finalNo = 0;
+    const apply = (dbx: DB) => {
       dbx.fieldUpdates = dbx.fieldUpdates ?? [];
+      if (dbx.fieldUpdates.some((u) => u.id === id)) { finalNo = dbx.fieldUpdates.find((u) => u.id === id)!.no; return; }
+      const no = Math.max(0, ...dbx.fieldUpdates.map((u) => u.no)) + 1;
+      finalNo = no;
+      const noLabel = String(no).padStart(2, "0");
+      const ctx: UpdateContext = { kind: "field", refId: id, label: `Field update No ${noLabel} — ${dateLabel}`, href: `/field-updates?view=${id}` };
       dbx.fieldUpdates.unshift({
-        id, no, dateIso: now.toISOString().slice(0, 10), title,
-        by: this.session.displayName, byId: this.session.userId, items,
+        id, no, dateIso, title,
+        by: this.session.displayName, byId: this.session.userId,
+        items: clone(items),
         sentTo: { owner: owners.length > 0, designer: designers.length > 0, vendors: vendors.length > 0 },
         sentToLine, publishedAt: now.toISOString(),
       });
-      const post = (toIds: string[], body: string) => {
+      const post = (msgId: string, toIds: string[], body: string) => {
         if (!toIds.length) return;
         dbx.updates.unshift({
-          id: newId("upd"), title: `Field update No ${noLabel} — ${title}`, body,
+          id: msgId, title: `Field update No ${noLabel} — ${title}`, body,
           authorId: this.session.userId, authorName: this.session.displayName,
-          at: new Date().toISOString(), toUserIds: toIds, replies: [], context: ctx,
+          at: now.toISOString(), toUserIds: toIds, replies: [], context: ctx,
         });
         for (const uid2 of toIds) {
           this.notify(dbx, { toUserId: uid2, kind: "info", module: "updates", message: `📋 Field update No ${noLabel} from ${this.session.displayName}: "${title}"` });
         }
       };
       post(
+        teamMsgId,
         [...owners, ...designers].map((u) => u.id),
         `Field update No ${noLabel} is out: ${items.length} ${items.length === 1 ? "item" : "items"}` +
           (reds ? `, ${reds} flagged red` : "") + (asks ? `, ${asks} waiting on your decision` : "") +
@@ -1958,12 +1992,37 @@ class Store {
       );
       for (const v of vendors) {
         const n = vendorItemCount(v);
-        post([v.id], `Your work is in field update No ${noLabel}: ${n} ${n === 1 ? "item" : "items"} on your trade. Open it for the photos and the detail. Also sent by email.`);
+        post(vendorMsgIds.get(v.id)!, [v.id], `Your work is in field update No ${String(no).padStart(2, "0")}: ${n} ${n === 1 ? "item" : "items"} on your trade. Open it for the photos and the detail. Also sent by email.`);
       }
-    }, `Published to ${sentToLine} — in Messages and by email.${asks ? ` ${asks} ${asks === 1 ? "ask is" : "asks are"} waiting on the owner.` : ""}`);
+    };
 
+    // Optimistic local apply (no undo snapshot — see above), then the real
+    // write, chained behind whatever is already in flight so writes cannot
+    // land out of order. The caller gets a result only if the write LANDS.
+    const prevDb = this.db;
+    const next = clone(this.db);
+    apply(next);
+    this.db = next;
+    this.emit();
+    const run = async () => {
+      if (this.backend?.patchDB) await this.backend.patchDB(apply);
+      else await this.backend?.persistDB(next);
+      if (this.saveError) { this.saveError = null; this.emit(); }
+    };
+    this.lastWrite = this.lastWrite.catch(() => undefined).then(run);
+    try {
+      await this.lastWrite;
+    } catch (e) {
+      // Roll the optimistic copy back (if nothing else has moved since):
+      // a report that never reached the server must not linger locally, or a
+      // later unrelated save would publish it WITHOUT its emails.
+      if (this.db === next) { this.db = prevDb; this.emit(); }
+      this.announceSaveFailed(e);
+      return null;
+    }
+    this.announceSave(`Published to ${sentToLine} — in Messages and by email.${asks ? ` ${asks} ${asks === 1 ? "ask is" : "asks are"} waiting on the owner.` : ""}`);
     return {
-      id, no, title, dateLabel, sentToLine,
+      id, no: finalNo, title, dateLabel, sentToLine,
       teamEmails: [...owners, ...designers].filter((u) => !u.emailOptOut && !!u.email).map((u) => u.email),
       vendorRecipients: vendors.map((u) => ({ userId: u.id, email: u.emailOptOut ? undefined : u.email, tradeIds: u.tradeIds ?? [] })),
     };

@@ -47,6 +47,9 @@ function photoBlock(it: MailItem): string {
 function renderReport(o: {
   projectName: string; no: string; title: string; dateLabel: string; by: string;
   items: MailItem[]; viewUrl: string; ownerFirst?: string;
+  /** "team" mail is addressed to the owner; a vendor's copy must not tell THEM
+   *  a decision is theirs when the ask belongs to the owner. */
+  askHeading: string;
 }): string {
   const items = o.items;
   const asks = items.filter((i) => (i.ask ?? "").trim());
@@ -104,7 +107,7 @@ function renderReport(o: {
       </div>
       <div style="padding:13px 20px 7px;border-bottom:1px solid #ddd2bd;background:#f5f0e4;">${summaryChips}</div>
       ${asks.length ? `<div style="padding:16px 20px;border-bottom:1px solid #ddd2bd;background:#f5ecd7;">
-        <div style="font-family:Arial,sans-serif;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#7a5d1f;margin-bottom:10px;">Needs your decision</div>
+        <div style="font-family:Arial,sans-serif;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:#7a5d1f;margin-bottom:10px;">${esc(o.askHeading)}</div>
         ${askCards}
       </div>` : ""}
       ${reds.length ? `<div style="padding:16px 20px;border-bottom:1px solid #ddd2bd;">
@@ -124,11 +127,28 @@ function renderReport(o: {
 </body></html>`;
 }
 
+// The link in the mail only ever points back into the app: this endpoint is
+// unauthenticated (like the Messenger push beside it), and a mailable button
+// with an arbitrary target would be a phishing kit wearing our branding. Any
+// off-app origin is replaced with the canonical one, keeping the path.
+const APP_ORIGINS = new Set(["evergreen-rust-five.vercel.app", "app.evergreenreno.net", "localhost:3180"]);
+const CANONICAL = "https://evergreen-rust-five.vercel.app";
+function pinViewUrl(raw?: string): string {
+  try {
+    const u = new URL(raw ?? "");
+    if (APP_ORIGINS.has(u.host)) return u.toString();
+    return `${CANONICAL}${u.pathname}${u.search}`;
+  } catch {
+    return `${CANONICAL}/field-updates`;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const key = process.env.RESEND_API_KEY;
   let payload: {
     to?: string[]; projectName?: string; no?: string | number; title?: string;
-    dateLabel?: string; by?: string; viewUrl?: string; ownerFirst?: string; items?: MailItem[];
+    dateLabel?: string; by?: string; viewUrl?: string; ownerFirst?: string;
+    audience?: string; items?: MailItem[];
   };
   try { payload = await req.json(); } catch { return NextResponse.json({ ok: false, error: "Bad body" }, { status: 400 }); }
   const to = (payload.to ?? []).filter((e) => typeof e === "string" && e.includes("@")).slice(0, 20);
@@ -139,14 +159,17 @@ export async function POST(req: NextRequest) {
   const from = process.env.EMAIL_FROM || "Evergreen AI <onboarding@resend.dev>";
   const no = String(payload.no ?? "").padStart(2, "0");
   const subject = `Field update No ${no} — ${payload.title}`;
-  const viewUrl = payload.viewUrl || "https://evergreen-rust-five.vercel.app/field-updates";
+  const viewUrl = pinViewUrl(payload.viewUrl);
+  const askHeading = payload.audience === "vendor"
+    ? `Needs ${payload.ownerFirst || "the owner"}'s decision`
+    : "Needs your decision";
   const html = renderReport({
     projectName: payload.projectName || "31810 Evergreen Rd",
     no, title: payload.title, dateLabel: payload.dateLabel || "", by: payload.by || "The GC",
-    items, viewUrl, ownerFirst: payload.ownerFirst,
+    items, viewUrl, ownerFirst: payload.ownerFirst, askHeading,
   });
   const text = items
-    .map((i) => `[${(i.rag ?? "green").toUpperCase()}] ${i.line ?? ""} — ${i.text ?? ""}${(i.ask ?? "").trim() ? `\n  NEEDS YOUR DECISION: ${i.ask}` : ""}`)
+    .map((i) => `[${(i.rag ?? "green").toUpperCase()}] ${i.line ?? ""} — ${i.text ?? ""}${(i.ask ?? "").trim() ? `\n  ${askHeading.toUpperCase()}: ${i.ask}` : ""}`)
     .join("\n\n") + `\n\n—\nOpen this update in Evergreen: ${viewUrl}`;
   try {
     const r = await fetch("https://api.resend.com/emails", {

@@ -16,13 +16,14 @@
 // An update is immutable once sent — corrections go in the next update.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { ActionBar } from "../ui/action-bar";
 import { useDictation, usePhotoAttach, PhotoStrip } from "../ui/messenger";
 import {
-  accessFor, canReadFieldUpdate, fieldItemsFor, RAG_LABEL,
+  accessFor, awardedTradeIdSet, canReadFieldUpdate, fieldItemsFor, RAG_LABEL,
   type FieldItem, type FieldUpdate, type Rag, type User,
 } from "@/lib/data/types";
 
@@ -46,6 +47,15 @@ const oneLine = (t: string) => (t.length > 64 ? `${t.slice(0, 64).replace(/\s+\S
 const live = (u: User) => u.status !== "invited" && u.status !== "pending" && !u.disabled;
 
 export default function FieldUpdatesPage() {
+  // useSearchParams needs a Suspense boundary to statically prerender.
+  return (
+    <Suspense fallback={null}>
+      <FieldUpdatesInner />
+    </Suspense>
+  );
+}
+
+function FieldUpdatesInner() {
   const store = useStore();
   const db = store.db;
   const role = store.session.role;
@@ -53,24 +63,12 @@ export default function FieldUpdatesPage() {
   const access = accessFor(user, role, "field");
 
   // Deep link from a Messages chip or a Schedule pin: ?view=<id> opens that
-  // report. Read once on mount (the timing page's own pattern).
-  const [viewId, setViewId] = useState<string | null>(null);
-  useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("view");
-    if (id) setViewId(id);
-  }, []);
-  const open = (id: string) => {
-    setViewId(id);
-    const url = new URL(window.location.href);
-    url.searchParams.set("view", id);
-    window.history.replaceState({}, "", url.toString());
-  };
-  const close = () => {
-    setViewId(null);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("view");
-    window.history.replaceState({}, "", url.toString());
-  };
+  // report. Driven by the router, so the browser's Back closes a report the
+  // way it opened, and the nav item always returns to the composer/list.
+  const router = useRouter();
+  const viewId = useSearchParams().get("view");
+  const open = (id: string) => router.push(`/field-updates?view=${encodeURIComponent(id)}`);
+  const close = () => router.push("/field-updates");
 
   if (access === "none") return <NoAccess module="Field Updates" />;
 
@@ -94,7 +92,7 @@ export default function FieldUpdatesPage() {
   }
 
   if (viewing) {
-    const readable = canReadFieldUpdate(viewing, role, user);
+    const readable = canReadFieldUpdate(viewing, role, user, awardedTradeIdSet(db.vendorAgreements));
     if (!readable) return <NoAccess module="this field update" />;
     return <ReportView u={viewing} onBack={close} />;
   }
@@ -112,7 +110,8 @@ function ReaderList({ onOpen }: { onOpen: (id: string) => void }) {
   const store = useStore();
   const role = store.session.role;
   const user = store.currentUser;
-  const mine = (store.db.fieldUpdates ?? []).filter((u) => canReadFieldUpdate(u, role, user));
+  const awarded = awardedTradeIdSet(store.db.vendorAgreements);
+  const mine = (store.db.fieldUpdates ?? []).filter((u) => canReadFieldUpdate(u, role, user, awarded));
   return (
     <>
       <PageHeader
@@ -166,7 +165,8 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
   const [title, setTitle] = useState("");
   const [ack, setAck] = useState<string | null>(null);
   const [sendTo, setSendTo] = useState({ owner: true, designer: false, vendors: false });
-  const [pubMsg, setPubMsg] = useState<string | null>(null);
+  const [pubMsg, setPubMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [publishing, setPublishing] = useState(false);
 
   const say = (t: string) => { setAck(t); setTimeout(() => setAck((cur) => (cur === t ? null : cur)), 4000); };
 
@@ -185,6 +185,9 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   const showMic = mounted && mic.supported;
+  // Leaving the page mid-dictation must release the microphone.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => () => mic.stop(), []);
 
   const lineOpts = db.costLines.map((l) => ({ id: l.id, label: l.name, tradeId: l.tradeId }));
   const isAdhoc = lineSel === "__adhoc";
@@ -241,14 +244,18 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
 
   const redN = items.filter((i) => i.rag === "red").length;
   const askN = items.filter((i) => i.ask).length;
-  const canPublish = items.length > 0 && anyRecipient;
+  const canPublish = items.length > 0 && anyRecipient && !publishing;
   const publishWhy = !items.length ? "Nothing to publish — add at least one item first."
     : !anyRecipient ? "Pick at least one recipient before it goes out."
+    : publishing ? "Publishing…"
     : "";
 
-  const publish = () => {
+  const publish = async () => {
     if (!canPublish) return;
-    const res = store.publishFieldUpdate({
+    setPublishing(true);
+    // The result comes back only once the write has LANDED — the emails must
+    // never promise a report the server refused.
+    const res = await store.publishFieldUpdate({
       title,
       items,
       sendTo: {
@@ -257,7 +264,13 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
         vendors: sendTo.vendors && vendorTargets.length > 0,
       },
     });
-    if (!res) return;
+    setPublishing(false);
+    if (!res) {
+      // The store has already toasted a save failure; this covers the quiet
+      // refusals (a recipient seat vanished between render and tap).
+      setPubMsg({ ok: false, text: "Not published — nothing was sent. Check the recipients and your connection, then try again." });
+      return;
+    }
     // The email push — the same report, laid out for the inbox. Data URLs
     // (mock-mode photos) are dropped from the mail; a count line stands in.
     const origin = typeof window !== "undefined" ? window.location.origin : "https://evergreen-rust-five.vercel.app";
@@ -267,24 +280,24 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
       photos: i.photos.filter((p) => /^https?:\/\//i.test(p)),
       photoCount: i.photos.length,
     }));
-    const send = (to: string[], list: DraftItem[]) => {
+    const send = (to: string[], list: DraftItem[], audience: "team" | "vendor") => {
       if (!to.length || !list.length) return;
       void fetch("/api/field-update-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to, projectName: db.project.name, no: res.no, title: res.title,
-          dateLabel: res.dateLabel, by: store.session.displayName, viewUrl,
+          dateLabel: res.dateLabel, by: store.session.displayName, viewUrl, audience,
           ownerFirst: owners[0]?.name.split(" ")[0], items: mailItems(list),
         }),
       }).catch(() => { /* the in-app copy still stands */ });
     };
-    send(res.teamEmails, items);
+    send(res.teamEmails, items, "team");
     for (const v of res.vendorRecipients) {
-      if (v.email) send([v.email], items.filter((i) => i.tradeId && v.tradeIds.includes(i.tradeId)));
+      if (v.email) send([v.email], items.filter((i) => i.tradeId && v.tradeIds.includes(i.tradeId)), "vendor");
     }
     setItems([]); setTitle(""); setComposing(true); setOpenItem(-1); resetEntry();
-    setPubMsg(`Published to ${res.sentToLine} — in Messages and by email.`);
+    setPubMsg({ ok: true, text: `Published to ${res.sentToLine} — in Messages and by email.` });
     setTimeout(() => setPubMsg(null), 6000);
   };
 
@@ -299,8 +312,8 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
       />
 
       {pubMsg && (
-        <div className="card" style={{ padding: "10px 13px", marginTop: 14, borderLeft: "3px solid var(--sage)", fontSize: 13, color: "var(--sage-2)", fontWeight: 600 }}>
-          ✓ {pubMsg}
+        <div className="card" style={{ padding: "10px 13px", marginTop: 14, borderLeft: `3px solid ${pubMsg.ok ? "var(--sage)" : "var(--rust)"}`, fontSize: 13, color: pubMsg.ok ? "var(--sage-2)" : "var(--rust)", fontWeight: 600 }}>
+          {pubMsg.ok ? "✓" : "✕"} {pubMsg.text}
         </div>
       )}
 
@@ -476,7 +489,7 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
             {!canPublish && publishWhy ? <span style={{ display: "block", marginTop: 2 }}>{publishWhy}</span> : null}
           </span>
         }
-        primary={{ label: "Publish & send", disabled: !canPublish, onClick: publish, title: canPublish ? undefined : publishWhy }}
+        primary={{ label: publishing ? "Publishing…" : "Publish & send", disabled: !canPublish, onClick: () => { void publish(); }, title: canPublish ? undefined : publishWhy }}
       />
 
       {/* -------- what has gone out -------- */}
