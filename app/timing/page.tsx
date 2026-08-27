@@ -268,6 +268,27 @@ export default function TimingPage() {
         </div>
       )}
 
+      {/* Field-update pins: one chip per published report, so the schedule and
+          the site story sit on the same screen. Vendors read their copy from
+          their own Messages chip instead — this strip is the client side's. */}
+      {(db.fieldUpdates?.length ?? 0) > 0 && ["builder", "full_admin", "owner", "viewer"].includes(role) && (
+        <div className="card" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", padding: "9px 13px", marginTop: 14 }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".11em", textTransform: "uppercase", color: "var(--brass-2)" }}>Field updates</span>
+          {(db.fieldUpdates ?? []).map((u) => {
+            const redN = u.items.filter((i) => i.rag === "red").length;
+            const askN = u.items.filter((i) => i.ask).length;
+            return (
+              <Link key={u.id} href={`/field-updates?view=${u.id}`} className="tap-row"
+                style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 11px", borderRadius: 6, border: "1px solid var(--line)", fontSize: 12, fontWeight: 600, color: "var(--walnut)", textDecoration: "none" }}>
+                <span>No {String(u.no).padStart(2, "0")} · {new Date(`${u.dateIso}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                {redN > 0 && <span style={{ fontSize: 10, background: "#f0e2d8", color: "#8a4029", borderRadius: 3, padding: "1px 6px" }}>{redN} red</span>}
+                {askN > 0 && <span style={{ fontSize: 10, background: "#f5ecd7", color: "#7a5d1f", borderRadius: 3, padding: "1px 6px" }}>{askN} {askN === 1 ? "ask" : "asks"}</span>}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Tasks" value={`${visible.length}`} sub={`${visible.filter((s) => s.status === "done").length} done`} />
         <StatCard label="Awaiting Trade Confirm" value={`${pending.length}`} accent={pending.length ? "var(--rust)" : "var(--ok)"} sub="date changes pending" />

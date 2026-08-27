@@ -48,6 +48,7 @@ export const HELP: Record<Role, HelpSeat> = {
       { t: "A range is not a failure", w: "A ROM range with a stated reason is more use to the owner than a precise figure you invented. Ranges get committed too." },
       { t: "A change order is a decision, not a filing", w: "Saving one asks what it is for: park it as a proposal, or push it onto the live contract as an amendment — which clears both signatures, because the sum they agreed to has changed." },
       { t: "Paid is final", w: "A paid draw does not move backwards and cannot be edited. If a cost grows after it, that is a change order and the difference goes in the next draw." },
+      { t: "Field Updates is the site report", w: "Build it item by item from your phone — dictate, photograph, flag Green/Yellow/Red, call out what needs the owner's decision. Publishing sends one formatted report through Messages and email, and pins it to the Schedule. Sent updates never change; corrections go in the next one." },
     ],
   },
 
@@ -69,6 +70,7 @@ export const HELP: Record<Role, HelpSeat> = {
       { t: "Ask rather than approve", w: "Messages carries the package in context. A question in the thread beats a yes you are not sure about." },
       { t: "The lowest bid is not always comparable", w: "A bid that excludes materials, or is priced time-and-materials with no ceiling, is flagged and kept out of the comparison. Read the flag before the figure." },
       { t: "The ROM is a baseline, not a budget", w: "Once it is locked it stops moving. Anything added afterwards sits against contract with a ROM of zero, so you can always see what is new since you agreed it." },
+      { t: "Field updates come to you", w: "The builder's site reports arrive in your Messages and email, and pin to the Schedule. Anything needing your decision leads the report, in its own amber section — you never have to dig for it." },
     ],
   },
 

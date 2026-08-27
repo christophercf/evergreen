@@ -30,6 +30,7 @@ export type ModuleKey =
   | "payments"
   | "updates"
   | "bids"
+  | "field"
   | "help";
 
 export type AccessLevel = "none" | "view" | "edit";
@@ -928,24 +929,24 @@ export interface UpdateReply {
 }
 
 /** What a message is ABOUT — set when it's launched from an item elsewhere in
- *  the app (a material, cost line, timeline task, or document). Carries a deep
- *  link so recipients can jump straight to that item. */
+ *  the app (a material, cost line, timeline task, document, or a published
+ *  field update). Carries a deep link so recipients can jump straight to it. */
 export interface UpdateContext {
-  kind: "material" | "cost" | "timing" | "artifact";
+  kind: "material" | "cost" | "timing" | "artifact" | "field";
   refId: string;
   label: string;   // item name at time of posting
   href: string;    // in-app link, e.g. /materials?item=mat-12
 }
 
 export const UPDATE_CONTEXT_ICON: Record<UpdateContext["kind"], string> = {
-  material: "📦", cost: "🧾", timing: "📅", artifact: "📁",
+  material: "📦", cost: "🧾", timing: "📅", artifact: "📁", field: "📋",
 };
 
 /** What the thing a message came from is CALLED. The icon is a hint; the noun
  *  is what someone reads in a notification or an email subject, where there is
  *  no chip to look at. */
 export const UPDATE_CONTEXT_NOUN: Record<UpdateContext["kind"], string> = {
-  material: "Material", cost: "Budget line", timing: "Schedule", artifact: "Document",
+  material: "Material", cost: "Budget line", timing: "Schedule", artifact: "Document", field: "Field update",
 };
 
 /** The title a message starts with when it was begun from somewhere in the app.
@@ -996,6 +997,71 @@ export function canMessageUser(sender: User | undefined, senderRole: Role, targe
   if (senderRole === "viewer") {
     return target.role === "owner" || target.role === "builder" || target.role === "full_admin";
   }
+  return false;
+}
+
+// ---- Field Updates ----------------------------------------------------------
+// A GC-only, phone-first composer builds a client-facing site report item by
+// item, then publishes it as ONE formatted update: sent through Messages AND by
+// email, and pinned to the Schedule where both parties can click into it. An
+// update is immutable once sent — corrections go in the next update.
+export type Rag = "green" | "yellow" | "red";
+
+export const RAG_LABEL: Record<Rag, string> = { green: "Green", yellow: "Yellow", red: "Red" };
+
+export interface FieldItem {
+  id: string;
+  /** What happened — typed or dictated. */
+  text: string;
+  /** The budget line's name at publish. A snapshot, because the report must
+   *  keep reading the same after the line is renamed. */
+  line: string;
+  /** The cost line it points at, when it is not ad hoc. */
+  lineId?: string;
+  /** The line's trade at publish — this is what filters a vendor's copy. */
+  tradeId?: string;
+  /** True when the item is tied to nothing in the budget, by name. */
+  adhoc: boolean;
+  /** Red = schedule or money at risk; yellow = watch; green = progress. */
+  rag: Rag;
+  /** The owner's decision this item is waiting on. "" = no ask. Separate from
+   *  RAG on purpose: a green item can still carry an ask. */
+  ask: string;
+  /** Photo URLs — same storage pipeline as Messages photos. */
+  photos: string[];
+}
+
+export interface FieldUpdate {
+  id: string;
+  /** Sequential per project: No 01, 02, … */
+  no: number;
+  dateIso: string;
+  /** The headline; defaults to "Field update — {date}" when none was given. */
+  title: string;
+  by: string;
+  byId: string;
+  items: FieldItem[];
+  /** Which audiences it went to. Vendor copies carry only their own items. */
+  sentTo: { owner: boolean; designer: boolean; vendors: boolean };
+  /** "Emily and the designer" — the sentence the footer and the ack reuse. */
+  sentToLine: string;
+  publishedAt: string;
+}
+
+/** The items of an update THIS reader is allowed to see. Vendors get only the
+ *  items on their own trades; everyone else reads the whole report. */
+export function fieldItemsFor(u: FieldUpdate, role: Role, user: User | undefined): FieldItem[] {
+  if (role !== "trade") return u.items;
+  const mine = new Set(user?.tradeIds ?? []);
+  return u.items.filter((i) => i.tradeId && mine.has(i.tradeId));
+}
+
+/** Whether this reader can open the update at all. */
+export function canReadFieldUpdate(u: FieldUpdate, role: Role, user: User | undefined): boolean {
+  if (role === "full_admin" || role === "builder") return true;
+  if (role === "owner") return u.sentTo.owner;
+  if (role === "viewer") return u.sentTo.designer;
+  if (role === "trade") return u.sentTo.vendors && fieldItemsFor(u, role, user).length > 0;
   return false;
 }
 
@@ -1257,6 +1323,10 @@ export interface DB {
   /** Reports filed from inside the app. Absent on databases saved before the
    *  feedback module existed, so every reader must tolerate undefined. */
   feedback?: FeedbackItem[];
+  /** Published field updates, newest first. Absent on databases saved before
+   *  the module existed, so every reader must tolerate undefined. Immutable
+   *  once published — there is deliberately no mutator that edits one. */
+  fieldUpdates?: FieldUpdate[];
   tradeRatings: TradeRating[];
   /** Conversation metadata, keyed by the sorted participant-id key. A
    *  conversation is otherwise derived from its messages, so this is the one
@@ -1298,28 +1368,30 @@ export interface Session {
 export const ROLE_ACCESS: Record<Role, Record<ModuleKey, AccessLevel>> = {
   full_admin: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "edit", help: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "edit", updates: "edit", bids: "edit", field: "edit", help: "edit",
   },
   owner: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
     // Draw Management is the GC's console. The owner sees what draws do to the
     // budget — decision 03 — rather than the machinery that builds them.
-    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "none", updates: "edit", bids: "view", help: "edit",
+    // Field Updates: "view" means she reads the reports sent to her (via the
+    // Messages chip, the Schedule pin, or email) — the composer is the GC's.
+    materials: "edit", vendors: "edit", costs: "edit", budget: "edit", payments: "none", updates: "edit", bids: "view", field: "view", help: "edit",
   },
   builder: {
     dashboard: "edit", timing: "edit", artifacts: "edit", admin: "edit",
-    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit", bids: "edit", help: "edit",
+    materials: "edit", vendors: "edit", costs: "edit", budget: "none", payments: "edit", updates: "edit", bids: "edit", field: "edit", help: "edit",
   },
   trade: {
     // Competing bids are never shown to trades.
     dashboard: "view", timing: "edit", artifacts: "view", admin: "none",
-    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", help: "edit",
+    materials: "edit", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", field: "view", help: "edit",
   },
   viewer: {
     dashboard: "view", timing: "view", artifacts: "view", admin: "none",
     // The designer works from the drawings, not the materials list. Materials are
     // curated by the owner and builder, and sign-off is the owner's alone.
-    materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", help: "edit",
+    materials: "none", vendors: "view", costs: "none", budget: "none", payments: "none", updates: "edit", bids: "none", field: "view", help: "edit",
   },
 };
 

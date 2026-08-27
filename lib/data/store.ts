@@ -8,7 +8,7 @@
 import type {
   AccessLevel, AppNotification, Artifact, ArtifactVersion, ChangeOrder, Contact, ContactSheet, Contract, CostLine, DB, Draw,
   BudgetLineState, CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
-  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, FeedbackItem, FeedbackKind, FeedbackSeverity, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
+  BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, FeedbackItem, FeedbackKind, FeedbackSeverity, FieldItem, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
 import { BID_REQ_DEFAULT, FEEDBACK_KIND_LABEL, ROLE_LABEL } from "./types";
 import { buildDB } from "./seed";
@@ -1872,6 +1872,101 @@ class Store {
         this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
       }
     }, "Reply sent");
+  }
+
+  // ---- Field Updates ----
+  /** Publish a field update: ONE immutable report, a tagged Messages chip to
+   *  each audience, and (pushed client-side after this returns) the same
+   *  report by email. The client side — owner + designer — shares one thread
+   *  and reads the whole report; each vendor gets their OWN thread, and their
+   *  copy of the report shows only their items. There is deliberately no
+   *  edit or delete: corrections go in the next update. Returns what the
+   *  email push needs, or null when the publish was refused. */
+  publishFieldUpdate(input: {
+    title: string;
+    items: Omit<FieldItem, "id">[];
+    sendTo: { owner: boolean; designer: boolean; vendors: boolean };
+  }): {
+    id: string; no: number; title: string; dateLabel: string; sentToLine: string;
+    teamEmails: string[];
+    vendorRecipients: { userId: string; email?: string; tradeIds: string[] }[];
+  } | null {
+    const role = this.session.role;
+    if (role !== "builder" && role !== "full_admin") return null;
+    if (!input.items.length) return null;
+    if (!input.sendTo.owner && !input.sendTo.designer && !input.sendTo.vendors) return null;
+
+    const db = this.db;
+    const id = newId("fu");
+    const no = Math.max(0, ...(db.fieldUpdates ?? []).map((u) => u.no)) + 1;
+    const noLabel = String(no).padStart(2, "0");
+    const now = new Date();
+    const dateLabel = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const title = input.title.trim() || `Field update — ${dateLabel}`;
+
+    const live = (u: User) => u.status !== "invited" && u.status !== "pending" && !u.disabled;
+    const owners = input.sendTo.owner ? db.users.filter((u) => u.role === "owner" && live(u)) : [];
+    const designers = input.sendTo.designer ? db.users.filter((u) => u.role === "viewer" && live(u)) : [];
+    // Awarded vendors only — a trade with a contract standing behind it — and
+    // only those with at least one item in THIS update. A vendor with nothing
+    // in the report receives nothing at all.
+    const awardedTradeIds = new Set(db.vendorAgreements.filter((a) => a.contract).map((a) => a.tradeId));
+    const itemTradeIds = new Set(input.items.map((i) => i.tradeId).filter((t): t is string => !!t));
+    const vendors = input.sendTo.vendors
+      ? db.users.filter((u) => u.role === "trade" && live(u) &&
+          (u.tradeIds ?? []).some((t) => awardedTradeIds.has(t) && itemTradeIds.has(t)))
+      : [];
+    if (!owners.length && !designers.length && !vendors.length) return null;
+    const vendorItemCount = (u: User) => input.items.filter((i) => i.tradeId && (u.tradeIds ?? []).includes(i.tradeId)).length;
+
+    const toNames = [
+      owners.length ? owners.map((u) => u.name.split(" ")[0]).join(" and ") : "",
+      designers.length ? "the designer" : "",
+      vendors.length ? (vendors.length === 1 ? vendors[0].name : `${vendors.length} awarded vendors`) : "",
+    ].filter(Boolean);
+    const sentToLine = toNames.length <= 1 ? (toNames[0] ?? "") : `${toNames.slice(0, -1).join(", ")} and ${toNames[toNames.length - 1]}`;
+
+    const reds = input.items.filter((i) => i.rag === "red").length;
+    const asks = input.items.filter((i) => i.ask).length;
+    const items: FieldItem[] = input.items.map((i) => ({ ...i, id: newId("fi") }));
+    const ctx: UpdateContext = { kind: "field", refId: id, label: `Field update No ${noLabel} — ${dateLabel}`, href: `/field-updates?view=${id}` };
+
+    this.mutate((dbx) => {
+      dbx.fieldUpdates = dbx.fieldUpdates ?? [];
+      dbx.fieldUpdates.unshift({
+        id, no, dateIso: now.toISOString().slice(0, 10), title,
+        by: this.session.displayName, byId: this.session.userId, items,
+        sentTo: { owner: owners.length > 0, designer: designers.length > 0, vendors: vendors.length > 0 },
+        sentToLine, publishedAt: now.toISOString(),
+      });
+      const post = (toIds: string[], body: string) => {
+        if (!toIds.length) return;
+        dbx.updates.unshift({
+          id: newId("upd"), title: `Field update No ${noLabel} — ${title}`, body,
+          authorId: this.session.userId, authorName: this.session.displayName,
+          at: new Date().toISOString(), toUserIds: toIds, replies: [], context: ctx,
+        });
+        for (const uid2 of toIds) {
+          this.notify(dbx, { toUserId: uid2, kind: "info", module: "updates", message: `📋 Field update No ${noLabel} from ${this.session.displayName}: "${title}"` });
+        }
+      };
+      post(
+        [...owners, ...designers].map((u) => u.id),
+        `Field update No ${noLabel} is out: ${items.length} ${items.length === 1 ? "item" : "items"}` +
+          (reds ? `, ${reds} flagged red` : "") + (asks ? `, ${asks} waiting on your decision` : "") +
+          ". Open it for the photos and the detail. Also sent by email.",
+      );
+      for (const v of vendors) {
+        const n = vendorItemCount(v);
+        post([v.id], `Your work is in field update No ${noLabel}: ${n} ${n === 1 ? "item" : "items"} on your trade. Open it for the photos and the detail. Also sent by email.`);
+      }
+    }, `Published to ${sentToLine} — in Messages and by email.${asks ? ` ${asks} ${asks === 1 ? "ask is" : "asks are"} waiting on the owner.` : ""}`);
+
+    return {
+      id, no, title, dateLabel, sentToLine,
+      teamEmails: [...owners, ...designers].filter((u) => !u.emailOptOut && !!u.email).map((u) => u.email),
+      vendorRecipients: vendors.map((u) => ({ userId: u.id, email: u.emailOptOut ? undefined : u.email, tradeIds: u.tradeIds ?? [] })),
+    };
   }
 
   // ---- Vendor agreements ----

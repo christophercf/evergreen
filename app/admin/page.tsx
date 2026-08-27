@@ -308,7 +308,7 @@ const MODULES: { key: ModuleKey; label: string }[] = [
   { key: "dashboard", label: "Dashboard" }, { key: "admin", label: "Admin" }, { key: "costs", label: "Costs" },
   { key: "payments", label: "Payments" }, { key: "budget", label: "Budget" }, { key: "timing", label: "Timing" },
   { key: "materials", label: "Materials" }, { key: "vendors", label: "Vendors" }, { key: "artifacts", label: "Artifacts" },
-  { key: "updates", label: "Updates" }, { key: "bids", label: "Bids" },
+  { key: "updates", label: "Updates" }, { key: "bids", label: "Bids" }, { key: "field", label: "Field Updates" },
 ];
 const LEVELS: AccessLevel[] = ["none", "view", "edit"];
 const ROLES: Role[] = ["full_admin", "owner", "builder", "trade", "viewer"];

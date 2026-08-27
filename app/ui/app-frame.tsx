@@ -11,14 +11,17 @@ import { MessageModal } from "./messenger";
 import { ConfirmProvider } from "./confirm";
 import { Toaster } from "./toast";
 import {
-  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, HelpIcon,
+  HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, CameraIcon, HelpIcon,
 } from "./icons";
 
 type Band = "job" | "reference";
 // `short` is the phone's bottom-bar label. A tab strip gives each item about
 // eight characters before it truncates, so any item whose full name is longer
 // carries a one-word version of the same name — never a different word.
-type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; band: Band; Icon: (p: any) => React.ReactElement; phase2?: boolean };
+// `editOnly`: the nav item exists only for seats that can WORK the module —
+// readers reach it another way (Field Updates arrive as a Messages chip, a
+// Schedule pin, or an email; the owner never sees the composer).
+type NavItem = { href: string; label: string; short?: string; mod: ModuleKey; band: Band; Icon: (p: any) => React.ReactElement; phase2?: boolean; editOnly?: boolean };
 
 // Labels follow one rule: a VENDOR is a company, a PACKAGE is a scope of work on
 // this house, a CONTRACT is a vendor awarded a package. "Trade" is only ever a
@@ -46,6 +49,9 @@ const NAV: NavItem[] = [
   { href: "/timing", label: "Schedule", mod: "timing", band: "job", Icon: CalendarIcon },
   { href: "/materials", label: "Materials", mod: "materials", band: "job", Icon: BoxIcon },
   { href: "/updates", label: "Messages", mod: "updates", band: "job", Icon: ChatIcon },
+  // The GC's site reporter. Compose seats only — everyone else reads the
+  // published report through its Messages chip, its Schedule pin, or email.
+  { href: "/field-updates", label: "Field Updates", short: "Field", mod: "field", band: "job", Icon: CameraIcon, editOnly: true },
   { href: "/artifacts", label: "Artifacts", mod: "artifacts", band: "reference", Icon: FolderIcon },
   // Help is last on purpose and reaches every seat: the person who most needs
   // it is the one who cannot work out where they are, and filing a report is
@@ -76,8 +82,9 @@ const ROLE_ORDER: Partial<Record<Role, string[]>> = {
   // The owner opens the app to approve one thing, then look at money.
   owner: ["/", "/costs", "/bids", "/budget", "/materials", "/timing", "/updates"],
   // The builder runs the job from the money out: the agreed figure first, then
-  // the packages bid against it.
-  builder: ["/", "/costs", "/bids", "/payments", "/timing", "/materials", "/updates"],
+  // the packages bid against it. Field Updates sits with Messages because that
+  // is where what it publishes lands.
+  builder: ["/", "/costs", "/bids", "/payments", "/timing", "/materials", "/updates", "/field-updates"],
   // A vendor's world is their own contract, their dates and their materials.
   trade: ["/vendors", "/timing", "/materials", "/updates"],
   // The designer works from the drawings and the programme, not materials.
@@ -121,7 +128,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   if (!IS_MOCK && !store.session.authed) return <Landing />;
 
   // Absent, never greyed out: a role should not see a control it cannot use.
-  const permitted = NAV.filter((n) => accessFor(user, role, n.mod) !== "none");
+  const permitted = NAV.filter((n) => {
+    const level = accessFor(user, role, n.mod);
+    return level !== "none" && (!n.editOnly || level === "edit");
+  });
 
   // What has happened since this user last looked, per module. Messages counts
   // unread messages the same way the conversation list counts them; everything

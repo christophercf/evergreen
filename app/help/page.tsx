@@ -23,7 +23,7 @@ const AREA_MODULES: [ModuleKey, string][] = [
   ["dashboard", "Dashboard"], ["costs", "Budget Management"], ["bids", "Bid and Package Management"],
   ["payments", "Draw Management"], ["vendors", "Contracts"], ["budget", "Funding"],
   ["timing", "Schedule"], ["materials", "Materials"], ["updates", "Messages"],
-  ["artifacts", "Artifacts"], ["admin", "Administrative"], ["help", "Help"],
+  ["field", "Field Updates"], ["artifacts", "Artifacts"], ["admin", "Administrative"], ["help", "Help"],
 ];
 const ACROSS = "Something across the whole app";
 
@@ -113,7 +113,7 @@ export default function HelpPage() {
 const MODULE_FOR_ROUTE: Record<string, ModuleKey> = {
   "/": "dashboard", "/costs": "costs", "/bids": "bids", "/payments": "payments",
   "/vendors": "vendors", "/budget": "budget", "/timing": "timing", "/materials": "materials",
-  "/updates": "updates", "/artifacts": "artifacts", "/admin": "admin", "/qa": "admin",
+  "/updates": "updates", "/field-updates": "field", "/artifacts": "artifacts", "/admin": "admin", "/qa": "admin",
 };
 
 // ---------------------------------------------------------------------------

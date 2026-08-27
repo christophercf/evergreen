@@ -102,6 +102,22 @@ next action is not obvious, not reachable, or silently does nothing.
 13. **Feedback** — file with an empty description and with a bug that has no
     expectation; both must refuse in words. Then file a real one and confirm the
     brief carries seat, device, ROM phase and screen.
+14. **Field Updates** (builder or admin seat) — build an update of three items:
+    one red, one yellow with an owner ask, one ad hoc green. Save each and
+    confirm the ack copy ("Saved and flagged red — it will lead the update" /
+    "Saved with an ask — the owner will see it called out"). Publish to the
+    owner and confirm, in order: the toast names the recipients; a Messages
+    thread to the owner carries the 📋 chip; the Schedule grows a pin with red
+    and ask badges; the Sent list gains the numbered update. Open the report:
+    asks lead in the amber band, red second, progress last with yellow before
+    green. Then as the owner: no Field Updates nav item, the chip/pin opens the
+    report, the ask section reads "Needs your decision", the footer reads "Sent
+    to you". As an awarded vendor with an item in the update: their copy shows
+    ONLY their items ("your items only"), in their own thread — never the
+    owner's; an update without their items is absent from their list and
+    refused on deep link. Refusals to test: publish with no items, publish with
+    no recipient ("Pick at least one recipient before it goes out."), save an
+    item with the ask toggle on but empty.
 
 Record: the step number, what stalled, and what you expected.
 
@@ -116,10 +132,10 @@ denied is denied *by the page too*, not just hidden from the nav (deep-link it).
 | Role | Must reach | Must NOT reach |
 |---|---|---|
 | Full admin | everything, incl. `/qa` | — |
-| Owner | Budget Management, Bid & Package (view), Funding, Materials, Schedule, Messages, Contracts | Draw Management |
-| Builder / GC | Budget Management, Bid & Package, Draw Management, Contracts, Schedule, Materials, Messages | Funding |
-| Trade | their own contract, Schedule, Materials, Messages | Budget Management, Draws, Funding, other trades' contracts |
-| Viewer | Schedule, Materials, Messages, Contracts (view) | all money |
+| Owner | Budget Management, Bid & Package (view), Funding, Materials, Schedule, Messages, Contracts, Field Updates reports (via chip/pin — no nav item) | Draw Management, the Field Updates composer |
+| Builder / GC | Budget Management, Bid & Package, Draw Management, Contracts, Schedule, Materials, Messages, Field Updates | Funding |
+| Trade | their own contract, Schedule, Materials, Messages, field updates carrying their items | Budget Management, Draws, Funding, other trades' contracts, other trades' field-update items |
+| Viewer | Schedule, Materials, Messages, Contracts (view), field updates sent to the designer | all money, the Field Updates composer |
 
 ---
 
@@ -330,6 +346,16 @@ Bugs that already escaped once. Each run, prove they are still dead.
   `app.evergreenreno.net` alias to the same deployment. The demo project is
   separate and has separate data; a "data loss" report is checked against the
   URL first.
+- **A published field update never changes** — there is no edit or delete
+  mutator, and the report renders line names from its own snapshot, not the
+  live budget (rename a cost line: old reports keep the old name).
+- **A vendor's field-update copy is filtered at every door** — the report view,
+  the reader list, AND the message thread. A vendor whose items aren't in an
+  update can't open it by deep link, and vendors never share the owner's
+  thread. (The client side — owner + designer — reads the whole report.)
+- **Feature detection never renders server-side** — the Dictate button exists
+  only when the browser says so, which the server cannot know; it mounts after
+  hydration or it breaks it (fixed 2026-08-27, found building Field Updates).
 
 ---
 
