@@ -392,3 +392,9 @@ of checks that ran, so a green run is provably a run.
 - On ≤700px a budget row is ONLY the caret, the line's name, Total, and Drawn/Paid — no pills, no manager/category sub-line, no 💬, no line counts. All of that (plus ROM and the 💬 button) appears in the expander when the row is opened.
 - A "Grand total · N lines" row leads the table on the phone, its two figures lined up over the Total and Drawn/Paid columns. Desktop keeps the stat-card row and the bottom totals row instead — the grand-total row must NOT show on desktop, and the stat cards must NOT show on the phone.
 - No horizontal overflow at 375px.
+
+### Budget expander on a phone: clean money read + change-order sheet (added 2026-08-29)
+- Opening a budget row on ≤700px leads with a money block — one figure per row (ROM, Contracted, Change orders, Builder fee, Total, Drawn/Paid; zero rows skipped, Total in walnut, Paid in green) — before any controls; the how-it-works boilerplate paragraphs are desktop-only.
+- Per-line contract/paid controls STACK on the phone (name, then inputs) — never a wrapped jumble.
+- Change orders on the phone are a single button ("Change orders (N)") opening a floating sheet; filing, the save-for-later / revise-contract decision, approving and removing all happen in the sheet through the SAME ChangeOrders component the desktop panel uses — the two must never drift. Native back closes the sheet.
+- Desktop unchanged: inline change-order panel, no sheet button, no phone money block.

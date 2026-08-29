@@ -10,6 +10,7 @@ import { contractOf, contractState, lineContractState, CONTRACT_STATE_LABEL } fr
 import { SearchBox, matches } from "../ui/search-box";
 import { SkeletonList } from "../ui/skeleton";
 import { MsgButton } from "../ui/messenger";
+import { useBackLayer } from "../ui/use-back-layer";
 
 // ---------------------------------------------------------------------------
 // Budget lines.
@@ -170,6 +171,11 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
   const store = useStore();
   const db = store.db;
   const role = store.session.role;
+  // Phone: change orders live in a floating sheet, not inline in the expander.
+  // Native back closes it, like every other full-screen layer.
+  const [coSheet, setCoSheet] = useState(false);
+  useBackLayer(coSheet, () => setCoSheet(false));
+  const coCount = r.lines.reduce((n, l) => n + l.changeOrders.length, 0);
   // Either party may say who manages a line; only its manager fills it in.
   const canManage = canEditLine || ["full_admin", "owner", "builder"].includes(role);
   const iManage = role === "full_admin"
@@ -229,17 +235,33 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
       {on ? (
         <tr>
           <td colSpan={COLS.length} style={{ padding: "4px 10px 16px 27px", borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
-            {/* The row hid these on the phone — the expander is where they live there. */}
-            <div className="m-only" style={{ alignItems: "center", gap: 7, flexWrap: "wrap", padding: "4px 0 8px" }}>
-              {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
-              {r.allOutsideRom && r.state !== "removed" ? <Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill> : null}
-              <span style={{ fontSize: 11, color: MUTED }}>
-                {r.manager === "owner" ? "Owner managed" : "GC managed"} · {r.category}
-                {r.ranged ? ` · ROM ${fmt(r.low)}–${fmt(r.high)}` : ` · ROM ${fmt(r.romFigure)}`}
-              </span>
-              <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
-                <MsgButton kind="cost" refId={r.lines[0]?.id ?? r.tradeId} label={r.label} href={`/costs?line=${r.lines[0]?.id ?? ""}`} small />
-              </span>
+            {/* The row hid these on the phone — the expander opens with a clean
+                read of the money, one figure per row, before any controls. */}
+            <div className="m-only" style={{ flexDirection: "column", padding: "4px 0 10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap", paddingBottom: 7 }}>
+                {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
+                {r.state === "hold" ? <Pill color="var(--walnut)" bg="#f7f1e2">On hold</Pill> : null}
+                {r.allOutsideRom && r.state !== "removed" ? <Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill> : null}
+                <span style={{ fontSize: 11, color: MUTED }}>
+                  {r.manager === "owner" ? "Owner managed" : "GC managed"} · {r.category}
+                </span>
+                <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
+                  <MsgButton kind="cost" refId={r.lines[0]?.id ?? r.tradeId} label={r.label} href={`/costs?line=${r.lines[0]?.id ?? ""}`} small />
+                </span>
+              </div>
+              {([
+                ["ROM", r.ranged ? `${fmt(r.low)} – ${fmt(r.high)}` : fmt(r.romFigure), undefined, true],
+                ["Contracted", fmt(r.contracted), undefined, r.contracted !== 0],
+                ["Change orders", fmt(r.changeOrders), undefined, r.changeOrders !== 0],
+                ["Builder fee", fmt(r.builderFee), undefined, r.builderFee !== 0],
+                ["Total", fmt(r.total), "var(--walnut)", true],
+                ["Drawn / Paid", r.draw !== r.paid ? `${fmt(r.paid)} of ${fmt(r.draw)}` : fmt(r.paid), "var(--ok)", true],
+              ] as const).filter(([, , , show]) => show).map(([label, value, accent]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, fontSize: 12.5, padding: "5px 0", borderTop: "1px solid var(--cream-2)" }}>
+                  <span style={{ color: MUTED }}>{label}</span>
+                  <span style={{ fontWeight: accent ? 700 : 600, color: accent ?? "var(--ink)", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+                </div>
+              ))}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
               <div>
@@ -251,7 +273,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                     <TextInput value={r.label}
                       onCommit={(v) => store.setBudgetLineName(r.tradeId, v)}
                       style={{ width: "100%", fontSize: 13, fontWeight: 600, marginTop: 4 }} />
-                    <div style={{ fontSize: 11, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>
+                    <div className="m-hide" style={{ fontSize: 11, color: MUTED, marginTop: 3, lineHeight: 1.45 }}>
                       Renaming this renames it everywhere — the schedule, the materials list, the
                       vendor roster and every package read the same name.
                       {r.splitByMarkup ? " This trade is priced two ways, so both of its lines follow." : ""}
@@ -283,7 +305,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                       }}>{label}</button>
                   ))}
                 </div>
-                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 5 }}>
+                <div className="m-hide" style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginTop: 5 }}>
                   {r.manager === "owner"
                     ? "The owner contracts and pays this trade direct, and no builder fee applies."
                     : `The GC carries this line. Builder fee: ${r.markupLabel}, ${fmt(r.builderFee)} on the contracted work.`}
@@ -291,13 +313,13 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                 </div>
 
                 <Kick style={{ marginTop: 12 }}>Under contract, and paid</Kick>
-                <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, margin: "3px 0 6px" }}>
+                <div className="m-hide" style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.45, margin: "3px 0 6px" }}>
                   {iManage
                     ? "Enter the figure agreed with the trade, before fee. Clearing it takes the line back out of contract."
                     : `Read-only — ${r.manager === "owner" ? "the owner" : "the GC"} manages this line.`}
                 </div>
                 {r.lines.map((l) => (
-                  <div key={l.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "4px 0", fontSize: 12 }}>
+                  <div key={l.id} className="bl-linerow" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "4px 0", fontSize: 12 }}>
                     <span style={{ minWidth: 150 }}>{l.name}</span>
                     {iManage ? (
                       <>
@@ -380,30 +402,66 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                         </>
                       )}
                     </div>
-                    <div style={{ fontSize: 11.5, color: MUTED, marginTop: 5, lineHeight: 1.45 }}>
+                    <div className="m-hide" style={{ fontSize: 11.5, color: MUTED, marginTop: 5, lineHeight: 1.45 }}>
                       A removed line counts towards nothing and stops holding up the ROM lock, but it is kept rather than deleted.
                     </div>
                   </div>
                 ) : null}
 
                 {iManage ? (
-                  <div style={{ marginTop: 14 }}>
-                    <Kick>Change orders</Kick>
-                    {r.complete ? (
-                      <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5 }}>
-                        Paid in full and closed. Raising a change order re-opens it.
-                      </div>
-                    ) : null}
-                    {r.lines.map((l) => (
-                      <div key={l.id} style={{ marginTop: 8 }}>
-                        {r.lines.length > 1 ? <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>{l.name}</div> : null}
-                        <ChangeOrders line={l} ro={false} />
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    {/* Desktop: the full panel, inline. */}
+                    <div className="m-hide" style={{ marginTop: 14 }}>
+                      <Kick>Change orders</Kick>
+                      {r.complete ? (
+                        <div style={{ fontSize: 11.5, color: MUTED, marginTop: 3, lineHeight: 1.5 }}>
+                          Paid in full and closed. Raising a change order re-opens it.
+                        </div>
+                      ) : null}
+                      {r.lines.map((l) => (
+                        <div key={l.id} style={{ marginTop: 8 }}>
+                          {r.lines.length > 1 ? <div style={{ fontSize: 11, color: MUTED, marginBottom: 3 }}>{l.name}</div> : null}
+                          <ChangeOrders line={l} ro={false} />
+                        </div>
+                      ))}
+                    </div>
+                    {/* Phone: one button, and the work happens in a sheet. */}
+                    <div className="m-only" style={{ marginTop: 14 }}>
+                      <button className="btn tap-row" style={{ width: "100%", justifyContent: "space-between", display: "flex", alignItems: "center" }}
+                        onClick={(e) => { e.stopPropagation(); setCoSheet(true); }}>
+                        <span>Change orders{coCount ? ` (${coCount})` : ""}</span>
+                        <span style={{ color: "var(--sage-2)", fontWeight: 700 }}>{coCount ? "open →" : "＋ add"}</span>
+                      </button>
+                    </div>
+                  </>
                 ) : null}
               </div>
             </div>
+
+            {/* The change-order sheet: a floating screen over the page. Same
+                writes as the desktop panel — file, approve, remove — through
+                the one ChangeOrders component, so the two can never drift. */}
+            {coSheet ? (
+              <div onClick={() => setCoSheet(false)} style={{ position: "fixed", inset: 0, background: "rgba(28,22,16,.5)", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 640, maxHeight: "88vh", overflowY: "auto", background: "var(--cream)", borderRadius: "14px 14px 0 0", boxShadow: "0 -8px 40px rgba(0,0,0,.25)", padding: "14px 14px 24px" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 2 }}>
+                    <strong className="serif" style={{ fontSize: 17, color: "var(--walnut)" }}>Change orders</strong>
+                    <span style={{ fontSize: 12, color: MUTED, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.label}</span>
+                    <button className="btn btn-sm" style={{ marginLeft: "auto", flexShrink: 0 }} onClick={() => setCoSheet(false)}>✕</button>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: MUTED, lineHeight: 1.5, marginBottom: 4 }}>
+                    A change order is the only thing that moves a signed line — approving one adds it to the contract.
+                    {r.complete ? " This line is paid in full; raising one re-opens it." : ""}
+                  </div>
+                  {r.lines.map((l) => (
+                    <div key={l.id} style={{ marginTop: 6 }}>
+                      {r.lines.length > 1 ? <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, marginBottom: 2 }}>{l.name}</div> : null}
+                      <ChangeOrders line={l} ro={false} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </td>
         </tr>
       ) : null}
