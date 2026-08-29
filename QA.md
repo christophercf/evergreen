@@ -382,8 +382,8 @@ of checks that ran, so a green run is provably a run.
 - Mechanism: `app/ui/use-back-layer.ts` (`useBackLayer`) — any new full-screen phone takeover must register with it.
 
 ### Schedule on a phone: list first, chart behind the toggle (added 2026-08-29)
-- On ≤860px the Schedule opens as an agenda — Running late (days-over figures, rust), On site now (ends/not-started pills), Up next, folded Later and Completed bands — with a List | Chart toggle at the top. The Gantt is unchanged behind Chart; desktop is untouched (no toggle, no agenda).
-- Day math is derived: "Nd over" = today minus the item's end; owner seat reads CONFIRMED dates in the list exactly as it does on the chart.
+- On ≤860px the Schedule opens as an agenda — On site now FIRST (ends/not-started pills), Up next, folded Later and Completed bands — with a List | Chart toggle at the top. The Gantt is unchanged behind Chart; desktop is untouched (no toggle, no agenda).
+- DECISION (2026-08-29): a task whose end date has passed reads as DONE in the list, whatever its status flag says — no "overdue"/days-over treatment. On this job the plan is maintained by moving bars, not statuses, so a passed window is the completion signal; a slipping task shows by its dates being pushed. Owner seat reads CONFIRMED dates in the list exactly as on the chart.
 - Tapping a list row opens the same Drilldown the Gantt uses — trades' confirm-dates buttons, QC sign-off, budget line and 💬 must all work from the list.
 - A deep link (?task= or a Messages chip) into a task inside a folded band must unfold that band.
 - Edit mode pins the phone to the Chart view; the toggle hides while editing.

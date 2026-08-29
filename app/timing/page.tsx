@@ -760,11 +760,13 @@ function PhoneAgenda({ visible, ownerView, openId, setOpenId, canEdit, onCascade
   const catColor = (s: ScheduleItem) =>
     s.kind === "milestone" ? "var(--walnut)" : macroColor(db, db.trades.find((t) => t.id === s.tradeId)?.category ?? "Soft Costs");
 
-  const open = visible.filter((s) => s.status !== "done");
-  const done = visible.filter((s) => s.status === "done");
-  const active = open.filter((s) => startOf(s) <= t0);
-  const late = active.filter((s) => endOf(s) < t0).sort((a, b) => endOf(a) - endOf(b));
-  const now = active.filter((s) => endOf(s) >= t0).sort((a, b) => endOf(a) - endOf(b));
+  // A task whose window has passed reads as done here, whatever its status
+  // flag says — on this job the plan is maintained by moving bars, not by
+  // flipping statuses, so a passed end date IS the completion signal. The
+  // list opens at what is live on site today.
+  const done = visible.filter((s) => s.status === "done" || endOf(s) < t0).sort((a, b) => endOf(b) - endOf(a));
+  const open = visible.filter((s) => s.status !== "done" && endOf(s) >= t0);
+  const now = open.filter((s) => startOf(s) <= t0).sort((a, b) => endOf(a) - endOf(b));
   const upNext = open.filter((s) => startOf(s) > t0 && dayDiff(startOf(s), t0) <= 14).sort((a, b) => startOf(a) - startOf(b));
   const later = open.filter((s) => startOf(s) > t0 && dayDiff(startOf(s), t0) > 14).sort((a, b) => startOf(a) - startOf(b));
   const nextMilestone = open.filter((s) => s.kind === "milestone" && startOf(s) >= t0).sort((a, b) => startOf(a) - startOf(b))[0];
@@ -815,22 +817,9 @@ function PhoneAgenda({ visible, ownerView, openId, setOpenId, canEdit, onCascade
   return (
     <div>
       <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "12px 2px 0", lineHeight: 1.5 }}>
-        {late.length > 0 && <><strong style={{ color: "var(--rust)" }}>{late.length} running late</strong> · </>}
         {now.length} on site now
         {nextMilestone && <> · next milestone <strong style={{ color: "var(--walnut)" }}>{nextMilestone.label.replace(/ \(Milestone\)$/i, "")}, {fmtD(iso(startOf(nextMilestone)))}</strong></>}
       </div>
-
-      {late.length > 0 && (
-        <>
-          {sect("Running late", "var(--rust)")}
-          {list(late, (s) => (
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--rust)" }}>{dayDiff(t0, endOf(s))}d</div>
-              <div style={{ fontSize: 9.5, color: "var(--rust)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>over</div>
-            </div>
-          ))}
-        </>
-      )}
 
       {sect("On site now", "var(--brass-2)")}
       {now.length ? list(now, (s) => (
