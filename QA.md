@@ -403,3 +403,9 @@ of checks that ran, so a green run is provably a run.
 - In Supabase mode, "not signed in YET" and "signed out" are different states: while the session restores after a refresh, the app shows the brand splash ("Signing you back in…"), and the login screen appears ONLY once auth has definitively answered no-session. The prerendered HTML must contain the splash, not the login form.
 - The splash must never outstay auth: signed-out browsers reach the login screen within a second (INITIAL_SESSION is local), an 8s safety valve falls back to the login screen if the auth client never answers, and mock mode never shows the splash at all.
 - Recovery links land on the reset screen, not the splash; a no-access email lands on the no-access message.
+
+### Materials: mapped to a trade, and that's it (decision 2026-08-29)
+- The critical-path machinery is retired from the UI: no Tied-task column, no Excel-style tie cells (Ctrl+C/V), no hard-date vs tie-to-schedule radio, no need-by (start/finish) choice, no identify-by/on-hand two-date stack.
+- Each material carries ONE mapping — its trade — editable in the table row, the phone quick-fields, and the detail's Trade block. The Due column is a single derived date from that trade's schedule window; changing the trade moves the date (a trade edit also clears any legacy hidden task tie).
+- Adding a material asks Item / Room / Trade / Qty, nothing more.
+- Data model untouched: dueMode/needBy/linkedScheduleId still exist on old rows; only the UI for tuning them is gone. Do not re-add the machinery without an explicit ask.

@@ -70,7 +70,7 @@ function SpecCell({ url }: { url?: string }) {
 const STATUS_ORDER = MATERIAL_STATUS_ORDER;
 const PURCH: Purchaser[] = ["owner", "trade", "builder"];
 
-type SortKey = "item" | "room" | "trade" | "qty" | "status" | "buyer" | "budget" | "due" | "tied" | "spec";
+type SortKey = "item" | "room" | "trade" | "qty" | "status" | "buyer" | "budget" | "due" | "spec";
 type SortDir = "asc" | "desc";
 
 export default function MaterialsPage() {
@@ -93,32 +93,9 @@ export default function MaterialsPage() {
     </th>
   );
   const [showFilters, setShowFilters] = useState(false);
-  // Excel-style tied-task cells: click selects, double-click edits, Ctrl+C/Ctrl+V
-  // copies and pastes across rows. tieClip holds the copied value ({v: undefined} = blank).
-  const [tieClip, setTieClip] = useState<{ v?: string } | null>(null);
-  const [tieSelCell, setTieSelCell] = useState<string | null>(null);
-  const [tieEditCell, setTieEditCell] = useState<string | null>(null);
   const [ai, setAi] = useState<Material | null>(null);
   const [q, setQ] = useState("");
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return; // don't hijack text editing
-      if (e.key === "Escape") { setTieSelCell(null); setTieEditCell(null); return; }
-      if (!tieSelCell || !(e.ctrlKey || e.metaKey)) return;
-      const k = e.key.toLowerCase();
-      if (k === "c") {
-        const m = store.db.materials.find((x) => x.id === tieSelCell);
-        if (m) { setTieClip({ v: m.linkedScheduleId }); e.preventDefault(); }
-      } else if (k === "v") {
-        if (access === "edit" && tieClip) { store.bulkSetMaterialTie([tieSelCell], tieClip.v); e.preventDefault(); }
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tieSelCell, tieClip, access]);
   const [openId, setOpenId] = useState<string | null>(null);
 
   // Deep link from a Messenger context chip: /materials?item=<id>.
@@ -154,9 +131,6 @@ export default function MaterialsPage() {
   const showMoney = role !== "trade";
 
   const roomLabel = (mt: Material) => mt.roomId ? (db.rooms.find((r) => r.id === mt.roomId)?.name ?? mt.roomLabel ?? "—") : (mt.roomLabel ?? "—");
-  // All timing items, chronological — options for the Tied-task column.
-  const schedSorted = useMemo(() => [...db.schedule].sort((a, b) => a.start.localeCompare(b.start)), [db.schedule]);
-  const schedLabel = (id?: string) => { const s = db.schedule.find((x) => x.id === id); return s ? s.label : "—"; };
 
   // Trades only see items essential to their job (auto-flagged by trade) —
   // except the architect, who reviews the full materials list.
@@ -183,7 +157,6 @@ export default function MaterialsPage() {
         case "status": return STATUS_ORDER.indexOf(mt.status);
         case "buyer": return mt.purchaser;
         case "budget": return materialLockedCost(mt) ?? mt.budget ?? -Infinity;
-        case "tied": return mt.linkedScheduleId ? schedLabel(mt.linkedScheduleId).toLowerCase() : "~~~";
         case "spec": return mt.specLink ? 0 : 1;
         case "due": default: return materialDates(db, mt).identifyBy ?? "~9999";
       }
@@ -251,12 +224,6 @@ export default function MaterialsPage() {
         <Filter label="Category" value={cat} onChange={setCat} options={[["all", "All categories"], ...catsUsed.map((c) => [c, c] as [string, string])]} />
         <Filter label="Status" value={status} onChange={(v) => setStatus(v as "all" | MaterialStatus)} options={[["all", "All status"], ...MATERIAL_STATUS_ORDER.map((s) => [s, MATERIAL_STATUS_LABEL[s]] as [string, string])]} />
         <span style={{ fontSize: 11.5, color: "var(--muted)" }}>· click a column header to sort</span>
-        {tieClip && (
-          <span style={{ fontSize: 11.5, color: "var(--sage-2)", display: "inline-flex", alignItems: "center", gap: 5 }}>
-            ⛓ copied: <strong>{tieClip.v ? schedLabel(tieClip.v) : "(blank)"}</strong> — click a Tied-task cell, Ctrl+V to paste
-            <button className="btn btn-sm" onClick={() => setTieClip(null)} style={{ padding: "0 5px" }}>✕</button>
-          </span>
-        )}
         <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--muted)" }}>{filtered.length} shown</span>
       </div>
 
@@ -272,7 +239,6 @@ export default function MaterialsPage() {
               {sortTh("buyer", "Buyer", false, undefined, "m-hide")}
               {showMoney && sortTh("budget", "Budget", false, "Budget / locked cost", "m-hide")}
               {sortTh("due", "Due", false, undefined, "m-hide")}
-              {sortTh("tied", "Tied task", false, undefined, "m-hide")}
               {sortTh("spec", "Spec", false, undefined, "m-hide")}
               {!ro && <th style={th} className="m-hide"></th>}
             </tr>
@@ -280,7 +246,7 @@ export default function MaterialsPage() {
           <tbody>
             {filtered.map((mt) => {
               const open = openId === mt.id;
-              const colSpan = 10 + (showMoney ? 1 : 0) + (ro ? 0 : 1);
+              const colSpan = 9 + (showMoney ? 1 : 0) + (ro ? 0 : 1);
               const locked = materialLockedCost(mt);
               return (
               <Fragment key={mt.id}>
@@ -298,7 +264,12 @@ export default function MaterialsPage() {
                     {db.rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
                 </td>
-                <td style={td} className="m-hide">{mt.tradeId ? tradeName(db, mt.tradeId) : "—"}</td>
+                <td style={td} className="m-hide">
+                  <select value={mt.tradeId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { tradeId: e.target.value || undefined, linkedScheduleId: undefined, dueMode: "trade" })} style={{ fontSize: 11.5, maxWidth: 150 }}>
+                    <option value="">— trade —</option>
+                    {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+                  </select>
+                </td>
                 <td style={tdC} className="m-hide"><NumInput value={mt.qty ?? 0} disabled={ro} onCommit={(v) => store.updateMaterial(mt.id, { qty: v > 0 ? v : undefined })} width={40} align="center" style={{ fontSize: 12 }} /></td>
                 <td style={td}>
                   <select value={normalizeMaterialStatus(mt.status)} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { status: e.target.value as MaterialStatus })} style={{ fontSize: 11, padding: "2px 4px", color: "#fff", background: STATUS_BG[normalizeMaterialStatus(mt.status)], border: "none", borderRadius: 5 }}>
@@ -316,32 +287,6 @@ export default function MaterialsPage() {
                     : <NumInput value={mt.budget ?? 0} disabled={ro} onCommit={(v) => store.updateMaterial(mt.id, { budget: v > 0 ? v : undefined })} width={64} money style={{ fontSize: 12 }} />}
                 </td>}
                 <td style={td} className="m-hide"><DueCell mt={mt} ro={ro} /></td>
-                <td style={td} className="m-hide">
-                  {tieEditCell === mt.id && !ro ? (
-                    <select autoFocus value={mt.linkedScheduleId ?? ""}
-                      onChange={(e) => { store.updateMaterial(mt.id, { linkedScheduleId: e.target.value || undefined }); setTieEditCell(null); }}
-                      onBlur={() => setTieEditCell(null)}
-                      onKeyDown={(e) => { if (e.key === "Escape") setTieEditCell(null); }}
-                      style={{ fontSize: 11, maxWidth: 150, padding: "2px 4px" }}>
-                      <option value="">—</option>
-                      {schedSorted.map((s) => <option key={s.id} value={s.id}>{s.label}{s.tradeId ? ` — ${tradeName(db, s.tradeId)}` : ""}</option>)}
-                    </select>
-                  ) : (
-                    <div
-                      onClick={() => setTieSelCell(mt.id)}
-                      onDoubleClick={() => { if (!ro) { setTieSelCell(mt.id); setTieEditCell(mt.id); } }}
-                      title={`${mt.linkedScheduleId ? `Gates “${schedLabel(mt.linkedScheduleId)}” · ` : ""}click to select · double-click to edit · Ctrl+C / Ctrl+V`}
-                      style={{
-                        fontSize: 11, minHeight: 22, display: "flex", alignItems: "center", padding: "2px 6px", borderRadius: 5,
-                        cursor: "cell", maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                        border: tieSelCell === mt.id ? "2px solid var(--sage)" : "1px solid transparent",
-                        background: tieSelCell === mt.id ? "var(--sage-tint)" : undefined,
-                        color: mt.linkedScheduleId ? "var(--ink)" : "var(--muted)",
-                      }}>
-                      {mt.linkedScheduleId ? `⛓ ${schedLabel(mt.linkedScheduleId)}` : "—"}
-                    </div>
-                  )}
-                </td>
                 <td style={td} className="m-hide"><SpecCell url={mt.specLink} /></td>
                 {!ro && <td style={td} className="m-hide">
                   <div style={{ display: "flex", gap: 4 }}>
@@ -382,7 +327,6 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
   const name = store.session.displayName;
   // One signature: the owner's. (The designer signature was retired.)
   const canApproveOwner = role === "owner" || role === "full_admin";
-  const linked = db.schedule.find((s) => s.id === mt.linkedScheduleId);
   const { over, dropProps } = useFileDrop(async (files) => { store.updateMaterial(mt.id, { imageUrl: await fileToDataURL(files[0]) }); }, { accept: (f) => f.type.startsWith("image/"), disabled: ro });
   // Live preview scraped from the product link (used when no image is saved yet).
   const preview = useLinkPreview(mt.imageUrl ? undefined : mt.specLink);
@@ -464,12 +408,10 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
               {PURCH.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </label>
-          <label style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>Tied task
-            <select value={mt.linkedScheduleId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { linkedScheduleId: e.target.value || undefined })} style={{ maxWidth: 180 }}>
-              <option value="">—</option>
-              {[...db.schedule].sort((a, b) => a.start.localeCompare(b.start)).map((s) => (
-                <option key={s.id} value={s.id}>{s.label}{s.tradeId ? ` — ${tradeName(db, s.tradeId)}` : ""}</option>
-              ))}
+          <label style={{ fontSize: 11, color: "var(--muted)", display: "flex", flexDirection: "column", gap: 3 }}>Trade
+            <select value={mt.tradeId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { tradeId: e.target.value || undefined, linkedScheduleId: undefined, dueMode: "trade" })} style={{ maxWidth: 180 }}>
+              <option value="">— trade —</option>
+              {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
             </select>
           </label>
           {!ro && onAi && <button className="btn btn-sm" onClick={onAi}>✨ Price</button>}
@@ -484,12 +426,7 @@ function MaterialDetail({ mt, ro, onAi }: { mt: Material; ro: boolean; onAi?: ()
         {mt.specs && <div style={{ fontSize: 12, color: "var(--muted)", background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 8, padding: 8 }}>{mt.specs}</div>}
         {mt.notes && <div style={{ fontSize: 12, color: "var(--brass-2)" }}>Note: {mt.notes}</div>}
 
-        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center", fontSize: 12 }}>
-          <span style={{ color: "var(--muted)" }}>Auto-shared with: <strong style={{ color: "var(--ink)" }}>{mt.tradeId ? tradeName(db, mt.tradeId) : "all trades"}</strong></span>
-          {linked && <span style={{ color: "var(--sage-2)" }}>⛓ gates “{linked.label}” ({fmtDate(linked.start)})</span>}
-        </div>
-
-        <TimingBlock mt={mt} ro={ro} />
+        <TradeBlock mt={mt} ro={ro} />
 
         {role !== "trade" && <ProductOptions mt={mt} ro={ro} />}
 
@@ -638,72 +575,45 @@ function DueCell({ mt, ro }: { mt: Material; ro: boolean }) {
   const store = useStore();
   const db = store.db;
   if (mt.dueMode === "trade") {
+    // One date: when it must be on hand, straight from the mapped trade's
+    // schedule window. The old identify-by / on-hand two-date stack is gone.
     const d = materialDates(db, mt);
-    const tName = mt.tradeId ? tradeName(db, mt.tradeId) : "trade";
-    const lastWk = d.needBy === "finish";
+    const when = d.onHandBy ?? d.identifyBy;
+    const tName = mt.tradeId ? tradeName(db, mt.tradeId) : null;
     return (
-      <div className="m-due" style={{ display: "flex", flexDirection: "column", gap: 2, fontSize: 11, minWidth: 104 }}>
-        <span title={`Identify / spec before ${tName} starts`} style={{ color: "var(--brass-2)" }}>🔍 {d.identifyBy ? fmtDate(d.identifyBy) : "—"}</span>
-        <span title={`On hand ${lastWk ? `by ${tName}'s last week` : `before ${tName} starts`}`} style={{ color: "var(--sage-2)" }}>
-          📦 {d.onHandBy ? fmtDate(d.onHandBy) : "—"}{lastWk && <span style={{ color: "var(--brass-2)", fontWeight: 700 }}> · last wk</span>}
-        </span>
-      </div>
+      <span className="m-due" title={tName ? `Follows ${tName}'s schedule` : "Map to a trade to derive this"} style={{ fontSize: 12, color: when ? "var(--sage-2)" : "var(--muted)", whiteSpace: "nowrap", fontWeight: 600 }}>
+        {when ? fmtDate(when) : "—"}
+      </span>
     );
   }
   return <input type="date" value={mt.dueDate ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { dueDate: e.target.value })} style={{ fontSize: 11, width: 118 }} />;
 }
 
-// Detail-panel control: choose a hard date or tie the material's timing to a trade's Gantt.
-function TimingBlock({ mt, ro }: { mt: Material; ro: boolean }) {
+// The one mapping that matters: which trade this material belongs to. It sets
+// who the item is shared with, and its needed-by date follows that trade's
+// schedule. (The old hard-date / tied-task / need-by machinery is retired —
+// decision 2026-08-29: map to a trade, and that's it.)
+function TradeBlock({ mt, ro }: { mt: Material; ro: boolean }) {
   const store = useStore();
   const db = store.db;
-  const mode = mt.dueMode === "trade" ? "trade" : "hard";
   const d = materialDates(db, mt);
+  const when = mt.dueMode === "trade" ? (d.onHandBy ?? d.identifyBy) : mt.dueDate;
   const tName = mt.tradeId ? tradeName(db, mt.tradeId) : null;
   return (
     <div style={{ borderTop: "1px solid var(--line)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ fontSize: 12, fontWeight: 700 }}>Critical-path timing:</span>
-        <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <input type="radio" name={`due-${mt.id}`} checked={mode === "hard"} disabled={ro} onChange={() => store.updateMaterial(mt.id, { dueMode: "hard" })} /> Hard date
-        </label>
-        <label style={{ fontSize: 12, display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <input type="radio" name={`due-${mt.id}`} checked={mode === "trade"} disabled={ro} onChange={() => store.updateMaterial(mt.id, { dueMode: "trade" })} /> Tie to trade schedule
-        </label>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>Trade:</span>
+        <select value={mt.tradeId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { tradeId: e.target.value || undefined, linkedScheduleId: undefined, dueMode: "trade" })} style={{ fontSize: 12 }}>
+          <option value="">— pick trade —</option>
+          {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
+        </select>
+        {when ? <span style={{ fontSize: 12, color: "var(--sage-2)" }}>needed by <strong>{fmtDate(when)}</strong></span> : null}
       </div>
-      {mode === "hard" ? (
-        <label style={{ fontSize: 11, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 8 }}>On-hand / selection due
-          <input type="date" value={mt.dueDate ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { dueDate: e.target.value })} style={{ fontSize: 12 }} />
-        </label>
-      ) : (
-        <>
-          <label style={{ fontSize: 11, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Driven by trade
-            <select value={mt.tradeId ?? ""} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { tradeId: e.target.value || undefined })} style={{ fontSize: 12 }}>
-              <option value="">— pick trade —</option>
-              {macroOrder(db).map((c) => <optgroup key={c} label={c}>{db.trades.filter((t) => t.category === c).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</optgroup>)}
-            </select>
-          </label>
-          {!mt.tradeId ? (
-            <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Pick the trade whose Gantt sets these dates.</span>
-          ) : (d.identifyBy || d.onHandBy) ? (
-            <>
-              <label style={{ fontSize: 11, color: "var(--muted)", display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>Needed on-hand
-                <select value={mt.needBy ?? "start"} disabled={ro} onChange={(e) => store.updateMaterial(mt.id, { needBy: e.target.value as "start" | "finish" })} style={{ fontSize: 12 }}>
-                  <option value="start">Before {tName} starts</option>
-                  <option value="finish">By {tName}’s last week (finishing)</option>
-                </select>
-              </label>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", fontSize: 12 }}>
-                <span style={{ color: "var(--brass-2)" }}>🔍 Identify by <strong>{d.identifyBy ? fmtDate(d.identifyBy) : "—"}</strong> <span style={{ color: "var(--muted)" }}>· before {tName} starts</span></span>
-                <span style={{ color: "var(--sage-2)" }}>📦 On-hand by <strong>{d.onHandBy ? fmtDate(d.onHandBy) : "—"}</strong> <span style={{ color: "var(--muted)" }}>· {d.needBy === "finish" ? `${tName}’s last week` : `before ${tName} starts`}</span></span>
-              </div>
-            </>
-          ) : (
-            <span style={{ fontSize: 11.5, color: "var(--rust)" }}>No Gantt bars for {tName} yet — add it to the schedule (Timing tab) to drive these dates.</span>
-          )}
-          <span style={{ fontSize: 11, color: "var(--muted)" }}>Identify-by is always the trade’s start; on-hand follows your choice above. Both shift automatically if the builder moves {tName ?? "the trade"}.</span>
-        </>
-      )}
+      <span style={{ fontSize: 11, color: "var(--muted)" }}>
+        {tName
+          ? `Shared with ${tName}'s vendor; the needed-by date follows their schedule and moves when their dates move.`
+          : "Pick the trade this material belongs to — it decides who sees it and when it is needed."}
+      </span>
     </div>
   );
 }
@@ -744,16 +654,8 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
   const [roomId, setRoomId] = useState(defaultRoomId ?? "");
   const [tradeId, setTradeId] = useState(ownTrades?.length === 1 ? ownTrades[0] : "");
   const [qty, setQty] = useState("1");
-  const [dep, setDep] = useState("");
-  const [needBy, setNeedBy] = useState<"start" | "finish">("start");
 
-  // Dependency can be ANY line item on the timing chart; the chosen trade's own
-  // tasks are grouped first for convenience.
-  const byStart = (a: (typeof db.schedule)[number], b: (typeof db.schedule)[number]) => a.start.localeCompare(b.start);
-  const tradeTasks = tradeId ? db.schedule.filter((s) => s.tradeId === tradeId).sort(byStart) : [];
-  const otherTasks = db.schedule.filter((s) => !tradeId || s.tradeId !== tradeId).sort(byStart);
-  const needsDep = db.schedule.length > 0;
-  const ready = !!item.trim() && !!roomId && !!tradeId && Number(qty) >= 1 && (!needsDep || !!dep);
+  const ready = !!item.trim() && !!roomId && !!tradeId && Number(qty) >= 1;
 
   const add = () => {
     if (!ready) return;
@@ -763,14 +665,12 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
       roomLabel: db.rooms.find((r) => r.id === roomId)?.name,
       tradeId,
       qty: Math.max(1, Math.round(Number(qty) || 1)),
-      linkedScheduleId: dep || undefined,
-      dueMode: "trade", // timing follows the assigned trade's Gantt
-      needBy,
+      dueMode: "trade", // timing follows the mapped trade's schedule
       status: "needed",
       purchaser: "owner",
     });
-    // keep room, trade & on-hand choice so several items can be added in a row
-    setItem(""); setQty("1"); setDep("");
+    // keep room & trade so several items can be added in a row
+    setItem(""); setQty("1");
   };
 
   const cell = (label: string, node: React.ReactNode) => (
@@ -790,7 +690,7 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
         </select>
       ))}
       {cell("Trade", (
-        <select value={tradeId} onChange={(e) => { setTradeId(e.target.value); setDep(""); }} style={{ borderColor: !tradeId ? "var(--rust)" : undefined }}>
+        <select value={tradeId} onChange={(e) => setTradeId(e.target.value)} style={{ borderColor: !tradeId ? "var(--rust)" : undefined }}>
           <option value="">— trade —</option>
           {tradeChoices
             ? tradeChoices.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)
@@ -798,21 +698,6 @@ function AddMaterial({ defaultRoomId }: { defaultRoomId?: string }) {
         </select>
       ))}
       {cell("Qty", <input type="number" min={1} value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 58 }} />)}
-      {cell("Timing dependency", (
-        <select value={dep} onChange={(e) => setDep(e.target.value)} style={{ minWidth: 180, borderColor: needsDep && !dep ? "var(--rust)" : undefined }}>
-          <option value="">{needsDep ? "— link a timing item —" : "no timing items yet"}</option>
-          {tradeTasks.length > 0 && <optgroup label="This trade’s tasks">{tradeTasks.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}</optgroup>}
-          <optgroup label={tradeTasks.length ? "Other timing items" : "All timing items"}>
-            {otherTasks.map((s) => <option key={s.id} value={s.id}>{s.label}{s.tradeId ? ` — ${tradeName(db, s.tradeId)}` : ""}</option>)}
-          </optgroup>
-        </select>
-      ))}
-      {cell("Needed on-hand", (
-        <select value={needBy} onChange={(e) => setNeedBy(e.target.value as "start" | "finish")} style={{ minWidth: 150 }} title="Identify-by is always the trade start; this sets when it must be delivered.">
-          <option value="start">Before trade starts</option>
-          <option value="finish">By trade’s last week</option>
-        </select>
-      ))}
       <button className="btn btn-primary" disabled={!ready} onClick={add}>+ Add material</button>
     </div>
   );
