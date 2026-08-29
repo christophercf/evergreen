@@ -15,6 +15,7 @@ import { useStore } from "@/lib/data/hooks";
 import { Pill } from "./bits";
 import { canMessageUser, contextTitle, ROLE_LABEL, UPDATE_CONTEXT_ICON, type UpdateContext } from "@/lib/data/types";
 import { storeFile } from "./upload";
+import { useBackLayer } from "./use-back-layer";
 
 // ---- compose bus ------------------------------------------------------------
 let composeListener: ((ctx: UpdateContext) => void) | null = null;
@@ -156,6 +157,8 @@ export function MessageModal() {
     composeListener = (c) => setCtx(c);
     return () => { composeListener = null; };
   }, []);
+  // The sheet covers the phone's screen — native back must close it, not the page.
+  useBackLayer(!!ctx, () => setCtx(null));
   if (!ctx) return null;
   return (
     <div onClick={() => setCtx(null)} style={{ position: "fixed", inset: 0, background: "rgba(28,22,16,.5)", zIndex: 70, display: "flex", alignItems: "flex-end", justifyContent: "center" }} className="ever-msg-overlay">

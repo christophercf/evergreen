@@ -10,6 +10,7 @@ import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
 import { ConfirmProvider } from "./confirm";
 import { Toaster } from "./toast";
+import { useBackLayer } from "./use-back-layer";
 import {
   HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, CameraIcon, HelpIcon,
 } from "./icons";
@@ -113,6 +114,8 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
+  // …and so does the phone's own back button.
+  useBackLayer(navOpen, () => setNavOpen(false));
   const role = store.session.role;
   const user = store.currentUser;
 

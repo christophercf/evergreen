@@ -5,6 +5,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type MsgQuote, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
 import { ContextChip, conversationKeyOf, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
+import { useBackLayer } from "../ui/use-back-layer";
 import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 
 // ---------------------------------------------------------------------------
@@ -90,6 +91,12 @@ export default function UpdatesPage() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, string>>({});
   useEffect(() => setReadMap(loadRead()), []);
+
+  // On a phone an open conversation owns the whole screen, and a tapped photo
+  // owns it again on top — so the phone's back button peels them off in order
+  // (photo → chat → list) instead of jumping out of Messages entirely.
+  useBackLayer(!!sel, () => { setSel(null); setPendingOthers(null); });
+  useBackLayer(!!lightbox, () => setLightbox(null));
 
   // Deep link from email "Reply in the app" buttons: /updates?conv=<key>
   useEffect(() => {
