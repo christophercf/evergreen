@@ -129,7 +129,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   // that would swallow the link and send them back to the password box the link
   // exists to avoid. It renders bare, with no nav around it.
   if (pathname === "/enter") return <>{children}</>;
-  if (!IS_MOCK && !store.session.authed) return <Landing />;
+  // "Not signed in YET" is not "signed out": while the session restores after
+  // a refresh, show a quiet splash — never flash the login form at someone
+  // who never signed out. The store drops the flag the moment auth answers.
+  if (!IS_MOCK && !store.session.authed) {
+    if (store.authResolving) return <Splash />;
+    return <Landing />;
+  }
 
   // Absent, never greyed out: a role should not see a control it cannot use.
   const permitted = NAV.filter((n) => {
@@ -319,6 +325,20 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
       `}</style>
     </div>
     </ConfirmProvider>
+  );
+}
+
+// The between-states screen: a session is being restored and the app is not
+// yet sure who you are. Brand mark, one quiet line, no controls — it lives
+// for well under a second on a decent connection.
+function Splash() {
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, background: "var(--cream)" }}>
+      <span style={{ color: "var(--brass)" }}><LeafIcon width={34} height={34} /></span>
+      <div className="serif" style={{ fontSize: 24, fontWeight: 700, color: "var(--walnut)" }}>Evergreen <span style={{ color: "var(--brass)" }}>AI</span></div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", animation: "ever-splash-pulse 1.6s ease-in-out infinite" }}>Signing you back in…</div>
+      <style>{`@keyframes ever-splash-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }`}</style>
+    </div>
   );
 }
 

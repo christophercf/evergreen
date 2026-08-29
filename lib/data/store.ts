@@ -16,6 +16,7 @@ import { contractFromAward, lineDrawable } from "./contract";
 import { uncoveredScopeFor } from "./drawscope";
 import { lineTotal, lineCurrent, phaseAmount, romEnvelope, romCanLock, tradeUsage, categoryUsage, MACRO_ORDER, MACRO_COLOR } from "./money";
 import { type Backend, makeBackend, defaultSession } from "./backend";
+import { IS_SUPABASE } from "./config";
 import { authEnabled, authOnChange, authSignOut, isRecoveryUrl, authUpdatePassword, authCurrentEmail } from "./auth";
 
 type Listener = () => void;
@@ -43,6 +44,12 @@ class Store {
   authNoAccess: string | null = null;
   /** True while a password-recovery link is being handled — show the reset screen. */
   recoveryPending = false;
+  /** True until Supabase has answered whether a session exists. "Not signed in
+   *  YET" and "signed out" are different states: a refresh mid-session must
+   *  show a quiet splash while the session restores, never a flash of the
+   *  login screen at someone who never signed out. (Config flag, not
+   *  authEnabled(): this runs at module load and must not build a client.) */
+  authResolving = IS_SUPABASE;
 
   private backend: Backend | null = null;
   private listeners = new Set<Listener>();
@@ -71,10 +78,17 @@ class Store {
         // persisted app session; bind/unbind as auth state changes.
         this.session = { ...this.session, authed: false };
         this.recoveryPending = isRecoveryUrl();
+        // A recovery link should land on the reset screen, not the splash.
+        if (this.recoveryPending) this.authResolving = false;
+        // Safety valve: if the auth client never answers (broken storage, a
+        // wedged tab), fall back to the login screen rather than a splash
+        // that outstays its welcome. INITIAL_SESSION reads local storage, so
+        // in practice this resolves in milliseconds.
+        setTimeout(() => { if (this.authResolving) { this.authResolving = false; this.emit(); } }, 8000);
         authOnChange((email, event) => {
           // Password reset: land on the "set a new password" screen instead of
           // binding straight into the app (or bouncing to login).
-          if (event === "PASSWORD_RECOVERY") { this.recoveryPending = true; this.emit(); return; }
+          if (event === "PASSWORD_RECOVERY") { this.recoveryPending = true; this.authResolving = false; this.emit(); return; }
           if (this.recoveryPending) {
             // Stay on the reset screen until the new password is saved (USER_UPDATED).
             if (event === "USER_UPDATED" && email) { this.recoveryPending = false; void this.reloadThenBind(email); }
@@ -83,6 +97,9 @@ class Store {
           if (email) void this.reloadThenBind(email); else this.unbindAuth();
         });
       } else if (typeof window !== "undefined") {
+        // No auth client (mock, or keys missing) — nothing will ever resolve,
+        // so the splash must not wait for it.
+        this.authResolving = false;
         // Mock mode: accept an invite link directly (no password).
         const tok = new URLSearchParams(window.location.search).get("invite");
         if (tok && this.acceptInvite(tok)) {
@@ -348,6 +365,8 @@ class Store {
   }
   /** Bind a verified Supabase session to its app user (role/permissions). */
   bindAuthEmail(email: string): boolean {
+    // Whatever the outcome, auth has answered — the splash stands down.
+    this.authResolving = false;
     const u = this.db.users.find((x) => x.email.trim().toLowerCase() === email.trim().toLowerCase());
     if (!u) { this.session = { ...this.session, authed: false }; this.authNoAccess = email; this.emit(); return false; }
     // Suspended accounts keep their history but can't get in.
@@ -362,6 +381,8 @@ class Store {
     return true;
   }
   unbindAuth() {
+    // A definitive "no session" — the login screen is now the honest answer.
+    this.authResolving = false;
     this.session = { ...this.session, authed: false };
     this.emit();
   }

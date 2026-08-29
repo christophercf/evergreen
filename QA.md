@@ -398,3 +398,8 @@ of checks that ran, so a green run is provably a run.
 - Per-line contract/paid controls STACK on the phone (name, then inputs) — never a wrapped jumble.
 - Change orders on the phone are a single button ("Change orders (N)") opening a floating sheet; filing, the save-for-later / revise-contract decision, approving and removing all happen in the sheet through the SAME ChangeOrders component the desktop panel uses — the two must never drift. Native back closes the sheet.
 - Desktop unchanged: inline change-order panel, no sheet button, no phone money block.
+
+### Refresh never flashes the login screen (added 2026-08-29)
+- In Supabase mode, "not signed in YET" and "signed out" are different states: while the session restores after a refresh, the app shows the brand splash ("Signing you back in…"), and the login screen appears ONLY once auth has definitively answered no-session. The prerendered HTML must contain the splash, not the login form.
+- The splash must never outstay auth: signed-out browsers reach the login screen within a second (INITIAL_SESSION is local), an 8s safety valve falls back to the login screen if the auth client never answers, and mock mode never shows the splash at all.
+- Recovery links land on the reset screen, not the splash; a no-access email lands on the no-access message.
