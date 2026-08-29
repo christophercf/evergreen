@@ -161,8 +161,15 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     .map((band) => ({ band, items: visible.filter((n) => bandOf(n) === band) }))
     .filter((g) => g.items.length > 0);
 
-  // Bottom tab bar (mobile): the first four this role can use, in their order.
-  const bottomNav = visible.slice(0, 4);
+  // Bottom tab bar (mobile): four fixed shortcuts, chosen by hand — the
+  // modules a thumb actually reaches for on site: Messages, Materials,
+  // Schedule, Budget Management. A seat missing one (a vendor has no budget)
+  // tops the row up from its own nav order instead.
+  const BOTTOM_FIRST = ["/updates", "/materials", "/timing", "/costs"];
+  const bottomNav = [
+    ...BOTTOM_FIRST.map((h) => visible.find((n) => n.href === h)).filter((n): n is NavItem => !!n),
+    ...visible.filter((n) => !BOTTOM_FIRST.includes(n.href)),
+  ].slice(0, 4);
 
   return (
     <ConfirmProvider>
