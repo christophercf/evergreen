@@ -96,7 +96,9 @@ export function BudgetLines() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 14 }}>
+      {/* Desktop reads the stat row; the phone gets one grand-total row at the
+          head of the table instead — the answer, lined up over its columns. */}
+      <div className="m-hide" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 10, marginTop: 14 }}>
         <StatCard label="ROM agreed" value={fmt(t.agreed)}
           sub={t.outsideRom ? `${fmt(t.outsideRom)} added since, outside it` : `${t.committedRows} of ${t.rows} lines committed`}
           accent="var(--brass-2)" />
@@ -127,11 +129,18 @@ export function BudgetLines() {
               </tr>
             </thead>
             <tbody>
+              {/* Phone: the grand total leads, its figures lined up over the
+                  Total and Drawn/Paid columns below it. */}
+              <tr className="m-only-row" style={{ borderBottom: "2px solid var(--line)", fontWeight: 700 }}>
+                <td style={{ padding: "9px 10px" }}>Grand total <span style={{ fontWeight: 400, fontSize: 10.5, color: MUTED }}>· {t.rows} lines</span></td>
+                <Num hide v={t.romFigure} bold /><Num hide v={t.contracted} bold /><Num hide v={t.changeOrders} bold />
+                <Num hide v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.paid} bold />
+              </tr>
               {rows.map((r) => (
                 <Row key={r.key} r={r} canCommit={canCommit} canEditLine={canEditLine}
                   on={open === r.key} onToggle={() => setOpen(open === r.key ? null : r.key)} />
               ))}
-              <tr style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
+              <tr className="m-hide" style={{ borderTop: "2px solid var(--line)", fontWeight: 700 }}>
                 <td style={{ padding: "9px 10px" }}>Total — {t.rows} lines{t.removedRows ? ` · ${t.removedRows} removed` : ""}</td>
                 <Num hide v={t.romFigure} bold /><Num hide v={t.contracted} bold /><Num hide v={t.changeOrders} bold />
                 <Num hide v={t.builderFee} bold /><Num v={t.total} bold /><Num v={t.paid} bold />
@@ -141,7 +150,7 @@ export function BudgetLines() {
         </div>
       )}
 
-      <div style={{ fontSize: 11.5, lineHeight: 1.55, color: MUTED, marginTop: 10, maxWidth: "80ch" }}>
+      <div className="m-hide" style={{ fontSize: 11.5, lineHeight: 1.55, color: MUTED, marginTop: 10, maxWidth: "80ch" }}>
         Contracted is the work itself, before fee — what was agreed with whoever is doing it —
         and its cell turns green once that is in place, amber on hold, grey once removed.
         Total is contracted plus approved change orders and the builder&rsquo;s fee. Whoever manages a
@@ -181,29 +190,24 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, color: MUTED }}>{on ? "▾" : "▸"}</span>
             <strong style={{ color: "var(--walnut)" }}>{r.label}</strong>
-            {r.lines.length > 1 ? <span style={{ fontSize: 10.5, color: MUTED }}>{r.lines.length} lines</span> : null}
-            {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
+            {/* On the phone the row is just the name and the two figures —
+                pills, counts and the sub-lines wait inside the expander. */}
+            {r.lines.length > 1 ? <span className="m-hide" style={{ fontSize: 10.5, color: MUTED }}>{r.lines.length} lines</span> : null}
+            {r.state === "removed" ? <span className="m-hide"><Pill color="#fff" bg="var(--muted)">Removed</Pill></span> : null}
             {r.allOutsideRom && r.state !== "removed"
-              ? <Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill>
+              ? <span className="m-hide"><Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill></span>
               : r.outsideRomTotal > 0
-                ? <span style={{ fontSize: 10.5, color: "var(--brass-2)" }}>{fmt(r.outsideRomTotal)} outside the ROM</span>
+                ? <span className="m-hide" style={{ fontSize: 10.5, color: "var(--brass-2)" }}>{fmt(r.outsideRomTotal)} outside the ROM</span>
                 : null}
             {/* Ask about this line from the line itself. The message opens
                 titled "Budget line: <name>", so the reader knows where it came
                 from before they open it. */}
-            <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
+            <span className="m-hide" onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
               <MsgButton kind="cost" refId={r.lines[0]?.id ?? r.tradeId} label={r.label} href={`/costs?line=${r.lines[0]?.id ?? ""}`} small />
             </span>
           </div>
-          <div style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
+          <div className="m-hide" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17 }}>
             {r.manager === "owner" ? "Owner managed · no builder fee" : `GC managed · ${r.markupLabel}`} · {r.category}
-          </div>
-          {/* What the hidden money columns said, for the phone. */}
-          <div className="m-only m-read" style={{ fontSize: 10.5, color: MUTED, marginTop: 2, paddingLeft: 17, gap: 7, flexWrap: "wrap" }}>
-            <span>ROM {r.ranged ? `${fmt(r.low)}–${fmt(r.high)}` : fmt(r.romFigure)}</span>
-            {r.contracted ? <span>· contracted {fmt(r.contracted)}</span> : null}
-            {r.changeOrders ? <span>· COs {fmt(r.changeOrders)}</span> : null}
-            {r.builderFee ? <span>· fee {fmt(r.builderFee)}</span> : null}
           </div>
         </td>
         <Num hide v={r.romFigure} node={r.ranged ? <span>{fmt(r.low)}<span style={{ color: MUTED }}> – </span>{fmt(r.high)}</span> : undefined} />
@@ -225,6 +229,18 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
       {on ? (
         <tr>
           <td colSpan={COLS.length} style={{ padding: "4px 10px 16px 27px", borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
+            {/* The row hid these on the phone — the expander is where they live there. */}
+            <div className="m-only" style={{ alignItems: "center", gap: 7, flexWrap: "wrap", padding: "4px 0 8px" }}>
+              {r.state === "removed" ? <Pill color="#fff" bg="var(--muted)">Removed</Pill> : null}
+              {r.allOutsideRom && r.state !== "removed" ? <Pill color="var(--walnut)" bg="#f7f1e2">Outside the ROM</Pill> : null}
+              <span style={{ fontSize: 11, color: MUTED }}>
+                {r.manager === "owner" ? "Owner managed" : "GC managed"} · {r.category}
+                {r.ranged ? ` · ROM ${fmt(r.low)}–${fmt(r.high)}` : ` · ROM ${fmt(r.romFigure)}`}
+              </span>
+              <span onClick={(e) => e.stopPropagation()} style={{ marginLeft: "auto" }}>
+                <MsgButton kind="cost" refId={r.lines[0]?.id ?? r.tradeId} label={r.label} href={`/costs?line=${r.lines[0]?.id ?? ""}`} small />
+              </span>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 18 }}>
               <div>
                 {/* One name, held on the trade. Everything that shows it reads

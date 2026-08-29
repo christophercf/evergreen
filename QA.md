@@ -387,3 +387,8 @@ of checks that ran, so a green run is provably a run.
 - Tapping a list row opens the same Drilldown the Gantt uses — trades' confirm-dates buttons, QC sign-off, budget line and 💬 must all work from the list.
 - A deep link (?task= or a Messages chip) into a task inside a folded band must unfold that band.
 - Edit mode pins the phone to the Chart view; the toggle hides while editing.
+
+### Budget lines on a phone: name + Total + Drawn/Paid, grand total first (added 2026-08-29)
+- On ≤700px a budget row is ONLY the caret, the line's name, Total, and Drawn/Paid — no pills, no manager/category sub-line, no 💬, no line counts. All of that (plus ROM and the 💬 button) appears in the expander when the row is opened.
+- A "Grand total · N lines" row leads the table on the phone, its two figures lined up over the Total and Drawn/Paid columns. Desktop keeps the stat-card row and the bottom totals row instead — the grand-total row must NOT show on desktop, and the stat cards must NOT show on the phone.
+- No horizontal overflow at 375px.

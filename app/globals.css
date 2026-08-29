@@ -150,6 +150,12 @@ table { border-collapse: collapse; width: 100%; }
   .m-filters-toggle { display: inline-flex !important; }
 }
 .m-only { display: none; }
+/* A table row that exists only on phones — e.g. the budget's grand-total row,
+   which sits ABOVE the line items there so the answer comes before the list. */
+.m-only-row { display: none; }
+@media (max-width: 700px) {
+  .m-only-row { display: table-row !important; }
+}
 .m-filters-toggle { display: none; }
 
 /* Loading, as distinct from empty. A blank card on a slow connection reads as
