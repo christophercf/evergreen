@@ -188,11 +188,14 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
   return (
     <>
       <tr onClick={onToggle} style={{
-        cursor: "pointer", borderBottom: "1px solid var(--line)",
-        background: on ? "var(--cream)" : undefined,
+        cursor: "pointer", borderBottom: on ? undefined : "1px solid var(--line)",
+        // An open row and its panel read as ONE tinted block: sage header,
+        // lighter sage body, and an accent bar down the left edge — so what
+        // belongs to the expansion is unmistakable against the closed rows.
+        background: on ? "var(--sage-tint)" : undefined,
         opacity: r.state === "removed" ? 0.55 : 1,
       }}>
-        <td style={{ padding: "9px 10px" }}>
+        <td style={{ padding: "9px 10px", borderLeft: `3px solid ${on ? "var(--sage)" : "transparent"}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, color: MUTED }}>{on ? "▾" : "▸"}</span>
             <strong style={{ color: "var(--walnut)" }}>{r.label}</strong>
@@ -234,7 +237,7 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
 
       {on ? (
         <tr>
-          <td colSpan={COLS.length} style={{ padding: "4px 10px 16px 27px", borderBottom: "1px solid var(--line)", background: "var(--cream)" }}>
+          <td colSpan={COLS.length} style={{ padding: "4px 10px 16px 27px", borderBottom: "2px solid var(--sage)", borderLeft: "3px solid var(--sage)", background: "#f1f5ea" }}>
             {/* The row hid these on the phone — the expander opens with a clean
                 read of the money, one figure per row, before any controls. */}
             <div className="m-only" style={{ flexDirection: "column", padding: "4px 0 10px" }}>
