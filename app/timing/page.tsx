@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, StatCard } from "../ui/bits";
 import {
   accessFor, awardedTradeIdSet, canReadFieldUpdate, fieldItemsFor, isArchitectUser, SCHEDULE_LABEL, type ScheduleItem, type ScheduleStatus, type MacroCategory,
 } from "@/lib/data/types";
+import { useNarrowViewport } from "../ui/desktop-only";
 import { tradeName, romRows, fmt, macroOrder, macroColor } from "@/lib/data/money";
 import { qcRecommendations } from "@/lib/data/qc";
 import { conversationKeyOf, conversationUrl, emailsFor, MsgButton, pushEmail } from "../ui/messenger";
@@ -45,6 +46,10 @@ export default function TimingPage() {
   const user = store.currentUser;
   const access = accessFor(user, role, "timing");
   const [openId, setOpenId] = useState<string | null>(null);
+  // Phone: the schedule opens as a list (what needs attention), with the
+  // fit-all chart one toggle away. Desktop keeps the Gantt untouched.
+  const phone = useNarrowViewport();
+  const [phoneView, setPhoneView] = useState<"list" | "chart">("list");
   const [mounted, setMounted] = useState(false);
   const [cascade, setCascade] = useState<Cascade>(null);
   const [zoom, setZoom] = useState(2);
@@ -296,6 +301,26 @@ export default function TimingPage() {
         );
       })()}
 
+      {/* Phone: List | Chart toggle. Editing is a chart activity, so an
+          active edit session pins the view to the chart. */}
+      {phone && !editing && (
+        <div style={{ display: "flex", background: "var(--cream-2)", border: "1px solid var(--line)", borderRadius: 9, padding: 2, marginTop: 14, fontSize: 12.5, fontWeight: 700 }}>
+          {(["list", "chart"] as const).map((v) => (
+            <button key={v} onClick={() => setPhoneView(v)} className="tap"
+              style={{ flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 7, border: "none", cursor: "pointer", font: "inherit",
+                background: phoneView === v ? "var(--paper)" : "transparent",
+                color: phoneView === v ? "var(--walnut)" : "var(--muted)",
+                boxShadow: phoneView === v ? "0 1px 2px rgba(58,47,37,.12)" : undefined }}>
+              {v === "list" ? "List" : "Chart"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {phone && phoneView === "list" && !editing ? (
+        <PhoneAgenda visible={visible} ownerView={ownerView} openId={openId} setOpenId={setOpenId} canEdit={canEdit} onCascade={setCascade} />
+      ) : (
+      <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Tasks" value={`${visible.length}`} sub={`${visible.filter((s) => s.status === "done").length} done`} />
         <StatCard label="Awaiting Trade Confirm" value={`${pending.length}`} accent={pending.length ? "var(--rust)" : "var(--ok)"} sub="date changes pending" />
@@ -457,6 +482,8 @@ export default function TimingPage() {
       <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 10 }}>
         Auto-zoomed to ~5 weeks from today (red line). Bars fill with QC sign-off. Toggle <em>overlay original</em> to compare the first plan (dashed) with current.
       </p>
+      </>
+      )}
 
       {cascade && <CascadeModal cascade={cascade} editing={editing} onClose={() => setCascade(null)} />}
       {publishOpen && <PublishModal changes={pendingChanges} onClose={() => setPublishOpen(false)} onDone={() => { setPublishOpen(false); setEditing(false); setSelIds(new Set()); editSnapshot.current = new Map(); }} />}
@@ -696,6 +723,148 @@ function CascadeModal({ cascade, editing, onClose }: { cascade: NonNullable<Casc
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// The phone's schedule: an agenda, not a chart. Answers the question a phone
+// user actually has — what needs attention this week — with the late work
+// leading. Tapping a row opens the same drilldown the Gantt uses, so trades
+// confirm dates and QC gets signed from here too. The chart stays one toggle
+// away; drag-editing stays a desktop activity.
+// ---------------------------------------------------------------------------
+function PhoneAgenda({ visible, ownerView, openId, setOpenId, canEdit, onCascade }: {
+  visible: ScheduleItem[];
+  ownerView: boolean;
+  openId: string | null;
+  setOpenId: (id: string | null) => void;
+  canEdit: boolean;
+  onCascade: (c: { sourceId: string; deltaDays: number; deps: ScheduleItem[] }) => void;
+}) {
+  const store = useStore();
+  const db = store.db;
+  const role = store.session.role;
+  const [showLater, setShowLater] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const t0 = today.getTime();
+  const dayDiff = (a: number, b: number) => Math.round((a - b) / DAY);
+  // The owner reads confirmed dates, like everywhere else on this page.
+  const startOf = (s: ScheduleItem) => parse(ownerView ? (s.confirmedStart ?? s.start) : s.start);
+  const endOf = (s: ScheduleItem) => parse(ownerView ? (s.confirmedEnd ?? s.end) : s.end);
+  const rangeLabel = (s: ScheduleItem) => `${fmtD(iso(startOf(s)))} – ${fmtD(iso(endOf(s)))}`;
+  const subOf = (s: ScheduleItem) =>
+    `${s.kind === "milestone" ? "Milestone" : s.kind === "procurement" ? "Procurement" : tradeName(db, s.tradeId!)} · ${rangeLabel(s)}`;
+  const catColor = (s: ScheduleItem) =>
+    s.kind === "milestone" ? "var(--walnut)" : macroColor(db, db.trades.find((t) => t.id === s.tradeId)?.category ?? "Soft Costs");
+
+  const open = visible.filter((s) => s.status !== "done");
+  const done = visible.filter((s) => s.status === "done");
+  const active = open.filter((s) => startOf(s) <= t0);
+  const late = active.filter((s) => endOf(s) < t0).sort((a, b) => endOf(a) - endOf(b));
+  const now = active.filter((s) => endOf(s) >= t0).sort((a, b) => endOf(a) - endOf(b));
+  const upNext = open.filter((s) => startOf(s) > t0 && dayDiff(startOf(s), t0) <= 14).sort((a, b) => startOf(a) - startOf(b));
+  const later = open.filter((s) => startOf(s) > t0 && dayDiff(startOf(s), t0) > 14).sort((a, b) => startOf(a) - startOf(b));
+  const nextMilestone = open.filter((s) => s.kind === "milestone" && startOf(s) >= t0).sort((a, b) => startOf(a) - startOf(b))[0];
+  // A deep link (?task= or a chip) may point into the folded band — unfold it.
+  const laterOpen = showLater || (!!openId && later.some((s) => s.id === openId));
+  const doneOpen = showDone || (!!openId && done.some((s) => s.id === openId));
+
+  const sect = (label: string, color: string) => (
+    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".11em", textTransform: "uppercase", color, margin: "16px 2px 7px" }}>{label}</div>
+  );
+
+  const row = (s: ScheduleItem, right: ReactNode) => {
+    const isOpen = openId === s.id;
+    const pendingMe = s.confirm === "pending" && !ownerView;
+    return (
+      <div key={s.id}>
+        <div role="button" onClick={() => setOpenId(isOpen ? null : s.id)} className="tap-row"
+          style={{ background: isOpen ? "var(--sage-tint)" : "var(--paper)", border: "1px solid var(--line)", borderLeft: `3px solid ${catColor(s)}`, borderRadius: isOpen ? "12px 12px 0 0" : 12, padding: "9px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", boxShadow: "0 1px 2px rgba(58,47,37,.05)" }}>
+          {s.kind === "milestone" && <span aria-hidden style={{ width: 9, height: 9, background: "var(--walnut)", transform: "rotate(45deg)", borderRadius: 2, flexShrink: 0 }} />}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.label}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {subOf(s)}{pendingMe && <> · <span style={{ color: "var(--rust)", fontWeight: 700 }}>pending</span></>}
+            </div>
+          </div>
+          {pendingMe && role === "trade" ? <span className="pill" style={{ color: "var(--brass-2)", background: "#f0e6cd", flexShrink: 0 }}>confirm dates</span> : right}
+        </div>
+        {isOpen && (
+          <div style={{ border: "1px solid var(--line)", borderTop: "none", borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
+            <Drilldown item={s} editing={false} canEdit={canEdit} onJump={() => setOpenId(null)} onCascade={onCascade} />
+          </div>
+        )}
+      </div>
+    );
+  };
+  const list = (items: ScheduleItem[], right: (s: ScheduleItem) => ReactNode) => (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>{items.map((s) => row(s, right(s)))}</div>
+  );
+
+  const foldBand = (label: string, sub: string, opened: boolean, toggle: () => void) => (
+    <div role="button" onClick={toggle} className="tap-row"
+      style={{ margin: "12px 0 0", background: "var(--cream-2)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", fontSize: 12, color: "var(--muted)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, cursor: "pointer" }}>
+      <span style={{ minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><strong style={{ color: "var(--walnut)" }}>{label}</strong>{sub ? <> · {sub}</> : null}</span>
+      <span style={{ flexShrink: 0, color: "var(--sage-2)", fontWeight: 700 }}>{opened ? "▴" : "▾"}</span>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", margin: "12px 2px 0", lineHeight: 1.5 }}>
+        {late.length > 0 && <><strong style={{ color: "var(--rust)" }}>{late.length} running late</strong> · </>}
+        {now.length} on site now
+        {nextMilestone && <> · next milestone <strong style={{ color: "var(--walnut)" }}>{nextMilestone.label.replace(/ \(Milestone\)$/i, "")}, {fmtD(iso(startOf(nextMilestone)))}</strong></>}
+      </div>
+
+      {late.length > 0 && (
+        <>
+          {sect("Running late", "var(--rust)")}
+          {list(late, (s) => (
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div className="serif" style={{ fontSize: 15, fontWeight: 700, color: "var(--rust)" }}>{dayDiff(t0, endOf(s))}d</div>
+              <div style={{ fontSize: 9.5, color: "var(--rust)", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".05em" }}>over</div>
+            </div>
+          ))}
+        </>
+      )}
+
+      {sect("On site now", "var(--brass-2)")}
+      {now.length ? list(now, (s) => (
+        s.status === "in_progress"
+          ? <span className="pill" style={{ color: "var(--sage-2)", background: "var(--sage-tint)", flexShrink: 0 }}>ends {fmtD(iso(endOf(s)))}</span>
+          : <span className="pill" style={{ color: "var(--brass-2)", background: "#f0e6cd", flexShrink: 0 }}>not started</span>
+      )) : <div className="card" style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--muted)" }}>Nothing on site this week.</div>}
+
+      {upNext.length > 0 && (
+        <>
+          {sect("Up next", "var(--brass-2)")}
+          {list(upNext, (s) => (
+            <span className="pill" style={{ color: "var(--muted)", background: "var(--cream-2)", flexShrink: 0 }}>in {dayDiff(startOf(s), t0)}d</span>
+          ))}
+        </>
+      )}
+
+      {later.length > 0 && (
+        <>
+          {foldBand(`Later — ${later.length} task${later.length === 1 ? "" : "s"}`, laterOpen ? "" : later.slice(0, 3).map((s) => s.label.replace(/ \(.*\)$/, "")).join(", ") + "…", laterOpen, () => setShowLater((v) => !v))}
+          {laterOpen && <div style={{ marginTop: 7 }}>{list(later, (s) => (
+            <span className="pill" style={{ color: "var(--muted)", background: "var(--cream-2)", flexShrink: 0 }}>{fmtD(iso(startOf(s)))}</span>
+          ))}</div>}
+        </>
+      )}
+
+      {done.length > 0 && (
+        <>
+          {foldBand(`Completed — ${done.length} task${done.length === 1 ? "" : "s"}`, "", doneOpen, () => setShowDone((v) => !v))}
+          {doneOpen && <div style={{ marginTop: 7 }}>{list(done, (s) => (
+            <span className="pill" style={{ color: "var(--ok)", background: "var(--sage-tint)", flexShrink: 0 }}>✓ done</span>
+          ))}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
 function Drilldown({ item, editing, canEdit, onJump, onCascade }: { item: ScheduleItem; editing: boolean; canEdit: boolean; onJump: () => void; onCascade: (c: { sourceId: string; deltaDays: number; deps: ScheduleItem[] }) => void }) {
   const store = useStore();
   const db = store.db;

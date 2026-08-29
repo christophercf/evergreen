@@ -380,3 +380,10 @@ of checks that ran, so a green run is provably a run.
 - Desktop (>860px) is untouched: no history entry is created for layers there.
 - The nav drawer registers NO back-layer, and a layer close must never cancel a navigation: on a phone, ☰ → Messages must LAND on Messages (regression 2026-08-29 — the drawer's consumed history entry yanked the router back off /updates).
 - Mechanism: `app/ui/use-back-layer.ts` (`useBackLayer`) — any new full-screen phone takeover must register with it.
+
+### Schedule on a phone: list first, chart behind the toggle (added 2026-08-29)
+- On ≤860px the Schedule opens as an agenda — Running late (days-over figures, rust), On site now (ends/not-started pills), Up next, folded Later and Completed bands — with a List | Chart toggle at the top. The Gantt is unchanged behind Chart; desktop is untouched (no toggle, no agenda).
+- Day math is derived: "Nd over" = today minus the item's end; owner seat reads CONFIRMED dates in the list exactly as it does on the chart.
+- Tapping a list row opens the same Drilldown the Gantt uses — trades' confirm-dates buttons, QC sign-off, budget line and 💬 must all work from the list.
+- A deep link (?task= or a Messages chip) into a task inside a folded band must unfold that band.
+- Edit mode pins the phone to the Chart view; the toggle hides while editing.
