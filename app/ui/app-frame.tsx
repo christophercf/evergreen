@@ -10,7 +10,6 @@ import { Landing } from "./landing";
 import { MessageModal } from "./messenger";
 import { ConfirmProvider } from "./confirm";
 import { Toaster } from "./toast";
-import { useBackLayer } from "./use-back-layer";
 import {
   HomeIcon, CoinsIcon, WalletIcon, CalendarIcon, BoxIcon, UsersIcon, FolderIcon, LeafIcon, ChevronIcon, ReceiptIcon, ChatIcon, GearIcon, ClipboardIcon, CameraIcon, HelpIcon,
 } from "./icons";
@@ -114,8 +113,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [navOpen]);
-  // …and so does the phone's own back button.
-  useBackLayer(navOpen, () => setNavOpen(false));
+  // The drawer deliberately does NOT register as a back-layer: nearly every
+  // drawer interaction ENDS in a navigation, and consuming a history entry
+  // right after one cancels it — tapping Messages bounced back to the
+  // dashboard. Scrim tap and Escape close it; back closes real takeovers.
   const role = store.session.role;
   const user = store.currentUser;
 

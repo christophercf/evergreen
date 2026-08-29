@@ -53,10 +53,16 @@ export function useBackLayer(open: boolean, onClose: () => void) {
     } else if (!open && layer.current) {
       // Closed by its own control — take our entry (and stack slot) with us,
       // so the next back press does real navigation instead of a dead pop.
+      // ONLY if our entry is still the current one: when the close rode along
+      // with a navigation (a nav link closing the layer), the router has
+      // already moved past it, and a back() here would cancel that navigation
+      // — the "can't open Messages" bug. The stray entry behind the new page
+      // is harmless; a no-longer-stacked pop is ignored by the listener.
       const i = stack.indexOf(layer.current);
       if (i >= 0) stack.splice(i, 1);
       layer.current = null;
-      window.history.back();
+      const st = window.history.state as { everLayer?: boolean } | null;
+      if (st?.everLayer) window.history.back();
     }
   }, [open]);
 

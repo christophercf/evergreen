@@ -378,4 +378,5 @@ of checks that ran, so a green run is provably a run.
 - On a phone, the device's back button closes the topmost full-screen layer — an open Messages conversation, a photo lightbox, the compose sheet, the nav drawer — and only leaves the page once no layer is open. Back from an open chat must land on the conversation list, NOT the dashboard.
 - Closing a layer with its own ← / ✕ consumes its history entry: the NEXT back press must do real navigation, never a dead press.
 - Desktop (>860px) is untouched: no history entry is created for layers there.
+- The nav drawer registers NO back-layer, and a layer close must never cancel a navigation: on a phone, ☰ → Messages must LAND on Messages (regression 2026-08-29 — the drawer's consumed history entry yanked the router back off /updates).
 - Mechanism: `app/ui/use-back-layer.ts` (`useBackLayer`) — any new full-screen phone takeover must register with it.
