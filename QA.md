@@ -395,7 +395,7 @@ of checks that ran, so a green run is provably a run.
 
 ### Budget expander on a phone: clean money read + change-order sheet (added 2026-08-29)
 - Opening a budget row on ≤700px leads with a money block — one figure per row (ROM, Contracted, Change orders, Builder fee, Total, Drawn/Paid; zero rows skipped, Total in walnut, Paid in green) — before any controls; the how-it-works boilerplate paragraphs are desktop-only.
-- Per-line contract/paid controls STACK on the phone (name, then inputs) — never a wrapped jumble.
+- The per-line contract/paid controls on the phone render as a MATRIX — Line | Contract | Paid, every input and figure on the same grid columns (verify: all Contract inputs share one left edge, all Paid inputs another). The ROM toggle is a small text control under the line name, not a chip. Desktop keeps the inline rows.
 - Change orders on the phone are a single button ("Change orders (N)") opening a floating sheet; filing, the save-for-later / revise-contract decision, approving and removing all happen in the sheet through the SAME ChangeOrders component the desktop panel uses — the two must never drift. Native back closes the sheet.
 - Desktop unchanged: inline change-order panel, no sheet button, no phone money block.
 

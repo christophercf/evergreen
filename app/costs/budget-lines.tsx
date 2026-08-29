@@ -321,8 +321,9 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                     ? "Enter the figure agreed with the trade, before fee. Clearing it takes the line back out of contract."
                     : `Read-only — ${r.manager === "owner" ? "the owner" : "the GC"} manages this line.`}
                 </div>
+                {/* Desktop keeps the inline rows. */}
                 {r.lines.map((l) => (
-                  <div key={l.id} className="bl-linerow" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "4px 0", fontSize: 12 }}>
+                  <div key={l.id} className="m-hide" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "4px 0", fontSize: 12 }}>
                     <span style={{ minWidth: 150 }}>{l.name}</span>
                     {iManage ? (
                       <>
@@ -353,6 +354,41 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                     )}
                   </div>
                 ))}
+                {/* Phone: the same figures as a matrix — Line | Contract | Paid,
+                    every number and input on the same grid, nothing floating. */}
+                <div className="m-only" style={{ flexDirection: "column", marginTop: 2 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 94px 94px", gap: "0 8px", alignItems: "center", padding: "2px 0 5px" }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: MUTED }}>Line</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: MUTED, textAlign: "right" }}>Contract</span>
+                    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: MUTED, textAlign: "right" }}>Paid</span>
+                  </div>
+                  {r.lines.map((l) => (
+                    <div key={l.id} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 94px 94px", gap: "0 8px", alignItems: "center", borderTop: "1px solid var(--cream-2)", padding: "7px 0" }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.name}</div>
+                        {iManage ? (
+                          <button className="tap-row" onClick={() => store.setLineOutsideRom(l.id, !l.outsideRom)}
+                            style={{ border: "none", background: "none", padding: 0, font: "inherit", fontSize: 10.5, color: l.outsideRom ? "var(--brass-2)" : "var(--sage-2)", fontWeight: 600, cursor: "pointer" }}>
+                            {l.outsideRom ? "Outside the ROM" : "In the ROM"}
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: 10.5, color: MUTED }}>{CONTRACT_STATE_LABEL[lineContractState(db, l)]}</div>
+                        )}
+                      </div>
+                      {iManage ? (
+                        <>
+                          <NumInput value={l.lockedCost ?? 0} onCommit={(v) => store.setLineContracted(l.id, v)} width={72} />
+                          <NumInput value={l.directPaid ?? 0} onCommit={(v) => store.setLineDirectPaid(l.id, v)} width={72} />
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.lockedCost ? fmt(l.lockedCost) : "—"}</span>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{l.directPaid ? fmt(l.directPaid) : "—"}</span>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div onClick={(e) => e.stopPropagation()}>
