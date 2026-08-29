@@ -321,11 +321,15 @@ export default function TimingPage() {
         <PhoneAgenda visible={visible} ownerView={ownerView} openId={openId} setOpenId={setOpenId} canEdit={canEdit} onCascade={setCascade} />
       ) : (
       <>
+      {/* The stat row is a desktop read; the phone's summary line carries what
+          matters there, and in Chart mode the chart itself is the point. */}
+      {!phone && (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Tasks" value={`${visible.length}`} sub={`${visible.filter((s) => s.status === "done").length} done`} />
         <StatCard label="Awaiting Trade Confirm" value={`${pending.length}`} accent={pending.length ? "var(--rust)" : "var(--ok)"} sub="date changes pending" />
         <StatCard label="Revisions" value={`${db.scheduleRevisions.length}`} sub="published timing changes" />
       </div>
+      )}
 
       <SectionTitle right={
         <div style={{ display: "flex", gap: 10, fontSize: 11.5, color: "var(--muted)", flexWrap: "wrap", alignItems: "center" }}>
