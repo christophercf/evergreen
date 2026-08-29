@@ -9,6 +9,7 @@ import { tradeName } from "@/lib/data/money";
 import { fileToDataURL, storeFile, driveViewLink } from "../ui/upload";
 import { useFileDrop } from "../ui/use-drop";
 import DrawingViewer from "./drawing-viewer";
+import { useNarrowViewport } from "../ui/desktop-only";
 import { MsgButton } from "../ui/messenger";
 import { FilePreview, FileViewerModal, currentVersion } from "./file-view";
 import { useConfirm } from "../ui/confirm";
@@ -40,12 +41,16 @@ export default function ArtifactsPage() {
   const [fileView, setFileView] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [layout, setLayout] = useState<"cards" | "list">("list");
+  // Phone: a compact modular tile grid — no table, no horizontal panning.
+  const phone = useNarrowViewport();
 
   // deep-link: ?artifact=…&view=scope&trade=…
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const id = q.get("artifact");
-    if (id) setViewer({ id, trade: q.get("view") === "scope" ? q.get("trade") ?? undefined : undefined });
+    if (!id) return;
+    if (q.get("view") === "scope") setViewer({ id, trade: q.get("trade") ?? undefined });
+    else setFileView(id);
   }, []);
 
   if (access === "none") return <NoAccess module="Artifacts" />;
@@ -66,20 +71,24 @@ export default function ArtifactsPage() {
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
 
+      {!phone && (
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px,1fr))", gap: 12, marginTop: 16 }}>
         <StatCard label="Documents" value={`${visible.length}`} />
         <StatCard label="Drawings" value={`${byKind("drawing").length}`} accent="var(--sage-2)" />
         <StatCard label="Watched for changes" value={`${watched}`} accent="var(--brass-2)" sub="notify on new version" />
         <StatCard label="Photos" value={`${byKind("photo").length}`} sub="incl. line-item photos" />
       </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
         {!ro && <AddArtifact />}
+        {!phone && (
         <div style={{ marginLeft: "auto", display: "inline-flex", gap: 4, background: "var(--cream-2)", padding: 3, borderRadius: 8 }}>
           {([["cards", "⊞ Cards"], ["list", "☰ List"]] as const).map(([v, lbl]) => (
             <button key={v} onClick={() => setLayout(v)} className="btn btn-sm" style={layout === v ? { background: "var(--walnut)", color: "#fff" } : { background: "transparent", border: "none" }}>{lbl}</button>
           ))}
         </div>
+        )}
       </div>
 
       {KIND_ORDER.map((k) => {
@@ -93,6 +102,8 @@ export default function ArtifactsPage() {
             {!ro && <div style={{ marginBottom: 10 }}><SectionAdder kind={k} /></div>}
             {items.length === 0 ? (
               <div className="card" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>No {ARTIFACT_KIND_LABEL[k].toLowerCase()} yet — use “＋ Add” above to define one on the fly.</div>
+            ) : phone ? (
+              <TileGrid items={items} ro={ro} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} />
             ) : layout === "cards" ? (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px,1fr))", gap: 12 }}>
                 {items.map((a) => <ArtifactCard key={a.id} a={a} ro={ro} isAdmin={isAdmin} onOpen={() => setViewer({ id: a.id })} onView={() => setFileView(a.id)} />)}
@@ -109,7 +120,9 @@ export default function ArtifactsPage() {
           <button onClick={() => setShowArchived((v) => !v)} className="btn btn-sm" style={{ display: "inline-flex", gap: 6 }}>
             {showArchived ? "▾" : "▸"} 🗄 Archived ({archived.length})
           </button>
-          {showArchived && <div style={{ marginTop: 10 }}><ArtifactTable items={archived} ro={ro} isAdmin={isAdmin} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} /></div>}
+          {showArchived && <div style={{ marginTop: 10 }}>{phone
+            ? <TileGrid items={archived} ro={ro} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} />
+            : <ArtifactTable items={archived} ro={ro} isAdmin={isAdmin} onOpen={(id) => setViewer({ id })} onView={(id) => setFileView(id)} />}</div>}
         </section>
       )}
 
@@ -174,7 +187,7 @@ function ArtifactCard({ a, ro, isAdmin, onOpen, onView }: { a: Artifact; ro: boo
           next to Archive, told apart by colour alone despite being the one
           that cannot be undone. */}
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-        {a.kind === "drawing" && <button className="btn btn-sm btn-primary" onClick={onOpen}>Interactive view</button>}
+        {a.kind === "drawing" && <button className="btn btn-sm" onClick={onOpen}>Scope view</button>}
         {hasAnyFile && <button className="btn btn-sm btn-primary" onClick={onView}>View</button>}
         {href ? (cur?.fileUrl ? <a className="btn btn-sm" href={href} download={cur.fileName ?? a.name}>Download</a> : <a className="btn btn-sm" href={driveViewLink(href)} target="_blank" rel="noreferrer">Open ↗</a>) : null}
         <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
@@ -304,6 +317,62 @@ function GeneralPermitNote({ items }: { items: Artifact[] }) {
 }
 
 // ---------------------------------------------------------------------------
+// The phone's view: a modular tile grid, two across. The sections already say
+// what kind a document is, so a tile carries only what a thumb needs — the
+// preview and the name (plus a permit's status, which blocks work). Type,
+// source and version stay on the desktop; everything else is behind ⋯.
+function TileGrid({ items, ro, onOpen, onView }: { items: Artifact[]; ro: boolean; onOpen: (id: string) => void; onView: (id: string) => void }) {
+  const store = useStore();
+  const ask = useConfirm();
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: 10 }}>
+      {items.map((a) => {
+        const cur = currentVersion(a);
+        const hasFile = !!(cur?.fileUrl || cur?.driveUrl);
+        const menu = menuFor === a.id;
+        const openIt = hasFile ? () => onView(a.id) : a.kind === "drawing" ? () => onOpen(a.id) : undefined;
+        return (
+          <div key={a.id} className="card" style={{ padding: 8, display: "flex", flexDirection: "column", gap: 6, minWidth: 0, opacity: a.archived ? 0.7 : 1 }}>
+            <button onClick={openIt} disabled={!openIt} aria-label={`Open ${a.name}`}
+              style={{ border: "none", background: "transparent", padding: 0, cursor: openIt ? "zoom-in" : "default", display: "block" }}>
+              <FilePreview a={a} height={92} />
+            </button>
+            <button onClick={openIt} disabled={!openIt} className="tap-row"
+              style={{ border: "none", background: "transparent", padding: 0, textAlign: "left", cursor: openIt ? "pointer" : "default", font: "inherit" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--walnut)", lineHeight: 1.3, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{a.name}</span>
+            </button>
+            {a.kind === "permit" && a.permitStatus && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: a.permitStatus === "issued" ? "var(--ok)" : "var(--rust)" }}>
+                {a.permitStatus === "issued" ? "✓ issued" : "⏳ pending — blocks work"}
+              </span>
+            )}
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />
+              <button className="btn btn-sm tap" aria-label="More actions" style={{ marginLeft: "auto" }} onClick={() => setMenuFor(menu ? null : a.id)}>⋯</button>
+            </div>
+            {menu && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+                {a.kind === "drawing" && <button className="btn btn-sm" onClick={() => { setMenuFor(null); onOpen(a.id); }}>Scope view</button>}
+                {cur?.fileUrl ? <a className="btn btn-sm" href={cur.fileUrl} download={cur.fileName ?? a.name}>Download</a>
+                  : cur?.driveUrl ? <a className="btn btn-sm" href={driveViewLink(cur.driveUrl)} target="_blank" rel="noreferrer">Open in Drive ↗</a> : null}
+                {!ro && <button className="btn btn-sm" onClick={() => store.setArtifactArchived(a.id, !a.archived)}>{a.archived ? "Unarchive" : "Archive"}</button>}
+                {!ro && (
+                  <button className="btn btn-sm" style={{ color: "var(--rust)" }}
+                    onClick={async () => { if (await ask({ title: `Permanently remove "${a.name}"?`, body: "Every version of it goes too, and this cannot be undone. Archiving keeps it and takes it out of the way.", danger: "Delete for good" })) store.removeArtifact(a.id); }}>
+                    Delete permanently
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Linear matrix (table) view — used for List layout and archived docs.
 function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: boolean; isAdmin: boolean; onOpen: (id: string) => void; onView: (id: string) => void }) {
   const store = useStore();
@@ -327,7 +396,7 @@ function ArtifactTable({ items, ro, onOpen, onView }: { items: Artifact[]; ro: b
                 <td style={tdS}>{cur?.label ?? "—"}</td>
                 <td style={tdS}><AccessSummary a={a} /></td>
                 <td style={{ ...tdS, textAlign: "right", whiteSpace: "nowrap" }}>
-                  {a.kind === "drawing" && <button className="btn btn-sm" title="Interactive view" onClick={() => onOpen(a.id)}>✍️</button>}
+                  {a.kind === "drawing" && <button className="btn btn-sm" title="Scope view" onClick={() => onOpen(a.id)}>🎯</button>}
                   {hasFile && <button className="btn btn-sm" title="View" onClick={() => onView(a.id)}>👁</button>}
                   {cur?.fileUrl ? <a className="btn btn-sm" title="Download" href={cur.fileUrl} download={cur.fileName ?? a.name}>⬇</a> : cur?.driveUrl ? <a className="btn btn-sm" title="Open" href={driveViewLink(cur.driveUrl)} target="_blank" rel="noreferrer">↗</a> : null}
                   <MsgButton kind="artifact" refId={a.id} label={a.name} href={`/artifacts?artifact=${a.id}`} small />

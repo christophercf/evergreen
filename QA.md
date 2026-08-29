@@ -409,3 +409,8 @@ of checks that ran, so a green run is provably a run.
 - Each material carries ONE mapping — its trade — editable in the table row, the phone quick-fields, and the detail's Trade block. The Due column is a single derived date from that trade's schedule window; changing the trade moves the date (a trade edit also clears any legacy hidden task tie).
 - Adding a material asks Item / Room / Trade / Qty, nothing more.
 - Data model untouched: dueMode/needBy/linkedScheduleId still exist on old rows; only the UI for tuning them is gone. Do not re-add the machinery without an explicit ask.
+
+### Artifacts: phone tiles, markup retired (decision 2026-08-29)
+- On ≤860px Artifacts renders as a modular TWO-UP tile grid per section — preview + name (+ a permit's issued/pending status) and a ⋯ menu; NO table, NO stat cards, NO Cards/List toggle, NO type/source/version (the section headings carry the kind), and no horizontal scrolling at 375px. Tapping a tile opens the file viewer.
+- Markup is REMOVED everywhere (phone and desktop): no pins, no scribble, no markup list, no "Interactive view". The drawing viewer survives as "Scope view" — zoom/pan, trade scope shading, admin room mapping — and Contracts' scope-drawing links (?view=scope&trade=) still open it. A plain ?artifact= deep link opens the file viewer instead.
+- Desktop list/cards views unchanged apart from the markup removal.
