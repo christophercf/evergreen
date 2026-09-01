@@ -414,3 +414,8 @@ of checks that ran, so a green run is provably a run.
 - On ≤860px Artifacts renders as a modular TWO-UP tile grid per section — preview + name (+ a permit's issued/pending status) and a ⋯ menu; NO table, NO stat cards, NO Cards/List toggle, NO type/source/version (the section headings carry the kind), and no horizontal scrolling at 375px. Tapping a tile opens the file viewer.
 - Markup is REMOVED everywhere (phone and desktop): no pins, no scribble, no markup list, no "Interactive view". The drawing viewer survives as "Scope view" — zoom/pan, trade scope shading, admin room mapping — and Contracts' scope-drawing links (?view=scope&trade=) still open it. A plain ?artifact= deep link opens the file viewer instead.
 - Desktop list/cards views unchanged apart from the markup removal.
+
+### Receipts inbox (added 2026-08-29)
+- Bills forwarded to the receipts alias hit /api/inbound-receipt (shared-secret auth). SENDER ALLOWLIST: mail from a non-member is answered 200 and filed NOWHERE. Claude parses vendor/date/amount + suggests a budget line; parse failure still files the receipt with empty fields — the pipeline never loses one.
+- Suggestions are PENDING and touch no money. Only owner/full_admin see the "Receipts to review" inbox on Budget Management; confirming (role-checked again in the mutator) writes the reviewed values, files the original into Artifacts against the chosen line, and — only for "count as paid" — adds the amount to the line's directPaid with a stamped note. "File as evidence on a draw" moves no money. Dismiss keeps the record.
+- Confirm button carries its consequence ("Confirm — adds $X to {line}'s paid"); disabled state names what's missing.

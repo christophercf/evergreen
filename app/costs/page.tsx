@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill, SectionTitle, Money, StatCard, StackBar, NumInput } from "../ui/bits";
 import { BudgetLines } from "./budget-lines";
+import { ReceiptsInbox } from "./receipts-inbox";
 import { MASTER_TERMS } from "@/lib/data/seed";
 import { accessFor, isOwnerManaged, type CostLine, type CostOwner, type LinePhase, type MarkupModel, type MacroCategory, type RoomFloor } from "@/lib/data/types";
 import { lineBase, lineStart, lineDelta, totals, byCategory, byTrade, drawAmount, lineBaseline, lineCurrent, approvedChanges, approvedSavings, approvedNetChange, phaseAmount, phasesTotal, tradeName, fmt, linePaid, linePaidByDraws, lineUnpaid, linePaidStatus, lineHasRange, lineLow, lineHigh, budgetRange, isLocked, lineLockedCost, lineRemaining, macroOrder, macroColor } from "@/lib/data/money";
@@ -48,6 +49,10 @@ export default function CostsPage() {
         subtitle="The money, one line per trade. The builder drafts a rough figure, the owner agrees it, and from there the price is settled inside the packages. A signed line moves only through a change order, and a line paid in full closes."
         right={ro ? <Pill color="var(--muted)">View only</Pill> : undefined}
       />
+
+      {/* Forwarded bills waiting on the owner's confirmation come first —
+          they are decisions, and decisions outrank charts. */}
+      <ReceiptsInbox />
 
       {/* The time series leads: how the budget got to where it is, before the
           lines that make it up. */}

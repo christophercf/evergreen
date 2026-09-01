@@ -2049,6 +2049,78 @@ class Store {
     };
   }
 
+  // ---- Receipts inbox ----
+  /** The owner (or admin) confirms a forwarded receipt: the reviewed values
+   *  are final, the original files into Artifacts against the chosen line,
+   *  and — only if applied as a direct payment — the line's Paid moves. The
+   *  suggestion itself never touched the money. */
+  confirmReceipt(id: string, final: {
+    lineId: string;
+    appliedAs: "direct" | "draw";
+    drawId?: string;
+    vendor: string;
+    date?: string;
+    amount: number;
+    summary?: string;
+  }): boolean {
+    const role = this.session.role;
+    if (role !== "owner" && role !== "full_admin") return false;
+    if (!final.lineId || !(final.amount > 0)) return false;
+    const line = this.db.costLines.find((l) => l.id === final.lineId);
+    if (!line) return false;
+    const rec = (this.db.receipts ?? []).find((r) => r.id === id);
+    if (!rec || rec.status !== "pending") return false;
+    const artId = newId("art");
+    this.mutate((db) => {
+      const r = (db.receipts ?? []).find((x) => x.id === id);
+      const l = db.costLines.find((x) => x.id === final.lineId);
+      if (!r || r.status !== "pending" || !l) return;
+      r.status = "confirmed";
+      r.vendor = final.vendor; r.date = final.date; r.amount = final.amount; r.summary = final.summary;
+      r.confirmedBy = this.session.displayName;
+      r.confirmedAt = new Date().toISOString();
+      r.confirmedLineId = final.lineId;
+      r.appliedAs = final.appliedAs;
+      r.appliedDrawId = final.appliedAs === "draw" ? final.drawId : undefined;
+      // File the evidence where the money lives.
+      r.artifactId = artId;
+      db.artifacts.unshift({
+        id: artId,
+        name: `Receipt — ${final.vendor}${final.date ? ` · ${final.date}` : ""} · $${final.amount.toLocaleString()}`,
+        kind: "other",
+        source: `forwarded by ${r.fromEmail}`,
+        date: final.date,
+        notes: final.summary,
+        lineId: final.lineId,
+        versions: r.fileUrl ? [{ id: newId("av"), label: "v1", uploadedAt: new Date().toISOString(), uploadedBy: this.session.displayName, fileUrl: r.fileUrl, fileName: r.fileName }] : undefined,
+      });
+      if (final.appliedAs === "direct") {
+        l.directPaid = (l.directPaid ?? 0) + final.amount;
+        l.directPaidDate = final.date ?? new Date().toISOString().slice(0, 10);
+        l.directPaidNote = [l.directPaidNote, `${final.vendor} $${final.amount.toLocaleString()}${final.date ? ` (${final.date})` : ""}`].filter(Boolean).join("; ").slice(0, 500);
+      } else if (final.drawId) {
+        const d = db.draws.find((x) => x.id === final.drawId);
+        if (d) d.note = [d.note, `Receipt: ${final.vendor} $${final.amount.toLocaleString()}${final.date ? ` (${final.date})` : ""}`].filter(Boolean).join("\n").slice(0, 1000);
+      }
+    }, final.appliedAs === "direct"
+      ? `Receipt confirmed — $${final.amount.toLocaleString()} added to ${line.name}'s paid.`
+      : `Receipt confirmed and filed against the draw.`);
+    return true;
+  }
+
+  /** Not project money (or not worth tracking) — keep the record, move on. */
+  dismissReceipt(id: string) {
+    const role = this.session.role;
+    if (role !== "owner" && role !== "full_admin") return;
+    this.mutate((db) => {
+      const r = (db.receipts ?? []).find((x) => x.id === id);
+      if (!r || r.status !== "pending") return;
+      r.status = "dismissed";
+      r.dismissedBy = this.session.displayName;
+      r.dismissedAt = new Date().toISOString();
+    }, "Receipt dismissed.");
+  }
+
   // ---- Vendor agreements ----
   private ensureAgreement(db: DB, tradeId: string) {
     let a = db.vendorAgreements.find((x) => x.tradeId === tradeId);

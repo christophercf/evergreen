@@ -1000,6 +1000,44 @@ export function canMessageUser(sender: User | undefined, senderRole: Role, targe
   return false;
 }
 
+// ---- Receipts inbox ---------------------------------------------------------
+// A bill or receipt forwarded to the project's email alias. The endpoint reads
+// it (Claude vision) and files a SUGGESTION here — vendor, date, amount and a
+// guessed budget line. Nothing touches the money until the owner reviews it,
+// corrects anything, and confirms which line it counts against. The AI
+// suggests; a person decides.
+export type ReceiptStatus = "pending" | "confirmed" | "dismissed";
+
+export interface ReceiptSuggestion {
+  id: string;
+  receivedAt: string;
+  /** The project member who forwarded it (sender allowlist is enforced). */
+  fromEmail: string;
+  subject?: string;
+  /** The original attachment (Supabase Storage URL) — the evidence. */
+  fileUrl?: string;
+  fileName?: string;
+  /** Parsed by Claude; every field is editable before confirming. */
+  vendor?: string;
+  date?: string;
+  amount?: number;
+  summary?: string;
+  suggestedLineId?: string;
+  suggestedReason?: string;
+  confidence?: "high" | "medium" | "low";
+  status: ReceiptStatus;
+  confirmedBy?: string;
+  confirmedAt?: string;
+  confirmedLineId?: string;
+  /** direct = counts toward the line's Paid; draw = filed as evidence on a draw. */
+  appliedAs?: "direct" | "draw";
+  appliedDrawId?: string;
+  /** The Artifacts record the original was filed to on confirm. */
+  artifactId?: string;
+  dismissedBy?: string;
+  dismissedAt?: string;
+}
+
 // ---- Field Updates ----------------------------------------------------------
 // A GC-only, phone-first composer builds a client-facing site report item by
 // item, then publishes it as ONE formatted update: sent through Messages AND by
@@ -1340,6 +1378,9 @@ export interface DB {
    *  the module existed, so every reader must tolerate undefined. Immutable
    *  once published — there is deliberately no mutator that edits one. */
   fieldUpdates?: FieldUpdate[];
+  /** Forwarded receipts awaiting (or past) owner review, newest first. Absent
+   *  on databases saved before the receipts inbox existed. */
+  receipts?: ReceiptSuggestion[];
   tradeRatings: TradeRating[];
   /** Conversation metadata, keyed by the sorted participant-id key. A
    *  conversation is otherwise derived from its messages, so this is the one
