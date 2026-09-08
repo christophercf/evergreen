@@ -1946,6 +1946,9 @@ class Store {
     const live = (u: User) => u.status !== "invited" && u.status !== "pending" && !u.disabled;
     const owners = input.sendTo.owner ? db.users.filter((u) => u.role === "owner" && live(u)) : [];
     const designers = input.sendTo.designer ? db.users.filter((u) => u.role === "viewer" && live(u)) : [];
+    // The full admin oversees the project: every published update reaches
+    // them (message + email) whoever it was addressed to — except their own.
+    const admins = db.users.filter((u) => u.role === "full_admin" && live(u) && u.id !== this.session.userId);
     // Awarded vendors only — a trade with a contract standing behind it — and
     // only those with at least one item in THIS update. A vendor with nothing
     // in the report receives nothing at all.
@@ -1955,7 +1958,7 @@ class Store {
       ? db.users.filter((u) => u.role === "trade" && live(u) &&
           (u.tradeIds ?? []).some((t) => awardedTradeIds.has(t) && itemTradeIds.has(t)))
       : [];
-    if (!owners.length && !designers.length && !vendors.length) return null;
+    if (!owners.length && !designers.length && !vendors.length && !admins.length) return null;
     const vendorItemCount = (u: User) => input.items.filter((i) => i.tradeId && (u.tradeIds ?? []).includes(i.tradeId)).length;
 
     const toNames = [
@@ -2006,7 +2009,7 @@ class Store {
       };
       post(
         teamMsgId,
-        [...owners, ...designers].map((u) => u.id),
+        [...owners, ...designers, ...admins].map((u) => u.id),
         `Field update No ${noLabel} is out: ${items.length} ${items.length === 1 ? "item" : "items"}` +
           (reds ? `, ${reds} flagged red` : "") + (asks ? `, ${asks} waiting on your decision` : "") +
           ". Open it for the photos and the detail. Also sent by email.",
@@ -2044,7 +2047,7 @@ class Store {
     this.announceSave(`Published to ${sentToLine} — in Messages and by email.${asks ? ` ${asks} ${asks === 1 ? "ask is" : "asks are"} waiting on the owner.` : ""}`);
     return {
       id, no: finalNo, title, dateLabel, sentToLine,
-      teamEmails: [...owners, ...designers].filter((u) => !u.emailOptOut && !!u.email).map((u) => u.email),
+      teamEmails: [...owners, ...designers, ...admins].filter((u) => !u.emailOptOut && !!u.email).map((u) => u.email),
       vendorRecipients: vendors.map((u) => ({ userId: u.id, email: u.emailOptOut ? undefined : u.email, tradeIds: u.tradeIds ?? [] })),
     };
   }

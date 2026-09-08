@@ -419,3 +419,8 @@ of checks that ran, so a green run is provably a run.
 - Bills forwarded to the receipts alias hit /api/inbound-receipt (shared-secret auth). SENDER ALLOWLIST: mail from a non-member is answered 200 and filed NOWHERE. Claude parses vendor/date/amount + suggests a budget line; parse failure still files the receipt with empty fields — the pipeline never loses one.
 - Suggestions are PENDING and touch no money. Only owner/full_admin see the "Receipts to review" inbox on Budget Management; confirming (role-checked again in the mutator) writes the reviewed values, files the original into Artifacts against the chosen line, and — only for "count as paid" — adds the amount to the line's directPaid with a stamped note. "File as evidence on a draw" moves no money. Dismiss keeps the record.
 - Confirm button carries its consequence ("Confirm — adds $X to {line}'s paid"); disabled state names what's missing.
+
+### Field Updates hardening round 2 (after a lost report, 2026-08-29)
+- The composer draft (title, items, recipients) persists in localStorage per user and restores on the next open; it clears ONLY on a successful publish. A failed publish must never lose the report.
+- Every published update also reaches the full admin(s) — thread, notification and email — whoever it was addressed to, excluding the publisher themselves.
+- Supabase persistDB carries server-side fieldUpdates and receipts (and field-update chips) that this client has never seen across a full-document save, so a stale tab's small edit can no longer erase another device's published report or a webhook-filed receipt.

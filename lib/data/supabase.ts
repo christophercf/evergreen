@@ -79,6 +79,34 @@ export class SupabaseBackend implements Backend {
   }
 
   async persistDB(db: DB): Promise<void> {
+    // A full-document save carries this client's copy of EVERYTHING — so a
+    // stale tab saving one small edit can silently erase records that were
+    // written elsewhere since it loaded: another device's published field
+    // update, or a receipt the inbound-email webhook filed server-side. Those
+    // two collections are append-heavy and externally written, so before the
+    // upsert we read the server's copy and carry across anything this client
+    // has never seen. (This is a guard for the worst losses, not a general
+    // merge — a lost field update took a GC's report, its messages and its
+    // emailed links with it.)
+    try {
+      const { data } = await this.client.from("project_state").select("db").eq("id", PROJECT_ID).maybeSingle();
+      const server = data?.db as DB | undefined;
+      if (server) {
+        const mergeById = <T extends { id: string }>(local: T[] | undefined, remote: T[] | undefined): T[] | undefined => {
+          if (!remote?.length) return local;
+          const have = new Set((local ?? []).map((x) => x.id));
+          const missing = remote.filter((x) => !have.has(x.id));
+          return missing.length ? [...missing, ...(local ?? [])] : local;
+        };
+        db.fieldUpdates = mergeById(db.fieldUpdates, server.fieldUpdates);
+        db.receipts = mergeById(db.receipts, server.receipts);
+        // A resurrected field update needs its Messages chips back too.
+        const localFu = new Set((db.fieldUpdates ?? []).map((u) => u.id));
+        const haveMsg = new Set(db.updates.map((m) => m.id));
+        const chips = server.updates.filter((m) => m.context?.kind === "field" && localFu.has(m.context.refId) && !haveMsg.has(m.id));
+        if (chips.length) db.updates = [...chips, ...db.updates];
+      }
+    } catch { /* the guard is best-effort — the save itself must still go out */ }
     // supabase-js reports failures in `error` rather than throwing. Unchecked,
     // a rejected write is invisible: the UI has already shown "Saved" and the
     // change is gone at the next refresh. Throw so the store can say so.

@@ -168,6 +168,30 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
   const [pubMsg, setPubMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [publishing, setPublishing] = useState(false);
 
+  // The draft survives everything short of a successful publish. A GC types a
+  // report one-handed on a ladder; a dropped connection, a mis-tap or a dead
+  // battery must not eat it (it already happened once — a report was lost to
+  // a failed publish that its author never saw fail).
+  const draftKey = `evergreen.fielddraft.v1:${store.session.userId}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { title?: string; items?: DraftItem[]; sendTo?: { owner: boolean; designer: boolean; vendors: boolean } };
+      if (d.items?.length) { setItems(d.items); setComposing(false); }
+      if (d.title) setTitle(d.title);
+      if (d.sendTo) setSendTo(d.sendTo);
+    } catch { /* a bad draft is not worth a crash */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    try {
+      if (!items.length && !title.trim()) localStorage.removeItem(draftKey);
+      else localStorage.setItem(draftKey, JSON.stringify({ title, items, sendTo }));
+    } catch { /* quota — the in-memory draft still stands */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items, title, sendTo]);
+
   const say = (t: string) => { setAck(t); setTimeout(() => setAck((cur) => (cur === t ? null : cur)), 4000); };
 
   // ---- item entry state ----
@@ -296,6 +320,7 @@ function Composer({ onOpen }: { onOpen: (id: string) => void }) {
     for (const v of res.vendorRecipients) {
       if (v.email) send([v.email], items.filter((i) => i.tradeId && v.tradeIds.includes(i.tradeId)), "vendor");
     }
+    try { localStorage.removeItem(draftKey); } catch { /* ignore */ }
     setItems([]); setTitle(""); setComposing(true); setOpenItem(-1); resetEntry();
     setPubMsg({ ok: true, text: `Published to ${res.sentToLine} — in Messages and by email.` });
     setTimeout(() => setPubMsg(null), 6000);
