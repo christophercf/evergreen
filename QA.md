@@ -399,6 +399,11 @@ of checks that ran, so a green run is provably a run.
 - Change orders on the phone are a single button ("Change orders (N)") opening a floating sheet; filing, the save-for-later / revise-contract decision, approving and removing all happen in the sheet through the SAME ChangeOrders component the desktop panel uses — the two must never drift. Native back closes the sheet.
 - Desktop unchanged: inline change-order panel, no sheet button, no phone money block.
 
+### Drawn / Paid never reads "of $0 drawn" (added 2026-09-11)
+- A line paid DIRECT (directPaid set, no draw allocations) shows "$X paid direct" in the Drawn/Paid cell and the phone expander — never "$X of $0 drawn", which reads like the payment failed to register (this escaped: window deposit entered 2026-09-11 looked lost).
+- The "of $Y drawn" qualifier appears only when a draw actually exists (draw > $0) AND drawn differs from paid; when they match, the bare figure.
+- Verify with: enter a Paid amount on a line with no draws (e.g. Masonry in mock) → collapsed row and expander both say "paid direct"; a draw-backed row (Electrical in mock) still says "$X of $Y drawn".
+
 ### Refresh never flashes the login screen (added 2026-08-29)
 - In Supabase mode, "not signed in YET" and "signed out" are different states: while the session restores after a refresh, the app shows the brand splash ("Signing you back in…"), and the login screen appears ONLY once auth has definitively answered no-session. The prerendered HTML must contain the splash, not the login form.
 - The splash must never outstay auth: signed-out browsers reach the login screen within a second (INITIAL_SESSION is local), an 8s safety valve falls back to the login screen if the auth client never answers, and mock mode never shows the splash at all.

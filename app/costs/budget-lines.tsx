@@ -230,9 +230,14 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
         <Num hide v={r.changeOrders} />
         <Num hide v={r.builderFee} />
         <Num v={r.total} bold />
-        <Num v={r.paid} node={r.draw !== r.paid
+        {/* "of $X drawn" only when a draw actually exists — a line paid direct
+            (outside any draw) has draw = $0, and "of $0 drawn" reads like the
+            payment never registered. */}
+        <Num v={r.paid} node={r.draw > 0.5 && Math.abs(r.draw - r.paid) > 0.5
           ? <span>{fmt(r.paid)}<span style={{ color: MUTED, fontSize: 11 }}> of {fmt(r.draw)} drawn</span></span>
-          : undefined} />
+          : r.paid > 0.5 && r.draw <= 0.5
+            ? <span>{fmt(r.paid)}<span style={{ color: MUTED, fontSize: 11 }}> paid direct</span></span>
+            : undefined} />
       </tr>
 
       {on ? (
@@ -258,7 +263,8 @@ function Row({ r, canCommit, canEditLine, on, onToggle }: {
                 ["Change orders", fmt(r.changeOrders), undefined, r.changeOrders !== 0],
                 ["Builder fee", fmt(r.builderFee), undefined, r.builderFee !== 0],
                 ["Total", fmt(r.total), "var(--walnut)", true],
-                ["Drawn / Paid", r.draw !== r.paid ? `${fmt(r.paid)} of ${fmt(r.draw)}` : fmt(r.paid), "var(--ok)", true],
+                ["Drawn / Paid", r.draw > 0.5 && Math.abs(r.draw - r.paid) > 0.5 ? `${fmt(r.paid)} of ${fmt(r.draw)} drawn`
+                  : r.paid > 0.5 && r.draw <= 0.5 ? `${fmt(r.paid)} paid direct` : fmt(r.paid), "var(--ok)", true],
               ] as const).filter(([, , , show]) => show).map(([label, value, accent]) => (
                 <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, fontSize: 12.5, padding: "5px 0", borderTop: "1px solid var(--cream-2)" }}>
                   <span style={{ color: MUTED }}>{label}</span>
