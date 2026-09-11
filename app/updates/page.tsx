@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type MsgQuote, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
@@ -58,9 +58,40 @@ type Msg = { id: string; authorId: string; authorName: string; at: string; body?
 
 // WhatsApp's default reaction set.
 const REACT_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
-type Conv = { key: string; otherIds: string[]; items: SiteUpdate[]; msgs: Msg[]; lastAt: string; preview: string };
+type Conv = { key: string; threadId?: string; otherIds: string[]; items: SiteUpdate[]; msgs: Msg[]; lastAt: string; preview: string };
 
 const convKeyOf = (ids: string[]) => [...new Set(ids)].sort().join("+");
+/** A thread key: a conversation with its OWN identity, so the same people can
+ *  hold several separate threads and membership can change over time. Legacy
+ *  conversations keep their participant-set key and behave as they always did. */
+const isThreadKey = (k: string) => k.startsWith("th-");
+const mintThreadKey = () => `th-${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
+
+/** Which of these people the text @-mentions — matched on first name or full
+ *  name, case-insensitively. Five people with distinct first names: fine. */
+function mentionIdsIn(text: string, people: User[]): string[] {
+  const t = text.toLowerCase();
+  return people.filter((u) => {
+    const first = u.name.split(" ")[0].toLowerCase();
+    return t.includes(`@${first}`) || t.includes(`@${u.name.toLowerCase()}`);
+  }).map((u) => u.id);
+}
+
+/** Render a message body with @-mentions highlighted. */
+function BodyWithMentions({ text, people }: { text: string; people: User[] }) {
+  const firsts = people.map((u) => u.name.split(" ")[0]).filter(Boolean);
+  if (!firsts.length || !text.includes("@")) return <>{text}</>;
+  const re = new RegExp(`@(${firsts.map((f) => f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`, "gi");
+  const parts: ReactNode[] = [];
+  let last = 0; let m: RegExpExecArray | null; let k = 0;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) parts.push(text.slice(last, m.index));
+    parts.push(<strong key={k++} style={{ color: "var(--sage-2)", background: "var(--sage-tint)", borderRadius: 4, padding: "0 3px" }}>@{m[1]}</strong>);
+    last = m.index + m[0].length;
+  }
+  parts.push(text.slice(last));
+  return <>{parts}</>;
+}
 
 // A chat send whose title was auto-derived from the body shouldn't repeat it.
 const derivedTitle = (body: string) => (body.trim().split("\n")[0] ?? "").slice(0, 60) || "📷 Photo";
@@ -128,7 +159,7 @@ export default function UpdatesPage() {
   useEffect(() => {
     const key = new URLSearchParams(window.location.search).get("conv");
     if (!key) return;
-    setPendingOthers(key.split("+").filter((id) => id !== store.session.userId));
+    if (!isThreadKey(key)) setPendingOthers(key.split("+").filter((id) => id !== store.session.userId));
     setSel(key);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -138,15 +169,25 @@ export default function UpdatesPage() {
 
   // ---- conversations from the update log ----
   const convs = useMemo<Conv[]>(() => {
-    const visible = db.updates.filter((u) => isAdmin || u.authorId === meId || u.toUserIds.includes(meId));
+    const metaBy = (key: string) => db.convMeta?.find((m) => m.key === key);
+    // A thread message is readable by the thread's CURRENT membership — a
+    // newcomer reads the whole history. Legacy messages keep per-message
+    // visibility, exactly as before.
+    const visible = db.updates.filter((u) => {
+      if (isAdmin || u.authorId === meId || u.toUserIds.includes(meId)) return true;
+      if (u.threadId) return !!metaBy(u.threadId)?.participantIds?.includes(meId);
+      return false;
+    });
     const map = new Map<string, SiteUpdate[]>();
     for (const u of visible) {
-      const key = convKeyOf([u.authorId, ...u.toUserIds]);
+      const key = u.threadId ?? convKeyOf([u.authorId, ...u.toUserIds]);
       map.set(key, [...(map.get(key) ?? []), u]);
     }
     const out: Conv[] = [];
     for (const [key, items] of map) {
-      const participantIds = key.split("+");
+      const participantIds = isThreadKey(key)
+        ? (metaBy(key)?.participantIds ?? [...new Set(items.flatMap((u) => [u.authorId, ...u.toUserIds]))])
+        : key.split("+");
       const otherIds = participantIds.filter((id) => id !== meId);
       const msgs: Msg[] = items.flatMap((u) => [
         { id: u.id, authorId: u.authorId, authorName: u.authorName, at: u.at, body: u.body, title: u.title, photos: u.photos, context: u.context, quote: u.quote, reactions: u.reactions },
@@ -154,20 +195,21 @@ export default function UpdatesPage() {
       ]).sort((a, b) => a.at.localeCompare(b.at));
       const last = msgs[msgs.length - 1];
       out.push({
-        key, otherIds: otherIds.length ? otherIds : participantIds, items, msgs,
+        key, threadId: isThreadKey(key) ? key : undefined,
+        otherIds: otherIds.length ? otherIds : participantIds, items, msgs,
         lastAt: last?.at ?? "",
         preview: last ? `${last.authorId === meId ? "You: " : ""}${(last.body || last.title || "").slice(0, 64)}${last.photos?.length ? " 📷" : ""}` : "",
       });
     }
     return out;
-  }, [db.updates, meId, isAdmin]);
+  }, [db.updates, db.convMeta, meId, isAdmin]);
 
   // The selected conversation — possibly a brand-new (empty) one.
   const selConv: Conv | null = useMemo(() => {
     if (!sel) return null;
     const found = convs.find((c) => c.key === sel);
     if (found) return found;
-    if (pendingOthers) return { key: sel, otherIds: pendingOthers, items: [], msgs: [], lastAt: "", preview: "" };
+    if (pendingOthers) return { key: sel, threadId: isThreadKey(sel) ? sel : undefined, otherIds: pendingOthers, items: [], msgs: [], lastAt: "", preview: "" };
     return null;
   }, [sel, convs, pendingOthers]);
 
@@ -256,11 +298,11 @@ export default function UpdatesPage() {
 
   const openConv = (ids: string[], subject?: string) => {
     if (!ids.length) return;
-    const key = convKeyOf([meId, ...ids]);
-    // "New group" with the same people as an existing thread lands in that
-    // thread — its subject is shared history and must not be silently renamed.
-    const existing = db.convMeta?.find((m) => m.key === key)?.subject;
-    if (subject?.trim() && !existing) store.setConversationSubject(key, subject);
+    // A single chat merges into the existing one-to-one thread (WhatsApp's
+    // reflex). A GROUP is always a FRESH thread with its own identity — the
+    // same five people can hold as many separate threads as the job needs.
+    const key = ids.length === 1 ? convKeyOf([meId, ...ids]) : mintThreadKey();
+    if (subject?.trim() && ids.length > 1) store.setConversationSubject(key, subject);
     setPendingOthers(ids);
     setSel(key);
     setShowNew(false); setGroupMode(false); setNewTo(new Set()); setNewSubject(""); setPq("");
@@ -606,6 +648,15 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
   const [quoting, setQuoting] = useState<MsgQuote | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [reactFor, setReactFor] = useState<string | null>(null);
+  // Thread membership management (threads only; legacy chats are fixed-set).
+  const [managing, setManaging] = useState(false);
+  const role = store.session.role;
+  const user = store.currentUser;
+  const meta2 = store.db.convMeta?.find((m) => m.key === conv.key);
+  const canManageMembers = role === "full_admin" || meta2?.createdBy === meId;
+  const addCandidates = conv.threadId
+    ? db.users.filter((u) => u.id !== meId && !conv.otherIds.includes(u.id) && canMessageUser(user, role, u, db.trades))
+    : [];
 
   // Opening (or catching up on) a chat marks it read — the other side's ✓✓
   // turns. Quiet write, skipped when nothing is new.
@@ -640,15 +691,18 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
     if ((!text && !photos.length) || att.uploading > 0) return;
     mic.stop();
     const latest = conv.items[0] ? conv.items.reduce((a, b) => (a.at > b.at ? a : b)) : null;
+    const mentionIds = mentionIdsIn(text, others.filter((u): u is User => !!u));
     if (photos.length || !latest) {
       // photos (or a brand-new thread) need a full update
-      store.postUpdate({ title: derivedTitle(text || "📷 Photo"), body: text, photos, toUserIds: conv.otherIds, quote: quoting ?? undefined });
+      store.postUpdate({ title: derivedTitle(text || "📷 Photo"), body: text, photos, toUserIds: conv.otherIds, quote: quoting ?? undefined, threadId: conv.threadId, mentionIds });
     } else {
-      store.replyToUpdate(latest.id, text, quoting ?? undefined);
+      store.replyToUpdate(latest.id, text, quoting ?? undefined, { mentionIds });
     }
     const emails = emailsFor(db.users, conv.otherIds);
-    pushEmail(emails, `💬 ${db.project.name} — ${subject ?? `message from ${name}`}`, text || "(photo)",
-      { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), convKey: conversationKeyOf([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
+    const convKey = conv.threadId ?? conversationKeyOf([store.session.userId, ...conv.otherIds]);
+    const replyUrl = `${typeof window !== "undefined" ? window.location.origin : "https://evergreen-rust-five.vercel.app"}/updates?conv=${encodeURIComponent(convKey)}`;
+    pushEmail(emails, `${mentionIds.length ? "🔔 " : "💬 "}${db.project.name} — ${subject ?? `message from ${name}`}`, text || "(photo)",
+      { replyUrl, convKey, senderName: name, photoCount: photos.length || undefined });
     setBody(""); att.clear(); setQuoting(null);
     requestAnimationFrame(() => { const el = taRef.current; if (el) el.style.height = "36px"; });
   };
@@ -679,6 +733,9 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
               : others.map((u) => u ? (u.role === "trade" && u.tradeIds?.length ? tradeName(db, u.tradeIds[0]) : ROLE_LABEL[u.role]) : "—").join(" · ")}
           </div>
         </div>
+        <button className="btn btn-sm" title="People in this conversation" aria-label="People in this conversation"
+          onClick={() => setManaging((v) => !v)}
+          style={managing ? { background: "var(--sage-tint)" } : { opacity: 0.8 }}>👥 {conv.otherIds.length + 1}</button>
         <button className="btn btn-sm" title={pinned ? "Unpin" : "Pin to top"}
           onClick={() => store.togglePinConversation(conv.key)}
           style={pinned ? { background: "var(--sage-tint)" } : { opacity: 0.65 }}>📌</button>
@@ -686,6 +743,50 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
           onClick={() => { store.toggleArchiveConversation(conv.key); if (!archived) onBack(); }}
           style={{ opacity: archived ? 1 : 0.65 }}>🗂</button>
       </div>
+
+      {managing && (
+        <div style={{ borderBottom: "1px solid var(--line)", background: "var(--cream)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, maxHeight: "45%", overflowY: "auto" }}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>In this conversation</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {[meId, ...conv.otherIds].map((id) => {
+              const u = userOf(id);
+              const isCreator = meta2?.createdBy === id;
+              return (
+                <div key={id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+                  <Avatar u={u} size={26} />
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {u?.name ?? "—"}{id === meId ? " (you)" : ""}
+                    <span style={{ color: "var(--muted)", fontSize: 11 }}> · {u ? ROLE_LABEL[u.role] : ""}{isCreator ? " · started it" : ""}</span>
+                  </span>
+                  {conv.threadId && canManageMembers && id !== meId && !isCreator && (
+                    <button className="btn btn-sm" style={{ color: "var(--rust)" }} title="Remove from this conversation"
+                      onClick={() => store.removeThreadMember(conv.key, id)}>✕</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {conv.threadId ? (
+            addCandidates.length ? (
+              <>
+                <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)", marginTop: 2 }}>Add someone</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {addCandidates.map((u) => (
+                    <button key={u.id} className="btn btn-sm" onClick={() => store.addThreadMembers(conv.key, [u.id])}>
+                      + {u.name}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.45 }}>Someone you add can read the whole thread, including what was said before they joined.</div>
+              </>
+            ) : <div style={{ fontSize: 11.5, color: "var(--muted)" }}>Everyone you can message is already here.</div>
+          ) : (
+            <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.5 }}>
+              This is an older conversation with fixed membership. Start a group from ＋ New to get a thread you can add people to — the same people can hold as many separate threads as you need.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* messages */}
       <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
@@ -725,7 +826,7 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
                     ))}
                   </div>
                 )}
-                {m.body && <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{m.body}</div>}
+                {m.body && <div style={{ fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}><BodyWithMentions text={m.body} people={[meId, ...conv.otherIds].map(userOf).filter((u): u is User => !!u)} /></div>}
                 {m.reactions && Object.keys(m.reactions).length > 0 && (
                   <div style={{ display: "flex", gap: 4, marginTop: 4, flexWrap: "wrap" }}>
                     {Object.entries(Object.values(m.reactions).reduce<Record<string, number>>((a, e) => { a[e] = (a[e] ?? 0) + 1; return a; }, {})).map(([e, n]) => (
@@ -776,6 +877,26 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
             <button className="btn btn-sm" onClick={() => setQuoting(null)}>✕</button>
           </div>
         )}
+        {(() => {
+          // Typing "@..." offers the people in this thread; tapping completes
+          // the mention, and they get the louder 🔔 ping when it sends.
+          const mAt = body.match(/@([a-z]*)$/i);
+          if (!mAt) return null;
+          const frag = mAt[1].toLowerCase();
+          const cands = others.filter((u): u is User => !!u && u.name.toLowerCase().startsWith(frag) || !!u && frag === "");
+          if (!cands.length) return null;
+          return (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 700 }}>@</span>
+              {cands.slice(0, 5).map((u) => (
+                <button key={u.id} className="btn btn-sm" style={{ background: "var(--sage-tint)", borderColor: "var(--sage)", color: "var(--sage-2)", fontWeight: 700 }}
+                  onClick={() => { setBody((b) => b.replace(/@[a-z]*$/i, `@${u.name.split(" ")[0]} `)); taRef.current?.focus(); }}>
+                  {u.name.split(" ")[0]}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         {mic.listening && <div style={{ fontSize: 11, color: "var(--rust)", fontWeight: 600 }}>● Listening — tap ■ to stop.</div>}
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
           {att.input}

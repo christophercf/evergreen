@@ -69,8 +69,12 @@ export async function POST(req: NextRequest) {
   if (!m) return NextResponse.json({ ok: false, error: "No conversation token in address" }, { status: 400 });
   let convKey: string;
   try { convKey = Buffer.from(m[1], "base64url").toString("utf8"); } catch { return NextResponse.json({ ok: false, error: "Bad token" }, { status: 400 }); }
-  const participantIds = convKey.split("+").filter(Boolean);
-  if (participantIds.length < 2) return NextResponse.json({ ok: false, error: "Bad conversation key" }, { status: 400 });
+  // Two key shapes: a thread id ("th-…", membership on convMeta) or the
+  // legacy participant-set key. Thread membership is resolved after the DB
+  // loads; legacy keys carry their participants in the key itself.
+  const isThread = convKey.startsWith("th-");
+  let participantIds = isThread ? [] : convKey.split("+").filter(Boolean);
+  if (!isThread && participantIds.length < 2) return NextResponse.json({ ok: false, error: "Bad conversation key" }, { status: 400 });
 
   // Load the project state server-side.
   const H = { apikey: svc, Authorization: `Bearer ${svc}` };
@@ -83,11 +87,16 @@ export async function POST(req: NextRequest) {
   // Sender must be a project user AND a participant of this conversation.
   const sender = (db.users as { id: string; name: string; email: string }[]).find((u) => u.email?.toLowerCase() === fromEmail);
   if (!sender) return NextResponse.json({ ok: false, error: "Sender not a project member" }, { status: 403 });
+  if (isThread) {
+    type Meta = { key: string; participantIds?: string[] };
+    participantIds = ((db.convMeta as Meta[] | undefined) ?? []).find((x) => x.key === convKey)?.participantIds ?? [];
+    if (participantIds.length < 2) return NextResponse.json({ ok: false, error: "Unknown thread" }, { status: 404 });
+  }
   if (!participantIds.includes(sender.id)) return NextResponse.json({ ok: false, error: "Sender not in this conversation" }, { status: 403 });
 
   // Append to the conversation's latest update (or start one if none exists).
-  type Upd = { id: string; authorId: string; toUserIds: string[]; at: string; replies: unknown[]; title: string };
-  const convOf = (u: Upd) => [...new Set([u.authorId, ...u.toUserIds])].sort().join("+");
+  type Upd = { id: string; authorId: string; toUserIds: string[]; at: string; replies: unknown[]; title: string; threadId?: string };
+  const convOf = (u: Upd) => u.threadId ?? [...new Set([u.authorId, ...u.toUserIds])].sort().join("+");
   const updates = (db.updates as Upd[]).filter((u) => convOf(u) === convKey);
   const now = new Date().toISOString();
   const rid = () => `${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`;
@@ -99,6 +108,7 @@ export async function POST(req: NextRequest) {
       id: `upd-${rid()}`, title: body.split("\n")[0].slice(0, 60), body,
       authorId: sender.id, authorName: sender.name, at: now,
       toUserIds: participantIds.filter((id) => id !== sender.id), replies: [],
+      ...(isThread ? { threadId: convKey } : {}),
     });
   }
   // In-app notification for the other participants.

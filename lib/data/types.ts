@@ -971,6 +971,11 @@ export interface SiteUpdate {
   replies: UpdateReply[];
   /** The app item this message was launched from, if any. */
   context?: UpdateContext;
+  /** The thread this message belongs to. Absent on messages written before
+   *  threads had identity — those group by their participant set, exactly as
+   *  they always did. A thread's membership lives on its convMeta entry, so
+   *  the same people can hold several separate threads. */
+  threadId?: string;
   quote?: MsgQuote;
   /** userId → emoji. One reaction per person, tap again to remove. */
   reactions?: Record<string, string>;
@@ -1396,6 +1401,13 @@ export interface DB {
     /** Per-user, so my pin does not rearrange anyone else's list. */
     pinnedBy?: string[];
     archivedBy?: string[];
+    /** Thread membership (threads only — a key starting "th-"). Authoritative:
+     *  whoever is here reads the WHOLE thread, including messages sent before
+     *  they joined. Legacy conversations have no entry; their membership IS
+     *  their participant-set key. */
+    participantIds?: string[];
+    /** Who started the thread — they (and the full admin) edit membership. */
+    createdBy?: string;
   }[];
   /** The project's macro categories. Absent on databases saved before they were
    *  editable, in which case the built-in set stands in. */

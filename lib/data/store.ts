@@ -10,7 +10,7 @@ import type {
   BudgetLineState, CostOwner, DrawingPin, FundingSource, LinePhase, MacroCategory, MarkupModel, Material, ModuleKey, PricePoint, ProductOption, Role, Room, RoomZone, ScheduleItem,
   BidOrigin, BidPackage, BidReqKey, BidRoute, DocRoute, FeedbackItem, FeedbackKind, FeedbackSeverity, FieldItem, MaterialsBasis, MsgQuote, PricingBasis, ScopeMaterial, VendorDoc, VendorDocKind, ScheduleStatus, ScopeDoc, ScopeStatus, Session, Trade, TradeRating, UpdateContext, User, VendorBid, Worker,
 } from "./types";
-import { BID_REQ_DEFAULT, FEEDBACK_KIND_LABEL, ROLE_LABEL } from "./types";
+import { BID_REQ_DEFAULT, canMessageUser, FEEDBACK_KIND_LABEL, ROLE_LABEL } from "./types";
 import { buildDB } from "./seed";
 import { contractFromAward, lineDrawable } from "./contract";
 import { uncoveredScopeFor } from "./drawscope";
@@ -1872,8 +1872,9 @@ class Store {
 
   // ---- Site updates (message board) ----
   /** Post a field update to specific recipients. Returns the new update's id. */
-  postUpdate(u: { title: string; body?: string; photos?: string[]; toUserIds: string[]; context?: UpdateContext; quote?: MsgQuote }): string {
+  postUpdate(u: { title: string; body?: string; photos?: string[]; toUserIds: string[]; context?: UpdateContext; quote?: MsgQuote; threadId?: string; mentionIds?: string[] }): string {
     const id = newId("upd");
+    const mentions = new Set(u.mentionIds ?? []);
     this.mutate((db) => {
       const me = db.users.find((x) => x.id === this.session.userId);
       db.updates.unshift({
@@ -1881,29 +1882,94 @@ class Store {
         photos: u.photos?.length ? u.photos : undefined,
         authorId: me?.id ?? this.session.userId, authorName: this.session.displayName,
         at: new Date().toISOString(), toUserIds: u.toUserIds, replies: [],
-        context: u.context, quote: u.quote,
+        context: u.context, threadId: u.threadId, quote: u.quote,
       });
+      // A thread's membership lives on its meta entry: created on first send,
+      // and never shrunk here — membership is edited deliberately.
+      if (u.threadId) {
+        db.convMeta = db.convMeta ?? [];
+        let m = db.convMeta.find((x) => x.key === u.threadId);
+        if (!m) { m = { key: u.threadId }; db.convMeta.push(m); }
+        if (!m.createdBy) m.createdBy = this.session.userId;
+        m.participantIds = [...new Set([...(m.participantIds ?? []), this.session.userId, ...u.toUserIds])];
+      }
       for (const uid of u.toUserIds) {
-        this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}` });
+        this.notify(db, {
+          toUserId: uid, kind: "info", module: "updates",
+          message: mentions.has(uid)
+            ? `🔔 ${this.session.displayName} mentioned you: "${(u.body ?? u.title).trim().slice(0, 80)}"`
+            : `💬 New message from ${this.session.displayName}: "${u.title.trim()}"${u.context ? ` (re: ${u.context.label})` : ""}`,
+        });
       }
     }, u.toUserIds.length > 1 ? `Message sent to ${u.toUserIds.length} people` : "Message sent");
     return id;
   }
-  /** In-line reply on an update — allowed for the author and any recipient. */
-  replyToUpdate(updateId: string, body: string, quote?: MsgQuote): void {
+  /** In-line reply on an update — allowed for the author, any recipient, and
+   *  (for a thread) any CURRENT member, however recently they joined. */
+  replyToUpdate(updateId: string, body: string, quote?: MsgQuote, opts?: { mentionIds?: string[] }): void {
+    const mentions = new Set(opts?.mentionIds ?? []);
     this.mutate((db) => {
       const up = db.updates.find((x) => x.id === updateId);
       if (!up || !body.trim()) return;
       const meId = this.session.userId;
-      const involved = up.authorId === meId || up.toUserIds.includes(meId) || this.session.role === "full_admin";
+      const meta = up.threadId ? db.convMeta?.find((m) => m.key === up.threadId) : undefined;
+      const involved = up.authorId === meId || up.toUserIds.includes(meId)
+        || !!meta?.participantIds?.includes(meId) || this.session.role === "full_admin";
       if (!involved) return;
       up.replies.push({ id: newId("rep"), authorId: meId, authorName: this.session.displayName, at: new Date().toISOString(), body: body.trim(), quote });
-      // Ping everyone on the thread except the person replying.
-      const others = new Set([up.authorId, ...up.toUserIds].filter((x) => x !== meId));
+      // Ping the CURRENT membership (thread) or the original parties (legacy),
+      // minus the person replying.
+      const others = new Set((meta?.participantIds ?? [up.authorId, ...up.toUserIds]).filter((x) => x !== meId));
       for (const uid of others) {
-        this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `↩ ${this.session.displayName} replied on "${up.title}"` });
+        this.notify(db, {
+          toUserId: uid, kind: "info", module: "updates",
+          message: mentions.has(uid)
+            ? `🔔 ${this.session.displayName} mentioned you: "${body.trim().slice(0, 80)}"`
+            : `↩ ${this.session.displayName} replied on "${up.title}"`,
+        });
       }
     }, "Reply sent");
+  }
+
+  /** Add people to a thread. Any current member may add anyone they are
+   *  allowed to message; the newcomers can read the whole thread. */
+  addThreadMembers(key: string, userIds: string[]): boolean {
+    if (!key.startsWith("th-") || !userIds.length) return false;
+    const meId = this.session.userId;
+    const meta0 = this.db.convMeta?.find((m) => m.key === key);
+    const isMember = !!meta0?.participantIds?.includes(meId) || this.session.role === "full_admin";
+    if (!isMember) return false;
+    const me = this.currentUser;
+    const addable = userIds.filter((id) => {
+      const t = this.db.users.find((x) => x.id === id);
+      return !!t && canMessageUser(me, this.session.role, t, this.db.trades);
+    });
+    if (!addable.length) return false;
+    this.mutate((db) => {
+      db.convMeta = db.convMeta ?? [];
+      let m = db.convMeta.find((x) => x.key === key);
+      if (!m) { m = { key, createdBy: meId }; db.convMeta.push(m); }
+      const before = new Set(m.participantIds ?? []);
+      m.participantIds = [...new Set([...(m.participantIds ?? []), meId, ...addable])];
+      for (const uid of addable.filter((id) => !before.has(id))) {
+        this.notify(db, { toUserId: uid, kind: "info", module: "updates", message: `👥 ${this.session.displayName} added you to "${m.subject ?? "a conversation"}" — the whole thread is yours to read` });
+      }
+    }, addable.length === 1 ? "Added to the conversation" : `Added ${addable.length} people to the conversation`);
+    return true;
+  }
+
+  /** Remove someone from a thread — the thread's creator or the full admin.
+   *  Membership IS visibility for threads, so they keep nothing. */
+  removeThreadMember(key: string, userId: string): boolean {
+    const meta = this.db.convMeta?.find((m) => m.key === key);
+    if (!key.startsWith("th-") || !meta?.participantIds?.includes(userId)) return false;
+    const canManage = this.session.role === "full_admin" || meta.createdBy === this.session.userId;
+    if (!canManage || userId === meta.createdBy) return false;
+    this.mutate((db) => {
+      const m = db.convMeta?.find((x) => x.key === key);
+      if (m?.participantIds) m.participantIds = m.participantIds.filter((id) => id !== userId);
+    }, "Removed from the conversation");
+    return true;
   }
 
   // ---- Field Updates ----
