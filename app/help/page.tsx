@@ -7,6 +7,8 @@ import { PageHeader, Pill, SectionTitle } from "../ui/bits";
 import { ROLE_LABEL, FEEDBACK_KIND_LABEL, FEEDBACK_SEVERITY_LABEL, accessFor,
   type FeedbackKind, type FeedbackSeverity, type ModuleKey } from "@/lib/data/types";
 import { HELP, HELP_RULES, SEAT_BLURB } from "@/lib/help/content";
+import { usePhotoAttach, PhotoStrip } from "../ui/messenger";
+import { PaperclipIcon } from "../ui/icons";
 import { briefText } from "@/lib/help/brief";
 
 // ---------------------------------------------------------------------------
@@ -130,6 +132,9 @@ function FeedbackForm() {
   const [steps, setSteps] = useState("");
   const [expected, setExpected] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // A screenshot says what a paragraph can't — same chooser as Messages:
+  // camera, photo library, or files.
+  const att = usePhotoAttach();
 
   // The area list is the seat's own nav: you cannot file against a screen you
   // have never been able to open.
@@ -141,13 +146,14 @@ function FeedbackForm() {
   const submit = () => {
     const r = store.fileFeedback({
       kind, area: area || "Help", severity: sev, what, steps, expected,
+      photos: att.photos,
       device: typeof window !== "undefined" && window.innerWidth < 768 ? "phone" : "desktop",
       screen: "Help",
       pkg: "no package open",
     });
     if (r.ok) {
-      setWhat(""); setSteps(""); setExpected("");
-      setMsg({ ok: true, text: "Filed. The seat, screen and job state you were on went with it." });
+      setWhat(""); setSteps(""); setExpected(""); att.clear();
+      setMsg({ ok: true, text: `Filed${att.photos.length ? " with " + att.photos.length + (att.photos.length === 1 ? " screenshot" : " screenshots") : ""}. The seat, screen and job state you were on went with it.` });
     } else {
       setMsg({ ok: false, text: r.reason });
     }
@@ -210,8 +216,17 @@ function FeedbackForm() {
           </label>
         ) : null}
 
+        {/* screenshots — the standard chooser: camera, library, or files */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <button className="btn btn-primary" onClick={submit}>File it</button>
+          {att.input}
+          <button className="btn btn-sm" onClick={att.open} aria-label="Attach screenshots" title="Attach screenshots">
+            <PaperclipIcon width={15} height={15} /> Add screenshots
+          </button>
+          <PhotoStrip photos={att.photos} uploading={att.uploading} onRemove={att.remove} size={44} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn btn-primary" disabled={att.uploading > 0} onClick={submit}>{att.uploading > 0 ? "Uploading…" : "File it"}</button>
           {msg ? (
             <span role={msg.ok ? undefined : "alert"} style={{ fontSize: 12, fontWeight: 600, color: msg.ok ? "var(--ok)" : "var(--rust)" }}>
               {msg.text}
@@ -279,6 +294,16 @@ function Brief() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>{f.area}</div>
               <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.5, marginTop: 2 }}>{f.what}</div>
+              {f.photos?.length ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                  {f.photos.map((ph, i) => (
+                    <a key={i} href={ph} target="_blank" rel="noreferrer" title="Open screenshot">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={ph} alt="Screenshot" style={{ width: 64, height: 64, objectFit: "cover", borderRadius: 6, border: "1px solid var(--line)", display: "block" }} />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
               <div style={{ fontSize: 10.5, color: MUTED, marginTop: 4 }}>
                 {f.seat}, {f.device} · {f.rom} · {f.pkg} · {f.screen} · {f.at.slice(0, 16).replace("T", " ")}
               </div>

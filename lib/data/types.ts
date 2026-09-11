@@ -1238,6 +1238,8 @@ export interface FeedbackItem {
   screen: string;
   filedBy: string;
   at: string;
+  /** Screenshots attached to the report (storage URLs). */
+  photos?: string[];
   /** Chris closes one when it is fixed; it leaves the brief, not the record. */
   done?: boolean;
   /** Set when the report was archived by copying the brief into Claude Code. */

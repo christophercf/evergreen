@@ -424,3 +424,9 @@ of checks that ran, so a green run is provably a run.
 - The composer draft (title, items, recipients) persists in localStorage per user and restores on the next open; it clears ONLY on a successful publish. A failed publish must never lose the report.
 - Every published update also reaches the full admin(s) — thread, notification and email — whoever it was addressed to, excluding the publisher themselves.
 - Supabase persistDB carries server-side fieldUpdates and receipts (and field-update chips) that this client has never seen across a full-document save, so a stale tab's small edit can no longer erase another device's published report or a webhook-filed receipt.
+
+### Messages & feedback quick wins (Aaron's reports, shipped 2026-09-11)
+- Photo attach (Messages, Field Updates, feedback) shows the STANDARD chooser — camera, photo library, or files. The file input must carry NO `capture` attribute (with it, phones jump straight to the camera). Attach buttons use the paperclip icon, not 📷.
+- The chat composer auto-grows with the message up to ~8 lines (176px), then scrolls internally; it resets to one line after sending.
+- The open-chat takeover pins to `visualViewport` height/offset (CSS vars --vvh/--vvt set on .msgr): keyboard up, the composer rides above it and the list keeps its distance-from-bottom. Readings under 240px are rejected (fall back to 100dvh) so embedded panes can't pin the chat to a sliver.
+- Feedback reports accept screenshots (same attach pipeline); they ride the record (`FeedbackItem.photos`), render as thumbnails in the admin brief, and the copied brief lists their URLs.

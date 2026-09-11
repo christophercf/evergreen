@@ -103,8 +103,11 @@ export function usePhotoAttach() {
     }
   };
   const clear = () => setPhotos([]);
+  // No `capture` attribute: with it, phones jump STRAIGHT to the camera and
+  // never offer the photo library or files. Without it, tapping attach shows
+  // the standard chooser — take a photo, pick from the library, or browse.
   const input = (
-    <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple style={{ display: "none" }}
+    <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
       onChange={(e) => { void addFiles(e.target.files); e.currentTarget.value = ""; }} />
   );
   return { photos, uploading, input, clear, remove: (i: number) => setPhotos((p) => p.filter((_, x) => x !== i)), open: () => fileRef.current?.click() };

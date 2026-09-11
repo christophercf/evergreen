@@ -27,6 +27,9 @@ export const EyeIcon = (p: SVGProps<SVGSVGElement>) => (
 export const CartIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M3 4h2l2.2 10.4a1.5 1.5 0 0 0 1.5 1.1h7.9a1.5 1.5 0 0 0 1.5-1.2L20 7H6" /><circle cx="9.5" cy="19" r="1.4" /><circle cx="17" cy="19" r="1.4" /></svg>
 );
+export const PaperclipIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}><path d="m20.4 11.1-8.2 8.2a5.4 5.4 0 0 1-7.6-7.6l8.5-8.5a3.6 3.6 0 0 1 5.1 5.1l-8.5 8.5a1.8 1.8 0 0 1-2.5-2.5l7.8-7.8" /></svg>
+);
 export const CameraIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}><path d="M4 7.5h3l1.6-2.3a1 1 0 0 1 .8-.4h5.2a1 1 0 0 1 .8.4L17 7.5h3a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1Z" /><circle cx="12" cy="13.3" r="3.4" /></svg>
 );

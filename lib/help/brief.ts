@@ -27,6 +27,7 @@ export function briefText(items: FeedbackItem[]): string {
     L.push(`${f.kind === "bug" ? "**What happened:** " : "**What is wanted:** "}${f.what}`);
     if (f.steps) L.push(`**Steps:** ${f.steps}`);
     if (f.expected) L.push(`**Expected instead:** ${f.expected}`);
+    if (f.photos?.length) L.push(`**Screenshots:** ${f.photos.join(" · ")}`);
     L.push(`**Filed as:** ${f.seat}, ${f.device} · ${f.rom} · ${f.pkg} · ${f.screen} · ${f.at.slice(0, 16).replace("T", " ")}`);
     L.push("");
     return L.join("\n");

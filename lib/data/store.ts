@@ -1299,7 +1299,7 @@ class Store {
    *  a one-word bug with no expectation is a guess handed to whoever fixes it. */
   fileFeedback(input: {
     kind: FeedbackKind; area: string; severity?: FeedbackSeverity;
-    what: string; steps?: string; expected?: string;
+    what: string; steps?: string; expected?: string; photos?: string[];
     device: "phone" | "desktop"; screen: string; pkg?: string;
   }): { ok: true } | { ok: false; reason: string } {
     const what = input.what.trim();
@@ -1316,6 +1316,7 @@ class Store {
       what,
       steps: input.steps?.trim() || undefined,
       expected: input.expected?.trim() || undefined,
+      photos: input.photos?.length ? input.photos : undefined,
       seat: `${this.session.displayName} (${ROLE_LABEL[this.session.role]})`,
       role: this.session.role,
       device: input.device,

@@ -5,6 +5,7 @@ import { useStore } from "@/lib/data/hooks";
 import { PageHeader, NoAccess, Pill } from "../ui/bits";
 import { accessFor, canMessageUser, ROLE_LABEL, type MsgQuote, type SiteUpdate, type UpdateContext, type User } from "@/lib/data/types";
 import { ContextChip, conversationKeyOf, conversationUrl, emailsFor, PhotoStrip, pushEmail, useDictation, usePhotoAttach } from "../ui/messenger";
+import { PaperclipIcon } from "../ui/icons";
 import { useBackLayer } from "../ui/use-back-layer";
 import { tradeName, materialDates, macroOrder } from "@/lib/data/money";
 
@@ -91,6 +92,31 @@ export default function UpdatesPage() {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [readMap, setReadMap] = useState<Record<string, string>>({});
   useEffect(() => setReadMap(loadRead()), []);
+
+  // The phone keyboard does not shrink 100dvh on iOS — it just covers the
+  // bottom of the screen, composer included. The visual viewport is the part
+  // that is actually visible, so the open-chat takeover pins its height (and
+  // top offset) to it: keyboard up, the composer rides up with it.
+  const msgrRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const apply = () => {
+      const el = msgrRef.current;
+      if (!el) return;
+      const h = Math.round(vv.height);
+      // A reading no real phone screen could produce (embedded panes,
+      // transitional layouts) must not pin the chat to a sliver — fall back
+      // to the stylesheet's 100dvh instead.
+      if (h < 240) { el.style.removeProperty("--vvh"); el.style.removeProperty("--vvt"); return; }
+      el.style.setProperty("--vvh", `${h}px`);
+      el.style.setProperty("--vvt", `${Math.round(vv.offsetTop)}px`);
+    };
+    apply();
+    vv.addEventListener("resize", apply);
+    vv.addEventListener("scroll", apply);
+    return () => { vv.removeEventListener("resize", apply); vv.removeEventListener("scroll", apply); };
+  }, []);
 
   // On a phone an open conversation owns the whole screen, and a tapped photo
   // owns it again on top — so the phone's back button peels them off in order
@@ -244,7 +270,7 @@ export default function UpdatesPage() {
     <>
       <PageHeader title="Messages" subtitle="Chat with the people on your project — photos, voice-to-text, and messages linked to materials, costs, tasks & documents." />
 
-      <div className="msgr card" data-pane={sel ? "chat" : "list"} style={{ marginTop: 14, padding: 0, display: "grid", gridTemplateColumns: "330px 1fr", overflow: "hidden", height: "calc(100dvh - 235px)", minHeight: 420 }}>
+      <div ref={msgrRef} className="msgr card" data-pane={sel ? "chat" : "list"} style={{ marginTop: 14, padding: 0, display: "grid", gridTemplateColumns: "330px 1fr", overflow: "hidden", height: "calc(100dvh - 235px)", minHeight: 420 }}>
         {/* ---------------- list pane ---------------- */}
         <div data-role="list" style={{ borderRight: "1px solid var(--line)", display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0 }}>
           <div style={{ padding: 10, borderBottom: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 7 }}>
@@ -388,8 +414,9 @@ export default function UpdatesPage() {
              tab bar below it, and no arithmetic against either. 100dvh follows
              the keyboard, so the composer stays visible while typing. */
           .msgr[data-pane="chat"] {
-            position: fixed !important; inset: 0 !important; z-index: 45 !important;
-            height: 100dvh !important; margin: 0 !important; border-radius: 0 !important;
+            position: fixed !important; left: 0 !important; right: 0 !important;
+            top: var(--vvt, 0px) !important; bottom: auto !important; z-index: 45 !important;
+            height: var(--vvh, 100dvh) !important; margin: 0 !important; border-radius: 0 !important;
             padding-bottom: env(safe-area-inset-bottom) !important;
           }
           body:has(.msgr[data-pane="chat"]) .ever-bottomnav { display: none !important; }
@@ -557,7 +584,17 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
   const [body, setBody] = useState("");
   const att = usePhotoAttach();
   const endRef = useRef<HTMLDivElement>(null);
-  const mic = useDictation((t) => setBody((b) => (b ? `${b} ${t}` : t)));
+  // The box grows with the message — one line for "on my way", eight visible
+  // lines (then an inner scroll) for the long ones, so you can read what you
+  // are writing before it goes out.
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const autoGrow = () => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 176)}px`;
+  };
+  const mic = useDictation((t) => { setBody((b) => (b ? `${b} ${t}` : t)); requestAnimationFrame(autoGrow); });
   const userOf = (id: string) => db.users.find((x) => x.id === id);
   const others = conv.otherIds.map(userOf);
   const group = conv.otherIds.length > 1;
@@ -580,6 +617,22 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
   const readByAll = (at: string) => conv.otherIds.every((id) => (meta?.reads?.[id] ?? "") >= at);
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [conv.msgs.length]);
+  // When the keyboard opens the list gets shorter; keep it anchored where it
+  // was (distance from the bottom), so starting to type never loses the
+  // messages you were reading.
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      const el = listRef.current;
+      if (!el) return;
+      const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      requestAnimationFrame(() => { el.scrollTop = el.scrollHeight - el.clientHeight - fromBottom; });
+    };
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
+  }, []);
 
   const send = () => {
     const text = body.trim();
@@ -597,6 +650,7 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
     pushEmail(emails, `💬 ${db.project.name} — ${subject ?? `message from ${name}`}`, text || "(photo)",
       { replyUrl: conversationUrl([store.session.userId, ...conv.otherIds]), convKey: conversationKeyOf([store.session.userId, ...conv.otherIds]), senderName: name, photoCount: photos.length || undefined });
     setBody(""); att.clear(); setQuoting(null);
+    requestAnimationFrame(() => { const el = taRef.current; if (el) el.style.height = "36px"; });
   };
 
   let lastDay = "";
@@ -634,7 +688,7 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
       </div>
 
       {/* messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
+      <div ref={listRef} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 6px", display: "flex", flexDirection: "column", gap: 6 }}>
         {conv.msgs.length === 0 && <div style={{ textAlign: "center", fontSize: 12.5, color: "var(--muted)", marginTop: 20 }}>Say hello 👋 — messages are tracked here and emailed to recipients.</div>}
         {conv.msgs.map((m) => {
           const mine = m.authorId === meId;
@@ -725,16 +779,16 @@ function ChatPane({ conv, meId, onBack, onPhoto }: { conv: Conv; meId: string; o
         {mic.listening && <div style={{ fontSize: 11, color: "var(--rust)", fontWeight: 600 }}>● Listening — tap ■ to stop.</div>}
         <div style={{ display: "flex", gap: 6, alignItems: "flex-end" }}>
           {att.input}
-          <button className="btn btn-sm" title="Add photos" onClick={att.open} style={{ height: 36 }}>📷</button>
+          <button className="btn btn-sm" title="Attach photos — camera, library or files" aria-label="Attach photos" onClick={att.open} style={{ height: 36 }}><PaperclipIcon width={16} height={16} /></button>
           {mic.supported && (
             <button className="btn btn-sm" title={mic.listening ? "Stop dictation" : "Dictate"} onClick={() => (mic.listening ? mic.stop() : mic.start())}
               style={{ height: 36, ...(mic.listening ? { background: "var(--rust)", color: "#fff", borderColor: "var(--rust)" } : {}) }}>
               {mic.listening ? "■" : "🎤"}
             </button>
           )}
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={1} placeholder="Message…"
+          <textarea ref={taRef} value={body} onChange={(e) => { setBody(e.target.value); autoGrow(); }} rows={1} placeholder="Message…"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-            style={{ flex: 1, resize: "none", fontSize: 13.5, minHeight: 36, maxHeight: 110, padding: "8px 11px", borderRadius: 18 }} />
+            style={{ flex: 1, resize: "none", fontSize: 13.5, minHeight: 36, maxHeight: 176, overflowY: "auto", padding: "8px 11px", borderRadius: 18, lineHeight: 1.45 }} />
           <button className="btn btn-primary" disabled={(!body.trim() && !att.photos.length) || att.uploading > 0} onClick={send} title="Send" style={{ height: 36, borderRadius: 18 }}>➤</button>
         </div>
       </div>
